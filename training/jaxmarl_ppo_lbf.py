@@ -14,7 +14,7 @@ import jaxmarl
 from jaxmarl.wrappers.baselines import LogWrapper
 # from jaxmarl.environments.overcooked import overcooked_layouts
 
-from lbf.jumanji_jaxmarl_wrapper_v2 import JumanjiToJaxMARL
+from lbf.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 
 import hydra
 from omegaconf import OmegaConf
