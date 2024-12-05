@@ -165,8 +165,8 @@ def make_train(config):
         obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rng)
 
         # TRAIN LOOP
-        def _update_step(runner_state, unused):
-            print("Update step: ", runner_state)
+        def _update_step(update_runner_state, unused):
+            runner_state, update_steps = update_runner_state
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, rng = runner_state
@@ -323,15 +323,18 @@ def make_train(config):
             )
             train_state = update_state[0]
             metric = traj_batch.info
+            metric["update_steps"] = update_steps
+            
             rng = update_state[-1]
-
+            update_steps += 1
+            
             runner_state = (train_state, env_state, last_obs, rng)
-            return runner_state, metric
+            return (runner_state, update_steps), metric
 
         rng, _rng = jax.random.split(rng)
         runner_state = (train_state, env_state, obsv, _rng)
         runner_state, metric = jax.lax.scan(
-            _update_step, runner_state, None, config["NUM_UPDATES"]
+            _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
         )
         return {"runner_state": runner_state, "metrics": metric}
 
@@ -344,7 +347,7 @@ if __name__ == "__main__":
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 5e6,
+        "TOTAL_TIMESTEPS": 1e6,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16, # 4,
         "GAMMA": 0.99,
@@ -371,15 +374,21 @@ if __name__ == "__main__":
         out = train_jit(rngs)
 
 
-    # print results for each seed:
+    # print results for each seed
+    # metrics values shape is (num_seeds, num_updates, num_envs, ???)
     for i in range(config["NUM_SEEDS"]):
         print("Seed: ", i)
-        print("Mean Return: ", out["metrics"]["returned_episode_returns"][i].mean())
-        print("Std Return: ", out["metrics"]["returned_episode_returns"][i].std())
-    
+        print("Mean Return (Last): ", out["metrics"]["returned_episode_returns"][i, -1].mean())
+        print("Std Return (Last): ", out["metrics"]["returned_episode_returns"][i, -1].std())
+
+        print("Mean Percent Eaten (Last): ", out["metrics"]["percent_eaten"][i, -1].mean())
+        print("Std Percent Eaten (Last): ", out["metrics"]["percent_eaten"][i, -1].std())
+
     for i in range(config["NUM_SEEDS"]):
-        plt.plot(out["metrics"]["returned_episode_returns"][i].mean(-1).reshape(-1))
+        xs = out["metrics"]["update_steps"][i] * config["NUM_ENVS"] * config["NUM_STEPS"]
+        ys = out["metrics"]["percent_eaten"][i].mean((1, 2))
+        plt.plot(xs, ys)
     
-    plt.xlabel("Update Step")
-    plt.ylabel("Return")
+    plt.xlabel("Time Step")
+    plt.ylabel("Percent Eaten")
     plt.show()

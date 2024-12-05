@@ -425,9 +425,6 @@ def make_train(config):
                         "returns": metric["returned_episode_returns"][:, :, 0][
                             metric["returned_episode"][:, :, 0]
                         ].mean(),
-                        # "win_rate": metric["returned_won_episode"][:, :, 0][
-                        #     metric["returned_episode"][:, :, 0]
-                        # ].mean(),
                         "env_step": metric["update_steps"]
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
@@ -458,7 +455,7 @@ def make_train(config):
     return train
 
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_smax")
+@hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_lbf")
 def main(config):
     config = OmegaConf.to_container(config)
     wandb.init(
@@ -474,28 +471,22 @@ def main(config):
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
     out = train_jit(rng)
 
-    print("Mean Return: ", out["metrics"]["returned_episode_returns"].mean())
-    print("Std Return: ", out["metrics"]["returned_episode_returns"].std())
-    plt.plot(out["metrics"]["returned_episode_returns"].mean(-1).reshape(-1))
+    # shape is (update_step, num_steps, num_envs, num_agents)
+    # no idea why the returns are so small
+    print("Mean Return (Last): ", out["metrics"]["returned_episode_returns"][-1].mean())
+    print("Std Return (Last): ", out["metrics"]["returned_episode_returns"][-1].std())
 
-    # RUN MULTIPLE SEEDS
-    # rng = jax.random.PRNGKey(config["SEED"])
-    # rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    # with jax.disable_jit(False):
-    #     train_jit = jax.jit(jax.vmap(make_train(config)), device=jax.devices()[0])
-    #     out = train_jit(rngs)
-
-    # for i in range(config["NUM_SEEDS"]):
-    #     print("Seed: ", i)
-    #     print("Mean Return: ", out["metrics"]["returned_episode_returns"][i].mean())
-    #     print("Std Return: ", out["metrics"]["returned_episode_returns"][i].std())
+    print("Mean Percent Eaten (Last): ", out["metrics"]["percent_eaten"][-1].mean())
+    print("Std Percent Eaten (Last): ", out["metrics"]["percent_eaten"][-1].std())
     
-    # for i in range(config["NUM_SEEDS"]):
-    #     plt.plot(out["metrics"]["returned_episode_returns"][i].mean(-1).reshape(-1))
-    
-    plt.xlabel("Update Step")
-    plt.ylabel("Return")
+    # plot % eaten
+    xs = out["metrics"]["update_steps"] * config["NUM_ENVS"] * config["NUM_STEPS"]
+    ys = out["metrics"]["percent_eaten"].mean((1, 2, 3))
+    plt.plot(xs, ys)
+    plt.xlabel("Time Step")
+    plt.ylabel("Percent Eaten")
     plt.show()
+
 
 if __name__ == "__main__":
     main()

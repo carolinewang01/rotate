@@ -44,12 +44,14 @@ for episode in range(NUM_EPISODES):
             total_rewards[agent] += rewards[agent]
 
             print(f"\nEpisode {episode}, agent {agent}, timestep {wrapper.get_step_count(state.env_state)}")
+
             print("action is ", actions[agent])
             print("obs", obs[agent], "type", type(obs[agent]))
             print("rewards", rewards[agent], "type", type(rewards[agent]))
             print("dones", done[agent], "type", type(done[agent]))
             print("info", info, "type", type(info))
-            
+            print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
+
         print("state", state, "type", type(state))
 
     print(f"Episode {episode} finished. Total rewards: {total_rewards}")
