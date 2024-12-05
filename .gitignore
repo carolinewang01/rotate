@@ -5,3 +5,7 @@ figures/*
 # output files from jaxmarl
 outputs/ 
 outputs/*
+
+# pycache
+**/__pycache__/
+**/*.pyc
