@@ -20,17 +20,16 @@ def download_file(url: str, file_path: str) -> None:
     else:
         print("Failed to download the file.")
 
-
-os.makedirs("configs", exist_ok=True)
+os.makedirs("jumanji_configs", exist_ok=True)
 config_url = "https://raw.githubusercontent.com/instadeepai/jumanji/main/jumanji/training/configs/config.yaml"
-download_file(config_url, "configs/config.yaml")
+download_file(config_url, "jumanji_configs/config.yaml")
 env_url = f"https://raw.githubusercontent.com/instadeepai/jumanji/main/jumanji/training/configs/env/{env}.yaml"
-os.makedirs("configs/env", exist_ok=True)
-download_file(env_url, f"configs/env/{env}.yaml")
+os.makedirs("jumanji_configs/env", exist_ok=True)
+download_file(env_url, f"jumanji_configs/env/{env}.yaml")
 
 # training code
-# config path located at continual-aht/configs
-with initialize(version_base=None, config_path="../configs"):
+# config path located at continual-aht/jumanji_configs
+with initialize(version_base=None, config_path="../jumanji_configs"):
     cfg = compose(
         config_name="config.yaml",
         overrides=[

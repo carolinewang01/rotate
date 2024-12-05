@@ -1,11 +1,22 @@
-import jax
 from functools import partial
+import jax
 from typing import Dict, Any
 import jax.numpy as jnp
+from flax.struct import dataclass
+
+
 from jumanji.env import Environment as JumanjiEnv
 from jumanji import specs as jumanji_specs
 from jaxmarl.environments import spaces as jaxmarl_spaces
 
+@dataclass
+class WrappedEnvState:
+    """Wraps Jumanji state plus any extra information
+    we want to carry."""
+    env_state: Any # a jumanji state
+    avail_actions: jnp.ndarray
+    step: jnp.array
+    
 class JumanjiToJaxMARL(object):
     """Use a Jumanji Environment within JaxMARL.
     Warning: this wrapper has only been tested with LBF.
@@ -29,15 +40,21 @@ class JumanjiToJaxMARL(object):
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, key, params=None):
-        state, timestep = self.env.reset(key)
+        env_state, timestep = self.env.reset(key)
         obs = self._extract_observations(timestep.observation)
+        state = WrappedEnvState(env_state, 
+                                self._extract_avail_actions(timestep),
+                                timestep.observation.step_count)
         return obs, state
 
     @partial(jax.jit, static_argnums=(0,))
-    def step(self, key, state, actions, params=None):
+    def step(self, key, state: WrappedEnvState, actions, params=None):
         # Convert dict of actions to array
         actions_array = self._actions_to_array(actions)
-        state, timestep = self.env.step(state, actions_array)
+        env_state, timestep = self.env.step(state.env_state, actions_array)
+        avail_actions = self._extract_avail_actions(timestep)
+        state = WrappedEnvState(env_state, avail_actions, timestep.observation.step_count)
+
         obs = self._extract_observations(timestep.observation)
         reward = self._extract_rewards(timestep.reward)
         done = self._extract_dones(timestep)
@@ -50,15 +67,27 @@ class JumanjiToJaxMARL(object):
     def action_space(self, agent: str):
         return self.action_spaces[agent]
 
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: WrappedEnvState) -> Dict[str, jnp.ndarray]:
+        """Returns the available actions for each agent."""
+        return state.avail_actions
+
+    @partial(jax.jit, static_argnums=(0,))
+    def get_step_count(self, state: WrappedEnvState) -> jnp.array:
+        """Returns the available actions for each agent."""
+        return state.step
+
     def _extract_observations(self, observation):
         # Extract per-agent observations and flatten them into arrays
         obs = {}
         for i in range(self.num_agents):
             agent_view = observation.agents_view[i].flatten()
-            action_mask = observation.action_mask[i].astype(jnp.float32)  # Convert bool to float
-            step_count = jnp.array([observation.step_count], dtype=jnp.float32)
+            # action_mask = observation.action_mask[i].astype(jnp.float32)  # Convert bool to float
+            # step_count = jnp.array([observation.step_count], dtype=jnp.float32)
             # Concatenate all components into a single array
-            agent_obs = jnp.concatenate([agent_view, action_mask, step_count])
+            # agent_obs = jnp.concatenate([agent_view, action_mask, step_count])
+            agent_obs = jnp.concatenate([agent_view])
+
             obs[self.agents[i]] = agent_obs
         return obs
 
@@ -84,29 +113,32 @@ class JumanjiToJaxMARL(object):
         info = {} 
         for k, v in timestep.extras.items():
             info[k] = jnp.array([v for _ in range(self.num_agents)])
-
-        info["step_count"] = jnp.array([timestep.observation.step_count for _ in range(self.num_agents)])
-
         return info
+    
+    def _extract_avail_actions(self, timestep):
+        # Extract per-agent avail_actions
+        avail_actions = {agent: timestep.observation.action_mask[i] for i, agent in enumerate(self.agents)}
+        return avail_actions
 
     def _convert_jumanji_spec_to_jaxmarl_space_per_agent(self, spec: jumanji_specs.Spec):
         """Converts the observation spec for each agent to a JaxMARL space."""
         # Extract specs for 'agents_view', 'action_mask', and 'step_count'
         agents_view_spec = spec.agents_view
-        action_mask_spec = spec.action_mask
-        step_count_spec = spec.step_count
+        # action_mask_spec = spec.action_mask
+        # step_count_spec = spec.step_count
 
         # Get per-agent specs
         per_agent_view_spec = self._get_per_agent_spec(agents_view_spec)
-        per_agent_mask_spec = self._get_per_agent_spec(action_mask_spec)
+        # per_agent_mask_spec = self._get_per_agent_spec(action_mask_spec)
 
         # Flatten shapes
         view_shape = int(jnp.prod(jnp.array(per_agent_view_spec.shape)))
-        mask_shape = int(jnp.prod(jnp.array(per_agent_mask_spec.shape)))
-        step_count_shape = 1  # Scalar
+        # mask_shape = int(jnp.prod(jnp.array(per_agent_mask_spec.shape)))
+        # step_count_shape = 1  # Scalar
 
         # Total observation length
-        total_shape = (view_shape + mask_shape + step_count_shape,)
+        # total_shape = (view_shape + mask_shape + step_count_shape,)
+        total_shape = (view_shape,)
 
         # Determine low and high bounds
         # For simplicity, use -inf and inf; adjust if you have specific bounds

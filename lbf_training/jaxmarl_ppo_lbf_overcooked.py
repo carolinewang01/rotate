@@ -10,11 +10,10 @@ import distrax
 from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
 
 import jumanji
-import jaxmarl
 from jaxmarl.wrappers.baselines import LogWrapper
 # from jaxmarl.environments.overcooked import overcooked_layouts
 
-from lbf.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 
 import hydra
 from omegaconf import OmegaConf
@@ -191,7 +190,9 @@ def make_train(config):
                 obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     rng_step, env_state, env_act
                 )
+                # note that num_actors = num_envs * num_agents
                 info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+
                 transition = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
                     action,
@@ -340,18 +341,18 @@ if __name__ == "__main__":
 
     # set hyperparameters:
     config = {
-        "LR": 2.5e-4,
+        "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 128,
+        "NUM_STEPS": 128, 
         "TOTAL_TIMESTEPS": 5e6,
         "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
+        "NUM_MINIBATCHES": 16, # 4,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
+        "CLIP_EPS": 0.05,
         "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
+        "VF_COEF": 1.0,
+        "MAX_GRAD_NORM": 1.0,
         "ACTIVATION": "tanh",
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {

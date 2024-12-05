@@ -1,3 +1,7 @@
 training_state
 figures/
 figures/*
+
+# output files from jaxmarl
+outputs/ 
+outputs/*

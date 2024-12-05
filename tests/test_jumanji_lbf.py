@@ -16,10 +16,10 @@ def sample_action(action_spec, key):
 
 # Instantiate a Jumanji environment using the registry
 env = jumanji.make('LevelBasedForaging-v0')
-import pdb; pdb.set_trace()
-print("Env name is ", env.name)
 
-NUM_EPISODES = 2
+NUM_EPISODES = 1
+RENDER = False
+SAVEVIDEO = False
 
 reset_fn = jax.jit(env.reset)
 step_fn = jax.jit(env.step)
@@ -34,19 +34,23 @@ for episode in range(NUM_EPISODES):
         key, action_key = jax.random.split(key)
         observation = jax.tree_util.tree_map(lambda x: x[None], timestep.observation)
         action = sample_action(env.action_spec, action_key)
-        print('action is ', action)
         state, timestep = step_fn(state, 
                                   action
                                   )
-        print('state is ', state)
+        print("action is ", action)
         print('timestep is ', timestep) # reward is stored within Timestep object
-        # rewards of each agent is given
-        
-        # env.render(state)
-        states.append(state)
-    # Freeze the terminal frame to pause the GIF.
-    for _ in range(3):
+
+        if RENDER:         
+            env.render(state)
         states.append(state)
     
-# anim = env.animate(states, interval=150)
-# anim.save("figures/lbf.gif", writer="imagemagick")
+        import sys; sys.exit(0)
+
+    # Rendering: Freeze the terminal frame to pause the GIF.
+    if RENDER:
+        for _ in range(3):
+            states.append(state)
+    
+if RENDER and SAVEVIDEO:
+    anim = env.animate(states, interval=150)
+    anim.save("figures/lbf.gif", writer="imagemagick")
