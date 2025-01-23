@@ -9,6 +9,7 @@ from flax.training.train_state import TrainState
 import distrax
 from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
 
+import jaxmarl
 import jumanji
 from jaxmarl.wrappers.baselines import LogWrapper
 # from jaxmarl.environments.overcooked import overcooked_layouts
@@ -68,10 +69,11 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 def get_rollout(train_state, config):
-    # env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    env = jumanji.make('LevelBasedForaging-v0')
-    env = JumanjiToJaxMARL(env)
-
+    if config["ENV_NAME"] == 'lbf':
+        env = jumanji.make('LevelBasedForaging-v0')
+        env = JumanjiToJaxMARL(env)
+    else:
+        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
     network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
@@ -119,8 +121,11 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 def make_train(config):
     # env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    env = jumanji.make('LevelBasedForaging-v0')
-    env = JumanjiToJaxMARL(env)
+    if config["ENV_NAME"] == 'lbf':
+        env = jumanji.make('LevelBasedForaging-v0')
+        env = JumanjiToJaxMARL(env)
+    else: 
+        jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
@@ -331,12 +336,31 @@ def make_train(config):
             runner_state = (train_state, env_state, last_obs, rng)
             return (runner_state, update_steps), metric
 
+        # Calculate the interval for checkpoints
+        checkpoint_interval = config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"]
+        checkpoints = []
+
         rng, _rng = jax.random.split(rng)
         runner_state = (train_state, env_state, obsv, _rng)
+        
+        def _update_step_with_checkpoints(carry, _):
+            runner_state, update_step = carry
+            runner_state, metric = _update_step((runner_state, update_step), None)
+            if update_step % checkpoint_interval == 0:
+                checkpoints.append(runner_state[0].params)
+            # return (runner_state, update_step + 1), metric
+            return (runner_state, update_step), metric
+
         runner_state, metric = jax.lax.scan(
-            _update_step, (runner_state, 0), None, config["NUM_UPDATES"]
+            _update_step_with_checkpoints, (runner_state, 0), None, config["NUM_UPDATES"]
         )
-        return {"runner_state": runner_state, "metrics": metric}
+
+        # Ensure the final state is also included as a checkpoint
+        checkpoints.append(runner_state[0].params)
+
+        return {"runner_state": runner_state, 
+                "metrics": metric,
+                "checkpoints": checkpoints}
 
     return train
 
@@ -345,11 +369,12 @@ if __name__ == "__main__":
     # set hyperparameters:
     config = {
         "LR": 1.e-4,
-        "NUM_ENVS": 16,
+        "NUM_ENVS": 8, # 16
         "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 1e6,
+        "TOTAL_TIMESTEPS": 1e5, # 1e6,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16, # 4,
+        "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.05,
@@ -363,7 +388,7 @@ if __name__ == "__main__":
         },
         "ANNEAL_LR": True,
         "SEED": 0,
-        "NUM_SEEDS": 3
+        "NUM_SEEDS": 2
     }
 
     # config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]

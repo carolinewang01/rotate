@@ -471,7 +471,8 @@ def main(config):
     train_jit = jax.jit(make_train(config), device=jax.devices()[0])
     out = train_jit(rng)
 
-    # shape is (update_step, num_steps, num_envs, num_agents)
+    # Visualize Results
+    # shape is (num_updates, num_steps, num_envs, num_agents)
     # no idea why the returns are so small
     print("Mean Return (Last): ", out["metrics"]["returned_episode_returns"][-1].mean())
     print("Std Return (Last): ", out["metrics"]["returned_episode_returns"][-1].std())

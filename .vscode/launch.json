@@ -1,0 +1,17 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "ippo-lbf",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/scratch/cluster/clw4542/explore_marl/continual-aht/lbf_training/ippo_lbf_checkpoints.py",
+            "cwd": "/scratch/cluster/clw4542/explore_marl/continual-aht/",
+            "console": "integratedTerminal"
+        }
+    ]
+}
