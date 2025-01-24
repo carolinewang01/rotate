@@ -1,6 +1,6 @@
 """
 Based on PureJaxRL Implementation of PPO. 
-Script adapted from JaxMARL IPPO RNN Smax script.
+Script adapted from JaxMARL IPPO RNN Smax example.
 """
 
 import jax

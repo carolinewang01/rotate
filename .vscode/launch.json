@@ -9,7 +9,7 @@
             "name": "ippo-lbf",
             "type": "debugpy",
             "request": "launch",
-            "program": "/scratch/cluster/clw4542/explore_marl/continual-aht/lbf_training/ippo_lbf_checkpoints.py",
+            "program": "/scratch/cluster/clw4542/explore_marl/continual-aht/lbf_training/fcp_train.py",
             "cwd": "/scratch/cluster/clw4542/explore_marl/continual-aht/",
             "console": "integratedTerminal"
         }

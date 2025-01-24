@@ -1,0 +1,457 @@
+def train_fcp_agent(config, checkpoints):
+    """
+    Train an FCP agent (agent_0) using a frozen pool of partner checkpoints (agent_1).
+    Returns a dictionary with final runner state, logging metrics, and FCP checkpoints.
+    """
+
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    import optax
+    from flax.training.train_state import TrainState
+    import distrax
+    from typing import NamedTuple
+
+    import jumanji
+    from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+    import jaxmarl
+
+    # Same ActorCritic architecture as your IPPO code
+    import flax.linen as nn
+    from flax.linen.initializers import orthogonal, constant
+    class ActorCritic(nn.Module):
+        action_dim: int
+        activation: str = "tanh"
+
+        @nn.compact
+        def __call__(self, x):
+            if self.activation == "relu":
+                activation_fn = nn.relu
+            else:
+                activation_fn = nn.tanh
+
+            # Actor
+            hidden = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
+            hidden = activation_fn(hidden)
+            hidden = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(hidden)
+            hidden = activation_fn(hidden)
+            logits = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))(hidden)
+            pi = distrax.Categorical(logits=logits)
+
+            # Critic
+            v_hidden = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(x)
+            v_hidden = activation_fn(v_hidden)
+            v_hidden = nn.Dense(64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))(v_hidden)
+            v_hidden = activation_fn(v_hidden)
+            value = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(v_hidden)
+
+            return pi, jnp.squeeze(value, axis=-1)
+
+    # ------------------------------
+    # 1) Flatten partner checkpoints into shape (N, ...) if desired
+    #    but we can also keep them as (n_seeds, m_ckpts, ...).
+    #    We'll just do gather via dynamic indexing in a jittable way.
+    # ------------------------------
+    partner_params = checkpoints["params"]  # This is the full PyTree
+    n_seeds = partner_params["Dense_0"]["kernel"].shape[0]
+    m_ckpts = partner_params["Dense_0"]["kernel"].shape[1]
+    num_total_partners = n_seeds * m_ckpts
+
+    # We can define a small helper to gather the correct slice for each environment
+    # from shape (n_seeds, m_ckpts, ...) -> (num_envs, ...)
+    # We'll do an integer mapping from [0, num_total_partners) -> (seed_idx, ckpt_idx).
+    def unravel_partner_idx(idx):
+        """Given a scalar in [0, n_seeds*m_ckpts), return (seed_idx, ckpt_idx)."""
+        # seed_idx = idx // m_ckpts
+        # ckpt_idx = idx % m_ckpts
+        # We'll do jax-friendly approach:
+        seed_idx = jnp.floor_divide(idx, m_ckpts)
+        ckpt_idx = jnp.mod(idx, m_ckpts)
+        return seed_idx, ckpt_idx
+
+    def gather_partner_params(partner_params_pytree, idx_vec):
+        """
+        idx_vec shape: (num_envs,) each in [0, n_seeds*m_ckpts).
+        Return a new pytree with shape (num_envs, ...) for each leaf.
+        """
+        # We'll define a function that gathers from each leaf
+        # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
+        # We'll vmap a slicing function.
+        def gather_leaf(leaf):
+            # leaf shape: (n_seeds, m_ckpts, ...)
+            # We'll define a function that slices out a single index:
+            def slice_one(idx):
+                s, c = unravel_partner_idx(idx)
+                return leaf[s, c]  # shape (...)
+            return jax.vmap(slice_one)(idx_vec)
+
+        return jax.tree_map(gather_leaf, partner_params_pytree)
+
+    # ------------------------------
+    # 2) Prepare environment (same as IPPO).
+    #    We'll assume exactly 2 agents: agent_0 = trainable, agent_1 = partner.
+    # ------------------------------
+    if config["ENV_NAME"] == 'lbf':
+        env = jumanji.make('LevelBasedForaging-v0')
+        env = JumanjiToJaxMARL(env)
+    else:
+        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+
+    num_agents = env.num_agents
+    assert num_agents == 2, "This FCP snippet assumes exactly 2 agents."
+
+    # We'll need the same helper functions from your original code: batchify, unbatchify, Transition
+    def batchify(x: dict, agent_list, num_actors):
+        """Convert dict of shape {agent: obs} -> (num_actors, obs_dim) by stacking in agent order."""
+        x = jnp.stack([x[a] for a in agent_list])
+        return x.reshape((num_actors, -1))
+
+    def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_agents):
+        """Inverse of batchify."""
+        x = x.reshape((num_agents, num_envs, -1))
+        return {a: x[i] for i, a in enumerate(agent_list)}
+
+    class Transition(NamedTuple):
+        done: jnp.ndarray
+        action: jnp.ndarray
+        value: jnp.ndarray
+        reward: jnp.ndarray
+        log_prob: jnp.ndarray
+        obs: jnp.ndarray
+        info: Any
+
+    # ------------------------------
+    # 3) Build the FCP training function, closely mirroring `make_train(...)`.
+    # ------------------------------
+    def make_fcp_train(config, env, partner_params):
+        config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
+        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+        config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["NUM_STEPS"]) // config["NUM_MINIBATCHES"]
+
+        from jaxmarl.wrappers.baselines import LogWrapper
+        # If you rely on the LogWrapper for metrics like "returned_episode_returns", wrap again:
+        env = LogWrapper(env)
+
+        def linear_schedule(count):
+            frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
+            return config["LR"] * frac
+
+        def train(rng):
+            # --------------------------
+            # 3a) Init agent_0 network
+            # --------------------------
+            agent0_net = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
+            rng, init_rng = jax.random.split(rng)
+            dummy_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
+            init_params = agent0_net.init(init_rng, dummy_obs)
+
+            if config["ANNEAL_LR"]:
+                tx = optax.chain(
+                    optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
+                    optax.adam(learning_rate=linear_schedule, eps=1e-5),
+                )
+            else:
+                tx = optax.chain(
+                    optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
+                    optax.adam(config["LR"], eps=1e-5),
+                )
+            train_state = TrainState.create(
+                apply_fn=agent0_net.apply,
+                params=init_params,
+                tx=tx,
+            )
+
+            # --------------------------
+            # 3b) Init envs & partner indices
+            # --------------------------
+            rng, reset_rng = jax.random.split(rng)
+            reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
+            obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
+
+            # Each environment picks a partner index in [0, n_seeds*m_ckpts)
+            rng, partner_rng = jax.random.split(rng)
+            partner_indices = jax.random.randint(
+                key=partner_rng,
+                shape=(config["NUM_ENVS"],),
+                minval=0,
+                maxval=num_total_partners
+            )
+
+            # --------------------------
+            # 3c) Define env step
+            # --------------------------
+            def _env_step(runner_state, unused):
+                """
+                runner_state = (train_state, env_state, last_obs, partner_indices, rng)
+                Returns updated runner_state, and a Transition for agent_0.
+                """
+                train_state, env_state, last_obs, partner_indices, rng = runner_state
+                rng, actor_rng, partner_rng, step_rng = jax.random.split(rng, 4)
+
+                # Flatten observations for both agents -> shape (num_actors, obs_dim)
+                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+                # agent_0 obs are the first config["NUM_ENVS"] entries, agent_1 the next
+                obs_0 = obs_batch[: config["NUM_ENVS"]]
+                obs_1 = obs_batch[config["NUM_ENVS"] :]
+
+                # Agent_0 action
+                pi_0, val_0 = agent0_net.apply(train_state.params, obs_0)
+                act_0 = pi_0.sample(seed=actor_rng)
+                logp_0 = pi_0.log_prob(act_0)
+
+                # Agent_1 (partner) action
+                #  gather correct partner params for each env -> shape (num_envs, ...)
+                gathered_params = gather_partner_params(partner_params, partner_indices)
+                # We'll vmap the partner net apply
+                def apply_partner(p, o, rng_):
+                    # p: single-partner param dictionary
+                    # o: single obs vector
+                    # rng_: single environment's RNG
+                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
+                                        activation=config["ACTIVATION"]).apply({'params': p}, o)
+                    return pi.sample(seed=rng_)
+
+                rng_partner = jax.random.split(partner_rng, config["NUM_ENVS"])
+                act_1 = jax.vmap(apply_partner)(gathered_params, obs_1, rng_partner)
+
+                # Combine actions into the env format
+                combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
+                env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
+
+                # Step env
+                step_rngs = jax.random.split(step_rng, config["NUM_ENVS"])
+                obsv2, env_state2, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
+                    step_rngs, env_state, env_act
+                )
+
+                # Info may have shapes like (num_envs,). We replicate the IPPO approach:
+                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+
+                # Pack agent_0 data into Transition
+                # agent_0 reward/done = reward["agent_0"], done["agent_0"]
+                rew_0 = jnp.stack([reward[i]["agent_0"] for i in range(config["NUM_ENVS"])])
+                done_0 = jnp.stack([done[i]["agent_0"] for i in range(config["NUM_ENVS"])])
+                transition = Transition(
+                    done=done_0,
+                    action=act_0,
+                    value=val_0,
+                    reward=rew_0,
+                    log_prob=logp_0,
+                    obs=obs_0,
+                    info=info  # store the entire info dict tree for logging
+                )
+
+                new_runner_state = (train_state, env_state2, obsv2, partner_indices, rng)
+                return new_runner_state, transition
+
+            # --------------------------
+            # 3d) GAE & update step
+            # --------------------------
+            def _calculate_gae(traj_batch, last_val):
+                def _get_advantages(gae_and_next_value, transition):
+                    gae, next_value = gae_and_next_value
+                    delta = (transition.reward
+                             + config["GAMMA"] * next_value * (1 - transition.done)
+                             - transition.value)
+                    gae = (delta
+                           + config["GAMMA"] * config["GAE_LAMBDA"] * (1 - transition.done) * gae)
+                    return (gae, transition.value), gae
+
+                (_, _), advantages = jax.lax.scan(
+                    _get_advantages,
+                    (jnp.zeros_like(last_val), last_val),
+                    traj_batch,
+                    reverse=True,
+                    unroll=16,
+                )
+                returns = advantages + traj_batch.value
+                return advantages, returns
+
+            def _update_minbatch(train_state, batch_info):
+                traj_batch, advantages, returns = batch_info
+                def _loss_fn(params, traj_batch, gae, target_v):
+                    pi, value = agent0_net.apply(params, traj_batch.obs)
+                    log_prob = pi.log_prob(traj_batch.action)
+
+                    # Value loss
+                    value_pred_clipped = traj_batch.value + (value - traj_batch.value).clip(
+                        -config["CLIP_EPS"], config["CLIP_EPS"]
+                    )
+                    v_loss_1 = jnp.square(value - target_v)
+                    v_loss_2 = jnp.square(value_pred_clipped - target_v)
+                    value_loss = 0.5 * jnp.mean(jnp.maximum(v_loss_1, v_loss_2))
+
+                    # Policy gradient loss
+                    ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                    gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
+                    pg_loss_1 = ratio * gae_norm
+                    pg_loss_2 = jnp.clip(ratio, 1.0 - config["CLIP_EPS"], 1.0 + config["CLIP_EPS"]) * gae_norm
+                    pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
+
+                    # Entropy
+                    entropy = jnp.mean(pi.entropy())
+
+                    total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
+                    return total_loss, (value_loss, pg_loss, entropy)
+
+                grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
+                (loss_val, aux_vals), grads = grad_fn(train_state.params, traj_batch, advantages, returns)
+                train_state = train_state.apply_gradients(grads=grads)
+                return train_state, (loss_val, aux_vals)
+
+            def _update_epoch(update_state, unused):
+                (train_state, traj_batch, advantages, returns, rng) = update_state
+                rng, perm_rng = jax.random.split(rng)
+                batch_size = config["NUM_STEPS"] * config["NUM_ENVS"]
+                permutation = jax.random.permutation(perm_rng, batch_size)
+
+                def flatten(x):
+                    return x.reshape((batch_size,) + x.shape[2:])
+                traj_batch_flat = jax.tree_map(flatten, traj_batch)
+                advantages_flat = advantages.reshape((batch_size,))
+                returns_flat = returns.reshape((batch_size,))
+
+                # Shuffle
+                traj_batch_flat = jax.tree_map(lambda x: jnp.take(x, permutation, axis=0), traj_batch_flat)
+                advantages_flat = jnp.take(advantages_flat, permutation, axis=0)
+                returns_flat = jnp.take(returns_flat, permutation, axis=0)
+
+                # Reshape into minibatches
+                def split_mb(x):
+                    return x.reshape((config["NUM_MINIBATCHES"], config["MINIBATCH_SIZE"]) + x.shape[1:])
+                traj_mb = jax.tree_map(split_mb, traj_batch_flat)
+                adv_mb = advantages_flat.reshape((config["NUM_MINIBATCHES"], config["MINIBATCH_SIZE"]))
+                ret_mb = returns_flat.reshape((config["NUM_MINIBATCHES"], config["MINIBATCH_SIZE"]))
+
+                def _scan_minibatch(carry, i):
+                    train_state = carry
+                    batch_info = (jax.tree_map(lambda xx: xx[i], traj_mb),
+                                  adv_mb[i],
+                                  ret_mb[i])
+                    train_state, _ = _update_minbatch(train_state, batch_info)
+                    return train_state, ()
+                train_state, _ = jax.lax.scan(_scan_minibatch, train_state, jnp.arange(config["NUM_MINIBATCHES"]))
+
+                return (train_state, traj_batch, advantages, returns, rng), None
+
+            def _update_step(update_runner_state, unused):
+                """
+                1. Collect rollouts
+                2. Compute advantage
+                3. PPO updates
+                """
+                (train_state, env_state, last_obs, partner_indices, rng, update_steps) = update_runner_state
+
+                # 1) rollout
+                runner_state = (train_state, env_state, last_obs, partner_indices, rng)
+                runner_state, traj_batch = jax.lax.scan(_env_step, runner_state, None, config["NUM_STEPS"])
+                (train_state, env_state, last_obs, partner_indices, rng) = runner_state
+
+                # 2) advantage
+                obs_batch_final = jnp.stack([last_obs[i]["agent_0"].flatten() for i in range(config["NUM_ENVS"])])
+                _, last_val = agent0_net.apply(train_state.params, obs_batch_final)
+                advantages, returns = _calculate_gae(traj_batch, last_val)
+
+                # 3) PPO update
+                update_state = (train_state, traj_batch, advantages, returns, rng)
+                update_state, _ = jax.lax.scan(_update_epoch, update_state, None, config["UPDATE_EPOCHS"])
+                train_state = update_state[0]
+
+                # (Optional) re-sample partner for each env for next rollout
+                rng, p_rng = jax.random.split(rng)
+                new_partner_idx = jax.random.randint(
+                    key=p_rng, shape=(config["NUM_ENVS"],),
+                    minval=0, maxval=num_total_partners
+                )
+
+                # Metrics
+                metric = traj_batch.info
+                metric["update_steps"] = update_steps
+
+                new_runner_state = (train_state, env_state, last_obs, new_partner_idx, rng, update_steps + 1)
+                return (new_runner_state, metric)
+
+            # --------------------------
+            # 3e) Checkpoint saving
+            # --------------------------
+            checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+            num_ckpts = config["NUM_CHECKPOINTS"]
+
+            # Build a PyTree that holds parameters for all FCP checkpoints
+            def init_ckpt_array(params_pytree):
+                return jax.tree_map(lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), params_pytree)
+
+            def _update_step_with_ckpt(state_with_ckpt, unused):
+                ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
+                 checkpoint_array, ckpt_idx) = state_with_ckpt
+
+                # Single PPO update
+                (new_runner_state, metric) = _update_step(
+                    (train_state, env_state, last_obs, partner_idx, rng, update_steps),
+                    None
+                )
+                (train_state, env_state, last_obs, partner_idx, rng, update_steps) = new_runner_state
+
+                # Decide if we store a checkpoint
+                to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+
+                def store_ckpt(args):
+                    ckpt_arr, cidx = args
+                    new_ckpt_arr = jax.tree_map(
+                        lambda c_arr, p: c_arr.at[cidx].set(p),
+                        ckpt_arr, train_state.params
+                    )
+                    return (new_ckpt_arr, cidx + 1)
+
+                def skip_ckpt(args):
+                    return args
+
+                (checkpoint_array, ckpt_idx) = jax.lax.cond(
+                    to_store, store_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx)
+                )
+
+                return ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
+                        checkpoint_array, ckpt_idx), metric
+
+            # init checkpoint array
+            checkpoint_array = init_ckpt_array(train_state.params)
+            ckpt_idx = 0
+
+            # initial runner state for scanning
+            update_steps = 0
+            update_runner_state = (train_state, env_state, obsv, partner_indices, rng, update_steps)
+            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx)
+
+            # run training
+            state_with_ckpt, metrics = jax.lax.scan(
+                _update_step_with_ckpt,
+                state_with_ckpt,
+                xs=None,
+                length=config["NUM_UPDATES"]
+            )
+            (final_runner_state, checkpoint_array, final_ckpt_idx), metrics = state_with_ckpt
+
+            # Slice down if we didn't fill all ckpts
+            final_checkpoints = jax.tree_map(
+                lambda arr: arr[:final_ckpt_idx],
+                checkpoint_array
+            )
+
+            results = {
+                "runner_state": final_runner_state,
+                "metrics": metrics,  # shape (NUM_UPDATES, ...)
+                "checkpoints": {"params": final_checkpoints},
+            }
+            return results
+
+        return train
+
+    # ------------------------------
+    # 4) Actually run the FCP training
+    # ------------------------------
+    fcp_train_fn = make_fcp_train(config, env, partner_params)
+    rng = jax.random.PRNGKey(config["SEED"])
+    with jax.disable_jit(False):
+        out = fcp_train_fn(rng)
+
+    return out["checkpoints"], out["metrics"]

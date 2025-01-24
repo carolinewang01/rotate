@@ -74,7 +74,7 @@ def get_rollout(train_state, config):
         env = JumanjiToJaxMARL(env)
     else:
         env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    network = ActorCritic(env.action_space().n, activation=config["ACTIVATION"])
+    network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
 
@@ -336,32 +336,88 @@ def make_train(config):
             runner_state = (train_state, env_state, last_obs, rng)
             return (runner_state, update_steps), metric
 
-        # Calculate the interval for checkpoints
-        checkpoint_interval = config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"]
-        checkpoints = []
+        checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+        num_ckpts = config["NUM_CHECKPOINTS"]
 
+        # (3) Build a PyTree that can hold the parameters for all checkpoints.
+        #     For each leaf x in train_state.params, create an array of shape
+        #     (num_ckpts,) + x.shape to hold all saved parameter states.
+        def init_ckpt_array(params_pytree):
+            return jax.tree_map(
+                lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype),
+                params_pytree
+            )
+
+        def _update_step_with_checkpoint(update_with_ckpt_runner_state, unused):
+            (update_runner_state, checkpoint_array, ckpt_idx) = update_with_ckpt_runner_state
+            # update_runner_state is ((train_state, env_state, obsv, rng), update_steps)
+            # Run one PPO update step
+            update_runner_state, metric = _update_step(update_runner_state, None)
+            _, update_steps = update_runner_state
+
+            # Decide if we store a checkpoint now
+            # condition: step % checkpoint_interval == 0
+            # (You can tweak so you store at the end, or start, etc.)
+            to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+
+            def store_ckpt_fn(args):
+                # Write current runner_state[0].params into checkpoint_array at ckpt_idx
+                # and increment ckpt_idx
+                _checkpoint_array, _ckpt_idx = args
+                new_checkpoint_array = jax.tree_map(
+                    lambda c_arr, p: c_arr.at[_ckpt_idx].set(p),
+                    _checkpoint_array,
+                    update_runner_state[0][0].params
+                )
+                return new_checkpoint_array, _ckpt_idx + 1
+
+            def skip_ckpt_fn(args):
+                return args  # No changes if we don't store
+
+            checkpoint_array, ckpt_idx = jax.lax.cond(
+                to_store,
+                store_ckpt_fn,
+                skip_ckpt_fn,
+                (checkpoint_array, ckpt_idx),
+            )
+
+            runner_state = (update_runner_state, checkpoint_array, ckpt_idx)
+            return runner_state, metric
+
+        # (5) Use lax.scan over NUM_UPDATES
         rng, _rng = jax.random.split(rng)
-        runner_state = (train_state, env_state, obsv, _rng)
-        
-        def _update_step_with_checkpoints(carry, _):
-            runner_state, update_step = carry
-            runner_state, metric = _update_step((runner_state, update_step), None)
-            if update_step % checkpoint_interval == 0:
-                checkpoints.append(runner_state[0].params)
-            # return (runner_state, update_step + 1), metric
-            return (runner_state, update_step), metric
+        update_steps = 0
+        update_runner_state = ((train_state, env_state, obsv, _rng), update_steps)
+        checkpoint_array = init_ckpt_array(train_state.params)
+        ckpt_idx = 0
+        update_with_ckpt_runner_state = (update_runner_state, checkpoint_array, ckpt_idx)
 
-        runner_state, metric = jax.lax.scan(
-            _update_step_with_checkpoints, (runner_state, 0), None, config["NUM_UPDATES"]
+        runner_state, metrics = jax.lax.scan(
+            _update_step_with_checkpoint,
+            update_with_ckpt_runner_state,
+            xs=None,  # No per-step input data
+            length=config["NUM_UPDATES"],
         )
 
-        # Ensure the final state is also included as a checkpoint
-        checkpoints.append(runner_state[0].params)
+        update_runner_state, checkpoint_array, final_ckpt_idx = runner_state
 
-        return {"runner_state": runner_state, 
-                "metrics": metric,
-                "checkpoints": checkpoints}
+        # metrics is a list (PyTree) of size NUM_UPDATES
+        # Convert that list-of-dicts into stacked arrays
+        # stacked_metrics = jax.tree_map(lambda *xs: jnp.stack(xs), *metrics)
 
+        # (6) If you only wrote final_ckpt_idx < num_ckpts checkpoints,
+        #     slice the arrays down:
+        # final_checkpoints = jax.tree_map(
+        #     lambda arr: arr[:final_ckpt_idx],
+        #     checkpoint_array
+        # )
+
+        return {
+            "runner_state": update_runner_state,
+            "metrics": metrics,
+            # final_checkpoints is a PyTree of shape (final_ckpt_idx, ...) in each leaf
+            "checkpoints": checkpoint_array
+        }
     return train
 
 if __name__ == "__main__":
@@ -397,8 +453,8 @@ if __name__ == "__main__":
     with jax.disable_jit(False):
         train_jit = jax.jit(jax.vmap(make_train(config)))
         out = train_jit(rngs)
-
-
+    # checkpoints
+    # out['checkpoints']['params']['Dense_0']['kernel'] has shape (num_seeds, num_ckpts, *param_shape)
     # print results for each seed
     # metrics values shape is (num_seeds, num_updates, num_envs, ???)
     for i in range(config["NUM_SEEDS"]):
