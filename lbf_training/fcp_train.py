@@ -308,13 +308,13 @@ def train_fcp_agent(config, checkpoints):
                 permutation = jax.random.permutation(perm_rng, batch_size)
 
                 batch = (traj_batch, advantages, targets)
-                batch = jax.tree_util.tree.map(
+                batch = jax.tree.map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
-                shuffled_batch = jax.tree_util.tree.map(
+                shuffled_batch = jax.tree.map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
                 )
-                minibatches = jax.tree_util.tree.map(
+                minibatches = jax.tree.map(
                     lambda x: jnp.reshape(
                         x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
                     ),
