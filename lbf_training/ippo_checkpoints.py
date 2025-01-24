@@ -402,21 +402,9 @@ def make_train(config):
 
         update_runner_state, checkpoint_array, final_ckpt_idx = runner_state
 
-        # metrics is a list (PyTree) of size NUM_UPDATES
-        # Convert that list-of-dicts into stacked arrays
-        # stacked_metrics = jax.tree.map(lambda *xs: jnp.stack(xs), *metrics)
-
-        # (6) If you only wrote final_ckpt_idx < num_ckpts checkpoints,
-        #     slice the arrays down:
-        # final_checkpoints = jax.tree.map(
-        #     lambda arr: arr[:final_ckpt_idx],
-        #     checkpoint_array
-        # )
-
         return {
             "runner_state": update_runner_state,
             "metrics": metrics,
-            # final_checkpoints is a PyTree of shape (final_ckpt_idx, ...) in each leaf
             "checkpoints": checkpoint_array
         }
     return train

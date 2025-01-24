@@ -424,16 +424,10 @@ def train_fcp_agent(config, checkpoints):
             )
             (final_runner_state, checkpoint_array, final_ckpt_idx) = state_with_ckpt
 
-            # Slice down if we didn't fill all ckpts
-            final_checkpoints = jax.tree.map(
-                lambda arr: arr[:final_ckpt_idx],
-                checkpoint_array
-            )
-
             out = {
                 "runner_state": final_runner_state,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
-                "checkpoints": {"params": final_checkpoints},
+                "checkpoints": {"params": checkpoint_array},
             }
             return out
 
@@ -441,11 +435,13 @@ def train_fcp_agent(config, checkpoints):
     # ------------------------------
     # 4) Actually run the FCP training
     # ------------------------------
-    fcp_train_fn = make_fcp_train(config, env, partner_params)
+    # fcp_train_fn = make_fcp_train(config, env, partner_params)
     rng = jax.random.PRNGKey(config["SEED"])
     # TODO: vmap across multiple seeds. 
+    rngs = jax.random.split(rng, config["NUM_SEEDS"])
     with jax.disable_jit(False):
-        out = fcp_train_fn(rng)
+        fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, env, partner_params)))
+        out = fcp_train_fn(rngs)
 
     return out["checkpoints"], out["metrics"]
 
@@ -483,3 +479,23 @@ if __name__ == "__main__":
     out_ckpts = load_checkpoints(ckpt_path)
     #####################################
     out_ckpts, out_metrics = train_fcp_agent(config, out_ckpts)
+
+    # visualize results
+    # print results for each seed
+    # metrics values shape is (num_seeds, num_updates, num_envs, ???)
+    for i in range(config["NUM_SEEDS"]):
+        print("Seed: ", i)
+        print("Mean Return (Last): ", out_metrics["returned_episode_returns"][i, -1].mean())
+        print("Std Return (Last): ", out_metrics["returned_episode_returns"][i, -1].std())
+
+        print("Mean Percent Eaten (Last): ", out_metrics["percent_eaten"][i, -1].mean())
+        print("Std Percent Eaten (Last): ", out_metrics["percent_eaten"][i, -1].std())
+
+    for i in range(config["NUM_SEEDS"]):
+        xs = out_metrics["update_steps"][i] * config["NUM_ENVS"] * config["NUM_STEPS"]
+        ys = out_metrics["percent_eaten"][i].mean((1, 2))
+        plt.plot(xs, ys)
+    
+    plt.xlabel("Time Step")
+    plt.ylabel("Percent Eaten")
+    plt.show()
