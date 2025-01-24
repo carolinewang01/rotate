@@ -89,18 +89,15 @@ def get_rollout(train_state, config):
     obs, state = env.reset(key_r)
     state_seq = [state]
     while not done:
-        key, key_a0, key_a1, key_s = jax.random.split(key, 4)
+        key, key_a, key_s = jax.random.split(key, 3)
+        obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
+        
+        pi, value = network.apply(network_params, obs_batch)
+        actions = pi.sample(seed=key_a)
+        log_prob = pi.log_prob(actions)
 
-        # obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
-        # breakpoint()
-        obs = {k: v.flatten() for k, v in obs.items()}
-
-        pi_0, _ = network.apply(network_params, obs["agent_0"])
-        pi_1, _ = network.apply(network_params, obs["agent_1"])
-
-        actions = {"agent_0": pi_0.sample(seed=key_a0), "agent_1": pi_1.sample(seed=key_a1)}
-        # env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-        # env_act = {k: v.flatten() for k, v in env_act.items()}
+        env_act = unbatchify(actions, env.agents, config["NUM_ENVS"], env.num_agents)
+        env_act = {k: v.flatten() for k, v in env_act.items()}
 
         # STEP ENV
         obs, state, reward, done, info = env.step(key_s, state, actions)
@@ -112,6 +109,11 @@ def get_rollout(train_state, config):
 
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+def batchify_info(x: dict, agent_list, num_actors):
+    '''Handle special case that info has both per-agent and global information'''
+    x = jnp.stack([x[a] for a in x if a in agent_list])
     return x.reshape((num_actors, -1))
 
 
@@ -185,7 +187,6 @@ def make_train(config):
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
-
                 env_act = {k:v.flatten() for k,v in env_act.items()}
 
                 # STEP ENV
@@ -196,7 +197,7 @@ def make_train(config):
                     rng_step, env_state, env_act
                 )
                 # note that num_actors = num_envs * num_agents
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
+                info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
 
                 transition = Transition(
                     batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
@@ -304,13 +305,13 @@ def make_train(config):
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(_rng, batch_size)
                 batch = (traj_batch, advantages, targets)
-                batch = jax.tree_util.tree_map(
+                batch = jax.tree_util.tree.map(
                     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
                 )
-                shuffled_batch = jax.tree_util.tree_map(
+                shuffled_batch = jax.tree_util.tree.map(
                     lambda x: jnp.take(x, permutation, axis=0), batch
                 )
-                minibatches = jax.tree_util.tree_map(
+                minibatches = jax.tree_util.tree.map(
                     lambda x: jnp.reshape(
                         x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
                     ),
@@ -343,7 +344,7 @@ def make_train(config):
         #     For each leaf x in train_state.params, create an array of shape
         #     (num_ckpts,) + x.shape to hold all saved parameter states.
         def init_ckpt_array(params_pytree):
-            return jax.tree_map(
+            return jax.tree.map(
                 lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype),
                 params_pytree
             )
@@ -364,7 +365,7 @@ def make_train(config):
                 # Write current runner_state[0].params into checkpoint_array at ckpt_idx
                 # and increment ckpt_idx
                 _checkpoint_array, _ckpt_idx = args
-                new_checkpoint_array = jax.tree_map(
+                new_checkpoint_array = jax.tree.map(
                     lambda c_arr, p: c_arr.at[_ckpt_idx].set(p),
                     _checkpoint_array,
                     update_runner_state[0][0].params
@@ -403,11 +404,11 @@ def make_train(config):
 
         # metrics is a list (PyTree) of size NUM_UPDATES
         # Convert that list-of-dicts into stacked arrays
-        # stacked_metrics = jax.tree_map(lambda *xs: jnp.stack(xs), *metrics)
+        # stacked_metrics = jax.tree.map(lambda *xs: jnp.stack(xs), *metrics)
 
         # (6) If you only wrote final_ckpt_idx < num_ckpts checkpoints,
         #     slice the arrays down:
-        # final_checkpoints = jax.tree_map(
+        # final_checkpoints = jax.tree.map(
         #     lambda arr: arr[:final_ckpt_idx],
         #     checkpoint_array
         # )

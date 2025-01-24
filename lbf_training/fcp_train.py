@@ -25,7 +25,7 @@ import wandb
 import pickle
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-from lbf_training.ippo_checkpoints import make_train, ActorCritic, batchify, unbatchify, Transition
+from lbf_training.ippo_checkpoints import make_train, ActorCritic, unbatchify
 
 def train_partners_in_parallel(config):
     '''
@@ -98,7 +98,7 @@ def train_fcp_agent(config, checkpoints):
                 return leaf[s, c]  # shape (...)
             return jax.vmap(slice_one)(idx_vec)
 
-        return jax.tree_map(gather_leaf, partner_params_pytree)
+        return jax.tree.map(gather_leaf, partner_params_pytree)
 
     # ------------------------------
     # 2) Prepare environment (same as IPPO).
@@ -126,6 +126,15 @@ def train_fcp_agent(config, checkpoints):
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
             return config["LR"] * frac
+
+        class Transition(NamedTuple):
+            done: jnp.ndarray
+            action: jnp.ndarray
+            value: jnp.ndarray
+            reward: jnp.ndarray
+            log_prob: jnp.ndarray
+            obs: jnp.ndarray
+            info: jnp.ndarray
 
         def train(rng):
             # --------------------------
@@ -179,11 +188,8 @@ def train_fcp_agent(config, checkpoints):
                 train_state, env_state, last_obs, partner_indices, rng = runner_state
                 rng, actor_rng, partner_rng, step_rng = jax.random.split(rng, 4)
 
-                # Flatten observations for both agents -> shape (num_actors, obs_dim)
-                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                # agent_0 obs are the first config["NUM_ENVS"] entries, agent_1 the next
-                obs_0 = obs_batch[: config["NUM_ENVS"]]
-                obs_1 = obs_batch[config["NUM_ENVS"] :]
+                obs_0 = last_obs["agent_0"]
+                obs_1 = last_obs["agent_1"]
 
                 # Agent_0 action
                 pi_0, val_0 = agent0_net.apply(train_state.params, obs_0)
@@ -208,30 +214,26 @@ def train_fcp_agent(config, checkpoints):
                 # Combine actions into the env format
                 combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
                 env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
+                env_act = {k: v.flatten() for k, v in env_act.items()}
 
                 # Step env
                 step_rngs = jax.random.split(step_rng, config["NUM_ENVS"])
                 obsv2, env_state2, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     step_rngs, env_state, env_act
                 )
+                # note that num_actors = num_envs * num_agents
+                info_0 = jax.tree.map(lambda x: x[:config["NUM_ENVS"]], info)
 
-                # Info may have shapes like (num_envs,). We replicate the IPPO approach:
-                info = jax.tree_map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
-
-                # Pack agent_0 data into Transition
-                # agent_0 reward/done = reward["agent_0"], done["agent_0"]
-                rew_0 = jnp.stack([reward[i]["agent_0"] for i in range(config["NUM_ENVS"])])
-                done_0 = jnp.stack([done[i]["agent_0"] for i in range(config["NUM_ENVS"])])
+                # Store agent_0 data in transition
                 transition = Transition(
-                    done=done_0,
+                    done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=rew_0,
+                    reward=reward["agent_0"],
                     log_prob=logp_0,
                     obs=obs_0,
-                    info=info  # store the entire info dict tree for logging
+                    info=info_0
                 )
-
                 new_runner_state = (train_state, env_state2, obsv2, partner_indices, rng)
                 return new_runner_state, transition
 
@@ -241,89 +243,88 @@ def train_fcp_agent(config, checkpoints):
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
-                    delta = (transition.reward
-                             + config["GAMMA"] * next_value * (1 - transition.done)
-                             - transition.value)
-                    gae = (delta
-                           + config["GAMMA"] * config["GAE_LAMBDA"] * (1 - transition.done) * gae)
-                    return (gae, transition.value), gae
+                    done, value, reward = (
+                        transition.done,
+                        transition.value,
+                        transition.reward,
+                    )
+                    delta = reward + config["GAMMA"] * next_value * (1 - done) - value
+                    gae = (
+                        delta
+                        + config["GAMMA"] * config["GAE_LAMBDA"] * (1 - done) * gae
+                    )
+                    return (gae, value), gae
 
-                (_, _), advantages = jax.lax.scan(
+                _, advantages = jax.lax.scan(
                     _get_advantages,
                     (jnp.zeros_like(last_val), last_val),
                     traj_batch,
                     reverse=True,
                     unroll=16,
                 )
-                returns = advantages + traj_batch.value
-                return advantages, returns
-
-            def _update_minbatch(train_state, batch_info):
-                traj_batch, advantages, returns = batch_info
-                def _loss_fn(params, traj_batch, gae, target_v):
-                    pi, value = agent0_net.apply(params, traj_batch.obs)
-                    log_prob = pi.log_prob(traj_batch.action)
-
-                    # Value loss
-                    value_pred_clipped = traj_batch.value + (value - traj_batch.value).clip(
-                        -config["CLIP_EPS"], config["CLIP_EPS"]
-                    )
-                    v_loss_1 = jnp.square(value - target_v)
-                    v_loss_2 = jnp.square(value_pred_clipped - target_v)
-                    value_loss = 0.5 * jnp.mean(jnp.maximum(v_loss_1, v_loss_2))
-
-                    # Policy gradient loss
-                    ratio = jnp.exp(log_prob - traj_batch.log_prob)
-                    gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
-                    pg_loss_1 = ratio * gae_norm
-                    pg_loss_2 = jnp.clip(ratio, 1.0 - config["CLIP_EPS"], 1.0 + config["CLIP_EPS"]) * gae_norm
-                    pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
-
-                    # Entropy
-                    entropy = jnp.mean(pi.entropy())
-
-                    total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
-                    return total_loss, (value_loss, pg_loss, entropy)
-
-                grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
-                (loss_val, aux_vals), grads = grad_fn(train_state.params, traj_batch, advantages, returns)
-                train_state = train_state.apply_gradients(grads=grads)
-                return train_state, (loss_val, aux_vals)
+                return advantages, advantages + traj_batch.value
 
             def _update_epoch(update_state, unused):
-                (train_state, traj_batch, advantages, returns, rng) = update_state
+                def _update_minbatch(train_state, batch_info):
+                    traj_batch, advantages, returns = batch_info
+                    def _loss_fn(params, traj_batch, gae, target_v):
+                        pi, value = agent0_net.apply(params, traj_batch.obs)
+                        log_prob = pi.log_prob(traj_batch.action)
+
+                        # Value loss
+                        value_pred_clipped = traj_batch.value + (
+                            value - traj_batch.value
+                            ).clip(
+                            -config["CLIP_EPS"], config["CLIP_EPS"])
+                        v_loss_1 = jnp.square(value - target_v)
+                        v_loss_2 = jnp.square(value_pred_clipped - target_v)
+                        value_loss = 0.5 * jnp.mean(jnp.maximum(v_loss_1, v_loss_2))
+
+                        # Policy gradient loss
+                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                        gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
+                        pg_loss_1 = ratio * gae_norm
+                        pg_loss_2 = jnp.clip(ratio, 1.0 - config["CLIP_EPS"], 1.0 + config["CLIP_EPS"]) * gae_norm
+                        pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
+
+                        # Entropy
+                        entropy = jnp.mean(pi.entropy())
+
+                        total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
+                        return total_loss, (value_loss, pg_loss, entropy)
+
+                    grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
+                    (loss_val, aux_vals), grads = grad_fn(train_state.params, traj_batch, advantages, returns)
+                    train_state = train_state.apply_gradients(grads=grads)
+                    return train_state, (loss_val, aux_vals)
+
+                (train_state, traj_batch, advantages, targets, rng) = update_state
                 rng, perm_rng = jax.random.split(rng)
-                batch_size = config["NUM_STEPS"] * config["NUM_ENVS"]
+                # Divide batch size by TWO because we are only training on data of agent_0
+                batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // 2 
+                assert (
+                    batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 2
+                ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(perm_rng, batch_size)
 
-                def flatten(x):
-                    return x.reshape((batch_size,) + x.shape[2:])
-                traj_batch_flat = jax.tree_map(flatten, traj_batch)
-                advantages_flat = advantages.reshape((batch_size,))
-                returns_flat = returns.reshape((batch_size,))
-
-                # Shuffle
-                traj_batch_flat = jax.tree_map(lambda x: jnp.take(x, permutation, axis=0), traj_batch_flat)
-                advantages_flat = jnp.take(advantages_flat, permutation, axis=0)
-                returns_flat = jnp.take(returns_flat, permutation, axis=0)
-
-                # Reshape into minibatches
-                def split_mb(x):
-                    return x.reshape((config["NUM_MINIBATCHES"], config["MINIBATCH_SIZE"]) + x.shape[1:])
-                traj_mb = jax.tree_map(split_mb, traj_batch_flat)
-                adv_mb = advantages_flat.reshape((config["NUM_MINIBATCHES"], config["MINIBATCH_SIZE"]))
-                ret_mb = returns_flat.reshape((config["NUM_MINIBATCHES"], config["MINIBATCH_SIZE"]))
-
-                def _scan_minibatch(carry, i):
-                    train_state = carry
-                    batch_info = (jax.tree_map(lambda xx: xx[i], traj_mb),
-                                  adv_mb[i],
-                                  ret_mb[i])
-                    train_state, _ = _update_minbatch(train_state, batch_info)
-                    return train_state, ()
-                train_state, _ = jax.lax.scan(_scan_minibatch, train_state, jnp.arange(config["NUM_MINIBATCHES"]))
-
-                return (train_state, traj_batch, advantages, returns, rng), None
+                batch = (traj_batch, advantages, targets)
+                batch = jax.tree_util.tree.map(
+                    lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
+                )
+                shuffled_batch = jax.tree_util.tree.map(
+                    lambda x: jnp.take(x, permutation, axis=0), batch
+                )
+                minibatches = jax.tree_util.tree.map(
+                    lambda x: jnp.reshape(
+                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
+                    ),
+                    shuffled_batch,
+                )
+                train_state, total_loss = jax.lax.scan(
+                    _update_minbatch, train_state, minibatches
+                )
+                update_state = (train_state, traj_batch, advantages, targets, rng)
+                return update_state, total_loss
 
             def _update_step(update_runner_state, unused):
                 """
@@ -339,12 +340,13 @@ def train_fcp_agent(config, checkpoints):
                 (train_state, env_state, last_obs, partner_indices, rng) = runner_state
 
                 # 2) advantage
-                obs_batch_final = jnp.stack([last_obs[i]["agent_0"].flatten() for i in range(config["NUM_ENVS"])])
+                obs_batch_final = last_obs["agent_0"]
+                # jnp.stack([last_obs[i]["agent_0"].flatten() for i in range(config["NUM_ENVS"])])
                 _, last_val = agent0_net.apply(train_state.params, obs_batch_final)
-                advantages, returns = _calculate_gae(traj_batch, last_val)
+                advantages, targets = _calculate_gae(traj_batch, last_val)
 
                 # 3) PPO update
-                update_state = (train_state, traj_batch, advantages, returns, rng)
+                update_state = (train_state, traj_batch, advantages, targets, rng)
                 update_state, _ = jax.lax.scan(_update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state = update_state[0]
 
@@ -370,7 +372,7 @@ def train_fcp_agent(config, checkpoints):
 
             # Build a PyTree that holds parameters for all FCP checkpoints
             def init_ckpt_array(params_pytree):
-                return jax.tree_map(lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), params_pytree)
+                return jax.tree.map(lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), params_pytree)
 
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
@@ -388,7 +390,7 @@ def train_fcp_agent(config, checkpoints):
 
                 def store_ckpt(args):
                     ckpt_arr, cidx = args
-                    new_ckpt_arr = jax.tree_map(
+                    new_ckpt_arr = jax.tree.map(
                         lambda c_arr, p: c_arr.at[cidx].set(p),
                         ckpt_arr, train_state.params
                     )
@@ -420,10 +422,10 @@ def train_fcp_agent(config, checkpoints):
                 xs=None,
                 length=config["NUM_UPDATES"]
             )
-            (final_runner_state, checkpoint_array, final_ckpt_idx), metrics = state_with_ckpt
+            (final_runner_state, checkpoint_array, final_ckpt_idx) = state_with_ckpt
 
             # Slice down if we didn't fill all ckpts
-            final_checkpoints = jax.tree_map(
+            final_checkpoints = jax.tree.map(
                 lambda arr: arr[:final_ckpt_idx],
                 checkpoint_array
             )
@@ -436,6 +438,16 @@ def train_fcp_agent(config, checkpoints):
             return out
 
         return train
+    # ------------------------------
+    # 4) Actually run the FCP training
+    # ------------------------------
+    fcp_train_fn = make_fcp_train(config, env, partner_params)
+    rng = jax.random.PRNGKey(config["SEED"])
+    # TODO: vmap across multiple seeds. 
+    with jax.disable_jit(False):
+        out = fcp_train_fn(rng)
+
+    return out["checkpoints"], out["metrics"]
 
 if __name__ == "__main__":
     # set hyperparameters:
@@ -456,7 +468,6 @@ if __name__ == "__main__":
         "ACTIVATION": "tanh",
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {
-        # "layout" : "cramped_room"
         },
         "ANNEAL_LR": True,
         "SEED": 0,
@@ -471,9 +482,4 @@ if __name__ == "__main__":
     ckpt_path = "results/lbf/2025-01-23_20-35-18/checkpoint.pkl"
     out_ckpts = load_checkpoints(ckpt_path)
     #####################################
-    rng = jax.random.PRNGKey(config["SEED"])
-    rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    with jax.disable_jit(False):
-        train_fcp_jit = jax.jit(jax.vmap(train_fcp_agent(config, out_ckpts)))
-        out = train_fcp_jit(rngs)
-
+    out_ckpts, out_metrics = train_fcp_agent(config, out_ckpts)

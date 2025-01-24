@@ -50,6 +50,7 @@ for episode in range(NUM_EPISODES):
             print("rewards", rewards[agent], "type", type(rewards[agent]))
             print("dones", done[agent], "type", type(done[agent]))
             print("info", info, "type", type(info))
+            breakpoint()
             print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
 
         print("state", state, "type", type(state))

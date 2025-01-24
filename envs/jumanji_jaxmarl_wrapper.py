@@ -110,7 +110,7 @@ class JumanjiToJaxMARL(object):
 
     def _extract_infos(self, timestep):
         # Broadcast info into per-agent shape
-        info = {} 
+        info = {}
         for k, v in timestep.extras.items():
             info[k] = jnp.array([v for _ in range(self.num_agents)])
         return info
