@@ -8,9 +8,8 @@ from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 from jaxmarl.environments.overcooked import Overcooked, overcooked_layouts, layout_grid_to_dict
 from jaxmarl.wrappers.baselines import LogWrapper
 
-import time
-
 # Parameters + random keys
+episodes = 2
 max_steps = 100
 key = jax.random.PRNGKey(0)
 key, key_r, key_a = jax.random.split(key, 3)
@@ -41,22 +40,24 @@ key_a = jax.random.split(key_a, env.num_agents)
 actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
 print('example action dict', actions)
 
-state_seq = []
-for ts in range(max_steps):
-    state_seq.append(state)
-    # Iterate random keys and sample actions
-    key, key_s, key_a = jax.random.split(key, 3)
-    key_a = jax.random.split(key_a, env.num_agents)
 
-    actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
+for _ in range(episodes):
+    state_seq = []
+    for ts in range(max_steps):
+        state_seq.append(state)
+        # Iterate random keys and sample actions
+        key, key_s, key_a = jax.random.split(key, 3)
+        key_a = jax.random.split(key_a, env.num_agents)
 
-    # Step environment
-    obs, state, rewards, dones, infos = env.step(key_s, state, actions)
-    print("\n timestep", ts)
-    print("obs", obs["agent_0"], "type", type(obs["agent_0"]))
-    print("rewards", rewards["agent_0"], "type", type(rewards["agent_0"]))
-    print("dones", dones["agent_0"], "type", type(dones["agent_0"]))
-    print("infos", infos, "type", type(infos))
+        actions = {agent: env.action_space(agent).sample(key_a[i]) for i, agent in enumerate(env.agents)}
+
+        # Step environment
+        obs, state, rewards, dones, infos = env.step(key_s, state, actions)
+        print("\n timestep", ts)
+        # print("obs", obs["agent_0"], "type", type(obs["agent_0"]))
+        # print("rewards", rewards["agent_0"], "type", type(rewards["agent_0"]))
+        # print("dones", dones["agent_0"], "type", type(dones["agent_0"]))
+        print("infos", infos, "type", type(infos))
 
 # Visualization code: 
 # viz = OvercookedVisualizer()

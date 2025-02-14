@@ -1,62 +1,18 @@
-import jax
-import jax.numpy as jnp
-import flax.linen as nn
-import numpy as np
-import optax
-from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any
-from flax.training.train_state import TrainState
-import distrax
-from gymnax.wrappers.purerl import LogWrapper, FlattenObservationWrapper
-
-import jaxmarl
-import jumanji
-from jaxmarl.wrappers.baselines import LogWrapper
-# from jaxmarl.environments.overcooked import overcooked_layouts
-
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+from typing import NamedTuple
 
 import hydra
+import jax
+import jax.numpy as jnp
+import jaxmarl
+import jumanji
+import optax
+from flax.training.train_state import TrainState
+from jaxmarl.wrappers.baselines import LogWrapper
 from omegaconf import OmegaConf
 
-import matplotlib.pyplot as plt
-
-class ActorCritic(nn.Module):
-    action_dim: Sequence[int]
-    activation: str = "tanh"
-
-    @nn.compact
-    def __call__(self, x):
-        if self.activation == "relu":
-            activation = nn.relu
-        else:
-            activation = nn.tanh
-        actor_mean = nn.Dense(
-            64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(x)
-        actor_mean = activation(actor_mean)
-        actor_mean = nn.Dense(
-            64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(actor_mean)
-        actor_mean = activation(actor_mean)
-        actor_mean = nn.Dense(
-            self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
-        )(actor_mean)
-        pi = distrax.Categorical(logits=actor_mean)
-
-        critic = nn.Dense(
-            64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(x)
-        critic = activation(critic)
-        critic = nn.Dense(
-            64, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(critic)
-        critic = activation(critic)
-        critic = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))(
-            critic
-        )
-
-        return pi, jnp.squeeze(critic, axis=-1)
+from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+from fcp.networks import ActorCritic
+from fcp.vis_utils import get_stats, plot_metrics
 
 
 class Transition(NamedTuple):
@@ -94,7 +50,6 @@ def get_rollout(train_state, config):
         
         pi, value = network.apply(network_params, obs_batch)
         actions = pi.sample(seed=key_a)
-        log_prob = pi.log_prob(actions)
 
         env_act = unbatchify(actions, env.agents, config["NUM_ENVS"], env.num_agents)
         env_act = {k: v.flatten() for k, v in env_act.items()}
@@ -115,7 +70,6 @@ def batchify_info(x: dict, agent_list, num_actors):
     '''Handle special case that info has both per-agent and global information'''
     x = jnp.stack([x[a] for a in x if a in agent_list])
     return x.reshape((num_actors, -1))
-
 
 def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
     x = x.reshape((num_actors, num_envs, -1))
@@ -144,7 +98,6 @@ def make_train(config):
         return config["LR"] * frac
 
     def train(rng):
-
         # INIT NETWORK
         network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
@@ -184,6 +137,7 @@ def make_train(config):
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
 
                 pi, value = network.apply(train_state.params, obs_batch)
+                # TODO: check that actions will be different for all envs
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
@@ -211,7 +165,8 @@ def make_train(config):
                 )
                 runner_state = (train_state, env_state, obsv, rng)
                 return runner_state, transition
-
+            
+            # TODO: figure out how to VMAP the reset!
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
@@ -376,9 +331,9 @@ def make_train(config):
                 return args  # No changes if we don't store
 
             checkpoint_array, ckpt_idx = jax.lax.cond(
-                to_store,
-                store_ckpt_fn,
-                skip_ckpt_fn,
+                to_store, # if to_store, execute true function(operand). else, execute false function(operand).
+                store_ckpt_fn, # true fn
+                skip_ckpt_fn, # false fn
                 (checkpoint_array, ckpt_idx),
             )
 
@@ -403,7 +358,7 @@ def make_train(config):
         update_runner_state, checkpoint_array, final_ckpt_idx = runner_state
 
         return {
-            "runner_state": update_runner_state,
+            "final_params": update_runner_state[0][0].params,
             "metrics": metrics,
             "checkpoints": checkpoint_array
         }
@@ -414,10 +369,10 @@ if __name__ == "__main__":
     # set hyperparameters:
     config = {
         "LR": 1.e-4,
-        "NUM_ENVS": 8, # 16
+        "NUM_ENVS": 16,
         "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 1e5, # 1e6,
-        "UPDATE_EPOCHS": 4,
+        "TOTAL_TIMESTEPS": 1e6,
+        "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 16, # 4,
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
@@ -436,29 +391,14 @@ if __name__ == "__main__":
         "NUM_SEEDS": 2
     }
 
-    # config["ENV_KWARGS"]["layout"] = overcooked_layouts[config["ENV_KWARGS"]["layout"]]
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     with jax.disable_jit(False):
         train_jit = jax.jit(jax.vmap(make_train(config)))
         out = train_jit(rngs)
-    # checkpoints
+
+
     # out['checkpoints']['params']['Dense_0']['kernel'] has shape (num_seeds, num_ckpts, *param_shape)
-    # print results for each seed
-    # metrics values shape is (num_seeds, num_updates, num_envs, ???)
-    for i in range(config["NUM_SEEDS"]):
-        print("Seed: ", i)
-        print("Mean Return (Last): ", out["metrics"]["returned_episode_returns"][i, -1].mean())
-        print("Std Return (Last): ", out["metrics"]["returned_episode_returns"][i, -1].std())
-
-        print("Mean Percent Eaten (Last): ", out["metrics"]["percent_eaten"][i, -1].mean())
-        print("Std Percent Eaten (Last): ", out["metrics"]["percent_eaten"][i, -1].std())
-
-    for i in range(config["NUM_SEEDS"]):
-        xs = out["metrics"]["update_steps"][i] * config["NUM_ENVS"] * config["NUM_STEPS"]
-        ys = out["metrics"]["percent_eaten"][i].mean((1, 2))
-        plt.plot(xs, ys)
-    
-    plt.xlabel("Time Step")
-    plt.ylabel("Percent Eaten")
-    plt.show()
+    # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs*num_agents)
+    all_stats = get_stats(out['metrics'], stats=("percent_eaten", "returned_episode_returns"))
+    plot_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])

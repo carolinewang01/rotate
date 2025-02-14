@@ -17,8 +17,8 @@ def sample_action(action_spec, key):
 # Instantiate a Jumanji environment using the registry
 env = jumanji.make('LevelBasedForaging-v0')
 
-NUM_EPISODES = 1
-RENDER = False
+NUM_EPISODES = 10
+RENDER = True
 SAVEVIDEO = False
 
 reset_fn = jax.jit(env.reset)
@@ -44,7 +44,7 @@ for episode in range(NUM_EPISODES):
             env.render(state)
         states.append(state)
     
-        import sys; sys.exit(0)
+        # import sys; sys.exit(0)
 
     # Rendering: Freeze the terminal frame to pause the GIF.
     if RENDER:

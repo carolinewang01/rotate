@@ -1,9 +1,8 @@
 from functools import partial
 import jax
-from typing import Dict, Any
+from typing import Dict, Any, List
 import jax.numpy as jnp
 from flax.struct import dataclass
-
 
 from jumanji.env import Environment as JumanjiEnv
 from jumanji import specs as jumanji_specs
@@ -49,16 +48,26 @@ class JumanjiToJaxMARL(object):
 
     @partial(jax.jit, static_argnums=(0,))
     def step(self, key, state: WrappedEnvState, actions, params=None):
+        '''Performs step transitions in the environment. 
+        In compliance with JaxMARL MultiAgentEnv interface, auto-resets the environment if done.
+        '''
+        key, key_reset = jax.random.split(key)
         # Convert dict of actions to array
         actions_array = self._actions_to_array(actions)
         env_state, timestep = self.env.step(state.env_state, actions_array)
         avail_actions = self._extract_avail_actions(timestep)
-        state = WrappedEnvState(env_state, avail_actions, timestep.observation.step_count)
 
-        obs = self._extract_observations(timestep.observation)
+        state_st = WrappedEnvState(env_state, avail_actions, timestep.observation.step_count)
+        obs_st = self._extract_observations(timestep.observation)
         reward = self._extract_rewards(timestep.reward)
         done = self._extract_dones(timestep)
         info  = self._extract_infos(timestep)
+        # Auto-reset environment based on termination
+        obs, state = jax.tree.map(
+            lambda x, y: jax.lax.select(done["__all__"], x, y), 
+            self.reset(key_reset), 
+            (obs_st, state_st)
+        )
         return obs, state, reward, done, info
 
     def observation_space(self, agent: str):
@@ -222,3 +231,11 @@ class JumanjiToJaxMARL(object):
             )
         else:
             raise NotImplementedError(f"Spec type {type(spec)} not supported.")
+
+    def render(self, state: WrappedEnvState):
+        '''TODO: figure out if this aligns with JaxMARL rendering interface.'''
+        self.env.render(state.env_state)
+    
+    def animate(self, states: List[WrappedEnvState], interval=100):
+        '''TODO: figure out if this aligns with JaxMARL rendering interface.'''
+        return self.env.animate([s.env_state for s in states], interval=interval)

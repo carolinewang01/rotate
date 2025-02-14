@@ -2,58 +2,36 @@
 Based on PureJaxRL Implementation of PPO. 
 Script adapted from JaxMARL IPPO RNN Smax script.
 """
-import os
-from datetime import datetime
+import time
+from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
-import functools
-import flax
-import flax.linen as nn
-import numpy as np
-import optax
-from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any, Dict
-from flax.training.train_state import TrainState
-import distrax
-import hydra
-from omegaconf import DictConfig, OmegaConf
-import matplotlib.pyplot as plt
-from jaxmarl.wrappers.baselines import LogWrapper
 import jaxmarl
 import jumanji
-import wandb
-import pickle
+import optax
+from flax.training.train_state import TrainState
+from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-from lbf_training.ippo_checkpoints import make_train, ActorCritic, unbatchify
+from fcp.ippo_checkpoints import make_train, unbatchify
+from fcp.networks import ActorCritic
+from fcp.utils import load_checkpoints, save_train_run
+from fcp.vis_utils import get_stats, plot_metrics
 
-def train_partners_in_parallel(config):
+
+def train_partners_in_parallel(config, base_seed):
     '''
     Train a pool of partners for FCP. Return checkpoints for all partners.
+    Returns out, a dictionary of the final train_state, metrics, and checkpoints.
     '''
-    rng = jax.random.PRNGKey(config["SEED"])
+    rng = jax.random.PRNGKey(base_seed)
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
 
     with jax.disable_jit(False):
         train_jit = jax.jit(jax.vmap(make_train(config)))
         out = train_jit(rngs)
-    
-    return out['checkpoints'], out['metrics']
-
-def save_checkpoints(config, checkpoints):
-    curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_dir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    savepath = f"{save_dir}/checkpoint.pkl"
-    with open(savepath, "wb") as f:
-        pickle.dump(checkpoints, f)
-    return savepath
-
-def load_checkpoints(path):
-    with open(path, "rb") as f:
-        checkpoints = pickle.load(f)
-    return checkpoints
+    return out
 
 def train_fcp_agent(config, checkpoints):
     '''
@@ -66,8 +44,7 @@ def train_fcp_agent(config, checkpoints):
     #    We'll just do gather via dynamic indexing in a jittable way.
     # ------------------------------
     partner_params = checkpoints["params"]  # This is the full PyTree
-    n_seeds = partner_params["Dense_0"]["kernel"].shape[0]
-    m_ckpts = partner_params["Dense_0"]["kernel"].shape[1]
+    n_seeds, m_ckpts = partner_params["Dense_0"]["kernel"].shape[:2]
     num_total_partners = n_seeds * m_ckpts
 
     # We can define a small helper to gather the correct slice for each environment
@@ -348,7 +325,7 @@ def train_fcp_agent(config, checkpoints):
                 # 3) PPO update
                 update_state = (train_state, traj_batch, advantages, targets, rng)
                 update_state, _ = jax.lax.scan(_update_epoch, update_state, None, config["UPDATE_EPOCHS"])
-                train_state = update_state[0]
+                # train_state = update_state[0]
 
                 # (Optional) re-sample partner for each env for next rollout
                 rng, p_rng = jax.random.split(rng)
@@ -365,14 +342,16 @@ def train_fcp_agent(config, checkpoints):
                 return (new_runner_state, metric)
 
             # --------------------------
-            # 3e) Checkpoint saving
+            # 3e) PPO Update and Checkpoint saving
             # --------------------------
             checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all FCP checkpoints
             def init_ckpt_array(params_pytree):
-                return jax.tree.map(lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), params_pytree)
+                return jax.tree.map(
+                    lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), 
+                    params_pytree)
 
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
@@ -425,8 +404,9 @@ def train_fcp_agent(config, checkpoints):
             (final_runner_state, checkpoint_array, final_ckpt_idx) = state_with_ckpt
 
             out = {
-                "runner_state": final_runner_state,
+                "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
+                # TODO: is wrapping with params necessary?
                 "checkpoints": {"params": checkpoint_array},
             }
             return out
@@ -435,25 +415,24 @@ def train_fcp_agent(config, checkpoints):
     # ------------------------------
     # 4) Actually run the FCP training
     # ------------------------------
-    # fcp_train_fn = make_fcp_train(config, env, partner_params)
-    rng = jax.random.PRNGKey(config["SEED"])
-    # TODO: vmap across multiple seeds. 
+    # training is vmapped across multiple seeds
+    rng = jax.random.PRNGKey(config["TRAIN_SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     with jax.disable_jit(False):
         fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, env, partner_params)))
         out = fcp_train_fn(rngs)
-
-    return out["checkpoints"], out["metrics"]
+    return out
 
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
         "LR": 1.e-4,
-        "NUM_ENVS": 8, # 16,
+        "NUM_ENVS": 16,
         "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 1e5, # 1e6,
-        "UPDATE_EPOCHS": 4,
+        "TOTAL_TIMESTEPS": 3e6, # 3e6 
+        "UPDATE_EPOCHS": 10,
         "NUM_MINIBATCHES": 16, # 4,
+        # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
@@ -466,36 +445,41 @@ if __name__ == "__main__":
         "ENV_KWARGS": {
         },
         "ANNEAL_LR": True,
-        "SEED": 0,
-        "NUM_SEEDS": 2,
+        "TRAIN_PARTNER_SEED": 112358,
+        "EVAL_PARTNER_SEED": 1285842,
+        "TRAIN_SEED": 38410,
+        "EVAL_SEED": 12345,
+        "NUM_SEEDS": 3,
         "RESULTS_PATH": "results/lbf"
     }
     
-    # out_ckpts, out_metrics = train_partners_in_parallel(config)
-    # savepath = save_checkpoints(config, out_ckpts)
-    # print(f"Saved partner checkpoints to {savepath}")
-    #####################################
-    ckpt_path = "results/lbf/2025-01-23_20-35-18/checkpoint.pkl"
-    out_ckpts = load_checkpoints(ckpt_path)
-    #####################################
-    out_ckpts, out_metrics = train_fcp_agent(config, out_ckpts)
+    # TODO: support modifying the savepath of the checkpoints to reflect method name
+    # TODO: support saving configs, labelled by the seed 
+    # TODO: move the main function out into a separate pipeline script
+    # TODO: figure out if partner agents should be put in eval mode.
+    start_time = time.time()
 
-    # visualize results
-    # print results for each seed
-    # metrics values shape is (num_seeds, num_updates, num_envs, ???)
-    for i in range(config["NUM_SEEDS"]):
-        print("Seed: ", i)
-        print("Mean Return (Last): ", out_metrics["returned_episode_returns"][i, -1].mean())
-        print("Std Return (Last): ", out_metrics["returned_episode_returns"][i, -1].std())
+    # train_out = train_partners_in_parallel(config, config["TRAIN_PARTNER_SEED"])
+    # savepath = save_train_run(config, train_out)
+    # train_partner_ckpts = train_out["checkpoints"]
+    # print(f"Saved train partner data to {savepath}")
 
-        print("Mean Percent Eaten (Last): ", out_metrics["percent_eaten"][i, -1].mean())
-        print("Std Percent Eaten (Last): ", out_metrics["percent_eaten"][i, -1].std())
+    train_partner_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl"
+    train_partner_ckpts = load_checkpoints(train_partner_path)
 
-    for i in range(config["NUM_SEEDS"]):
-        xs = out_metrics["update_steps"][i] * config["NUM_ENVS"] * config["NUM_STEPS"]
-        ys = out_metrics["percent_eaten"][i].mean((1, 2))
-        plt.plot(xs, ys)
+    # test_out = train_partners_in_parallel(config, config["EVAL_PARTNER_SEED"])
+    # savepath = save_train_run(config, test_out)
+    # print(f"Saved test partner data to {savepath}")
+
+    fcp_out = train_fcp_agent(config, train_partner_ckpts)
+    savepath = save_train_run(config, fcp_out)
+    print(f"Saved FCP training data to {savepath}")
+
+    end_time = time.time()
+    print(f"Training took {end_time - start_time:.2f} seconds.")
     
-    plt.xlabel("Time Step")
-    plt.ylabel("Percent Eaten")
-    plt.show()
+    #################################
+    # visualize training metrics
+    fcp_train_metrics = fcp_out["metrics"]
+    all_stats = get_stats(fcp_train_metrics, stats=("percent_eaten", "returned_episode_returns"))
+    plot_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])

@@ -1,10 +1,8 @@
-import os
-print(os.getcwd())
-
 import jax
 import jumanji
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from jaxmarl.wrappers.baselines import LogWrapper
+
+from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 
 """
 The purpose of this file is to test the JumanjiToJaxMARL wrapper for the LevelBasedForaging environment.
@@ -15,16 +13,18 @@ env = jumanji.make('LevelBasedForaging-v0')
 wrapper = JumanjiToJaxMARL(env)
 wrapper = LogWrapper(wrapper)
 
-NUM_EPISODES = 1
+NUM_EPISODES = 2
 key = jax.random.PRNGKey(20394)
 
+# reset outside of for loop over episodes to test auto-reset behavior
+key, subkey = jax.random.split(key)
+obs, state = wrapper.reset(subkey)
+
 for episode in range(NUM_EPISODES):
-    key, subkey = jax.random.split(key)
-    obs, state = wrapper.reset(subkey)
     done = {agent: False for agent in wrapper.agents}
     done['__all__'] = False
     total_rewards = {agent: 0.0 for agent in wrapper.agents}
-
+    num_steps = 0
     while not done['__all__']:
         # Sample actions for each agent
         actions = {}
@@ -45,14 +45,13 @@ for episode in range(NUM_EPISODES):
 
             print(f"\nEpisode {episode}, agent {agent}, timestep {wrapper.get_step_count(state.env_state)}")
 
-            print("action is ", actions[agent])
-            print("obs", obs[agent], "type", type(obs[agent]))
-            print("rewards", rewards[agent], "type", type(rewards[agent]))
-            print("dones", done[agent], "type", type(done[agent]))
+            # print("action is ", actions[agent])
+            # print("obs", obs[agent], "type", type(obs[agent]))
+            # print("rewards", rewards[agent], "type", type(rewards[agent]))
             print("info", info, "type", type(info))
-            breakpoint()
-            print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
+            # print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
+            print("dones", done[agent], "type", type(done[agent]))
 
-        print("state", state, "type", type(state))
+        num_steps += 1
 
-    print(f"Episode {episode} finished. Total rewards: {total_rewards}")
+    print(f"Episode {episode} finished. Total rewards: {total_rewards}. Num steps: {num_steps}")
