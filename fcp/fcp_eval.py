@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jaxmarl
 import jumanji
 from jaxmarl.wrappers.baselines import LogWrapper
+import pickle
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.networks import ActorCritic
@@ -151,7 +152,7 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
     base_rng = jax.random.PRNGKey(config["EVAL_SEED"])
     # Prepare one RNG per FCP seed (n_fcp total).
     rngs = jax.random.split(base_rng, n_fcp)
-    with jax.disable_jit(True):
+    with jax.disable_jit(False):
         eval_metrics = outer_eval(rngs)
     # eval_metrics has shape: (n_fcp, m_fcp, num_eval_total, num_episodes, ...info)
     return eval_metrics
@@ -189,13 +190,18 @@ if __name__ == "__main__":
     # test_partner_path = "results/lbf/2025-02-13_21-42-20/train_run.pkl"
     # partner_ckpts = load_checkpoints(test_partner_path)
 
-    fcp_path = "results/lbf/2025-02-13_21-23-25/train_run.pkl"
+    fcp_path = "results/lbf/2025-02-14_14-22-31/train_run.pkl"
     fcp_ckpts = load_checkpoints(fcp_path)
 
+    print("Starting eval.")
     eval_metrics = eval_fcp_agent(config, fcp_ckpts, partner_ckpts, 
                                   num_episodes=32)
     
-    # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, num_episodes, num_agents)
+    # save eval_metrics to pickle
+    with open("results/lbf/2025-02-14_14-22-31/eval_run.pkl", "wb") as f:
+        pickle.dump(eval_metrics, f)
+    
+    # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, num_rollouts, num_agents)
     # the FCP agent is always agent 0, the partner is agent 1
     print("Mean Return of FCP agent:", eval_metrics["returned_episode_returns"][:, -1,:, :, 0].mean())
     print("Std Return of FCP agent:", eval_metrics["returned_episode_returns"][:, -1,:, :, 0].std())

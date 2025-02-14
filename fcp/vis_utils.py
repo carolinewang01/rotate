@@ -3,8 +3,8 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-@partial(jax.jit, static_argnames=['stats'])
-def get_stats(metrics, stats: tuple):
+@partial(jax.jit, static_argnames=['stats', 'num_envs'])
+def get_stats(metrics, stats: tuple, num_envs: int):
     '''
     Computes mean and std of metrics of interest for each seed and update, 
     using only the final steps of episodes. Note that each rollout contains multiple episodes.
@@ -12,8 +12,7 @@ def get_stats(metrics, stats: tuple):
     metrics is a pytree where each leaf has shape (num_seeds, num_updates, rollout_length, num_envs)
     stats is a tuple of strings, each corresponding to a metric of interest in metrics
     '''
-    num_seeds, num_updates, rollout_len, num_envs_actors = metrics["returned_episode_lengths"].shape
-    num_envs = num_envs_actors // 2 # Assumption: 2 actors per env who receive the same reward
+    num_seeds, num_updates, rollout_len, _ = metrics["returned_episode_lengths"].shape
 
     # Create mask for final steps of episodes
     mask = metrics["returned_episode_lengths"][..., :num_envs] > 0
@@ -39,6 +38,7 @@ def get_stats(metrics, stats: tuple):
     return all_stats
 
 def plot_metrics(all_stats, num_seeds, num_updates, num_rollout_steps, num_envs):
+    '''Each key in all_stats is a metric name, and the value is an array of shape (num_seeds, num_updates, 2)'''
     for stat_name, stats in all_stats.items():
         stat_name = stat_name.replace("_", " ").title()
         for i in range(num_seeds):

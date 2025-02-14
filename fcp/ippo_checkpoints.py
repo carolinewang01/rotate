@@ -71,8 +71,8 @@ def batchify_info(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in x if a in agent_list])
     return x.reshape((num_actors, -1))
 
-def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
-    x = x.reshape((num_actors, num_envs, -1))
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_agents):
+    x = x.reshape((num_agents, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 def make_train(config):
@@ -137,7 +137,6 @@ def make_train(config):
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
 
                 pi, value = network.apply(train_state.params, obs_batch)
-                # TODO: check that actions will be different for all envs
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
@@ -166,7 +165,6 @@ def make_train(config):
                 runner_state = (train_state, env_state, obsv, rng)
                 return runner_state, transition
             
-            # TODO: figure out how to VMAP the reset!
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
@@ -388,7 +386,7 @@ if __name__ == "__main__":
         },
         "ANNEAL_LR": True,
         "SEED": 0,
-        "NUM_SEEDS": 2
+        "NUM_SEEDS": 3
     }
 
     rng = jax.random.PRNGKey(config["SEED"])
@@ -400,5 +398,6 @@ if __name__ == "__main__":
 
     # out['checkpoints']['params']['Dense_0']['kernel'] has shape (num_seeds, num_ckpts, *param_shape)
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs*num_agents)
-    all_stats = get_stats(out['metrics'], stats=("percent_eaten", "returned_episode_returns"))
-    plot_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
+    all_stats = get_stats(out['metrics'], stats=("percent_eaten", "returned_episode_returns"), num_envs=config["NUM_ENVS"])
+    plot_metrics(all_stats, config["NUM_SEEDS"], 
+                 config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])

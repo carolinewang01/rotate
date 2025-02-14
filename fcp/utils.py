@@ -8,6 +8,7 @@ def save_train_run(config, out):
     save_dir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir, exist_ok=True)
+        
     savepath = f"{save_dir}/train_run.pkl"
     with open(savepath, "wb") as f:
         pickle.dump(out, f)

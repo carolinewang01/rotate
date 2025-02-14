@@ -199,7 +199,7 @@ def train_fcp_agent(config, checkpoints):
                     step_rngs, env_state, env_act
                 )
                 # note that num_actors = num_envs * num_agents
-                info_0 = jax.tree.map(lambda x: x[:config["NUM_ENVS"]], info)
+                info_0 = jax.tree.map(lambda x: x[:, 0], info)
 
                 # Store agent_0 data in transition
                 transition = Transition(
@@ -406,7 +406,6 @@ def train_fcp_agent(config, checkpoints):
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
-                # TODO: is wrapping with params necessary?
                 "checkpoints": {"params": checkpoint_array},
             }
             return out
@@ -479,7 +478,9 @@ if __name__ == "__main__":
     print(f"Training took {end_time - start_time:.2f} seconds.")
     
     #################################
-    # visualize training metrics
-    fcp_train_metrics = fcp_out["metrics"]
-    all_stats = get_stats(fcp_train_metrics, stats=("percent_eaten", "returned_episode_returns"))
+    # visualize results!
+    # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
+    metrics = fcp_out["metrics"]
+    
+    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
     plot_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
