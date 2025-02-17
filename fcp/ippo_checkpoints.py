@@ -112,7 +112,9 @@ def make_train(config):
                 optax.adam(learning_rate=linear_schedule, eps=1e-5),
             )
         else:
-            tx = optax.chain(optax.clip_by_global_norm(config["MAX_GRAD_NORM"]), optax.adam(config["LR"], eps=1e-5))
+            tx = optax.chain(
+                optax.clip_by_global_norm(config["MAX_GRAD_NORM"]), 
+                optax.adam(config["LR"], eps=1e-5))
         train_state = TrainState.create(
             apply_fn=network.apply,
             params=network_params,
@@ -204,7 +206,6 @@ def make_train(config):
             def _update_epoch(update_state, unused):
                 def _update_minbatch(train_state, batch_info):
                     traj_batch, advantages, targets = batch_info
-
                     def _loss_fn(params, traj_batch, gae, targets):
                         # RERUN NETWORK
                         pi, value = network.apply(params, traj_batch.obs)
@@ -287,6 +288,8 @@ def make_train(config):
             rng = update_state[-1]
             update_steps += 1
             
+                            # TODO: consider whether we need to return NEW env state, last obs, etc. 
+
             runner_state = (train_state, env_state, last_obs, rng)
             return (runner_state, update_steps), metric
 

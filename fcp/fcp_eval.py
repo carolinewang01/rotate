@@ -38,19 +38,20 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
 
     # --- 3. Process checkpoints ---
     # fcp_checkpoints: each leaf shape (n_fcp, m_fcp, ...); extract dimensions.
-    fcp_params = fcp_checkpoints["params"]
+    fcp_params = fcp_checkpoints
     sample_leaf = jax.tree_util.tree_leaves(fcp_params)[0]
     n_fcp, m_fcp = sample_leaf.shape[:2]
 
     # For eval checkpoints, flatten the first two dims to form a partner pool.
     def flatten_ckpt(x):
         return x.reshape(-1, *x.shape[2:])
+    
     eval_params_flat = jax.tree.map(flatten_ckpt, eval_checkpoints["params"])
     sample_leaf_eval = jax.tree_util.tree_leaves(eval_params_flat)[0]
     num_eval_total = sample_leaf_eval.shape[0]
 
     # We'll use a fixed maximum step count per episode.
-    max_episode_steps = 103 # DEBUG MOD
+    max_episode_steps = config["NUM_STEPS"] 
 
     # --- 4. Inner evaluation functions (without jit) ---
     def run_single_episode(rng, fcp_param, partner_param):
@@ -63,12 +64,12 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
         pi0, _ = fcp_net.apply(fcp_param, obs["agent_0"])
         # note that 3 is num_seeds, 5 is num_checkpoints, 15 is ???, 12 is the shape of the observation
         # obs['agent_0'] shape is (12,), and obs['agent_0].val.val.val.shape is (3, 5, 15, 12)
-        # act0 = pi0.sample(seed=act_rng)
-        act0 = pi0.mode()
+        act0 = pi0.sample(seed=act_rng)
+        # act0 = pi0.mode()
         # act0 shape is (), and act0.val.val.val.shape is (3, 5, 15)
         pi1, _ = partner_net.apply({'params': partner_param}, obs["agent_1"])
-        # act1 = pi1.sample(seed=part_rng)
-        act1 = pi1.mode()
+        act1 = pi1.sample(seed=part_rng)
+        # act1 = pi1.mode()
         both_actions = [act0, act1]
         env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
         _, _, _, _, dummy_info = env.step(step_rng, env_state, env_act)
@@ -90,12 +91,11 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
                 env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
                 obs_next, env_state_next, reward, done, info = env.step(step_rng, env_state, env_act)
 
-                # return (ep_ts + 1, env_state_next, obs_next, rng, done["agent_0"], info)
                 return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], info)
             
             ep_ts, env_state, obs, rng, done_flag, last_info = carry
             new_carry = jax.lax.cond(
-                False, # done_flag,  # DEBUG FLAG
+                done_flag,
                 # if done, execute true function(operand). else, execute false function(operand).
                 lambda curr_carry: curr_carry, # True fn
                 take_step, # False fn
@@ -145,7 +145,7 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
                 )(rngs_ckpt, eval_params_flat)
             # Vmap over the m_fcp checkpoints.
             return jax.vmap(eval_for_checkpoint, in_axes=(0, 0))(fcp_params_seed, total_rngs)
-
+        # TODO: figure out why vmapping over axis 0 of fcp_params works.
         return jax.vmap(eval_fcp_seed, in_axes=(0, 0))(rngs, fcp_params)
 
     # --- 6. JIT-compile and run ---
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     config = {
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
+        "NUM_STEPS": 101, # max episode steps
         "TOTAL_TIMESTEPS": 1e6, # 1e6,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16, # 4,
@@ -190,7 +190,7 @@ if __name__ == "__main__":
     # test_partner_path = "results/lbf/2025-02-13_21-42-20/train_run.pkl"
     # partner_ckpts = load_checkpoints(test_partner_path)
 
-    fcp_path = "results/lbf/2025-02-14_14-22-31/train_run.pkl"
+    fcp_path = "results/lbf/2025-02-17_14-38-26/train_run.pkl"
     fcp_ckpts = load_checkpoints(fcp_path)
 
     print("Starting eval.")
@@ -198,10 +198,10 @@ if __name__ == "__main__":
                                   num_episodes=32)
     
     # save eval_metrics to pickle
-    with open("results/lbf/2025-02-14_14-22-31/eval_run.pkl", "wb") as f:
+    with open("results/lbf/2025-02-17_14-38-26/eval_run.pkl", "wb") as f:
         pickle.dump(eval_metrics, f)
     
-    # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, num_rollouts, num_agents)
+    # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
     # the FCP agent is always agent 0, the partner is agent 1
     print("Mean Return of FCP agent:", eval_metrics["returned_episode_returns"][:, -1,:, :, 0].mean())
     print("Std Return of FCP agent:", eval_metrics["returned_episode_returns"][:, -1,:, :, 0].std())

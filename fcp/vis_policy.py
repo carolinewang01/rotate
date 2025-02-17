@@ -45,7 +45,9 @@ if __name__ == "__main__":
     env = JumanjiToJaxMARL(env)
 
     # Instantiate a policy
-    run_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl" # FCP training partner, trained for 3e6 steps
+    # run_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl" # FCP training partner, trained for 3e6 steps
+    run_path = "results/lbf/2025-02-14_15-22-26/train_run.pkl" # FCP agent, trained for 3e6 steps
+
     policy = ActorCriticPolicyWrapper(run_path, env.action_spaces['agent_0'].n)
 
     # Rollout
