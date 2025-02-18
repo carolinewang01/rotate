@@ -1,3 +1,4 @@
+import os
 import jax
 import jax.numpy as jnp
 import jaxmarl
@@ -8,6 +9,7 @@ import pickle
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.networks import ActorCritic
 from fcp.utils import load_checkpoints
+from fcp.vis_utils import plot_eval_metrics
 
 
 def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int):
@@ -58,18 +60,13 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
         # Reset the env.
         rng, reset_rng = jax.random.split(rng)
         obs, env_state = env.reset(reset_rng)
-        # rng and reset_rng.val.val.val.shape are (3, 5, 15, 2)
         # Do one step to get a dummy info structure.
         rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
         pi0, _ = fcp_net.apply(fcp_param, obs["agent_0"])
-        # note that 3 is num_seeds, 5 is num_checkpoints, 15 is ???, 12 is the shape of the observation
-        # obs['agent_0'] shape is (12,), and obs['agent_0].val.val.val.shape is (3, 5, 15, 12)
+        # for LBF, IPPO policies do better when sampled than when taking the mode. 
         act0 = pi0.sample(seed=act_rng)
-        # act0 = pi0.mode()
-        # act0 shape is (), and act0.val.val.val.shape is (3, 5, 15)
         pi1, _ = partner_net.apply({'params': partner_param}, obs["agent_1"])
         act1 = pi1.sample(seed=part_rng)
-        # act1 = pi1.mode()
         both_actions = [act0, act1]
         env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
         _, _, _, _, dummy_info = env.step(step_rng, env_state, env_act)
@@ -82,11 +79,9 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
                 ep_ts, env_state, obs, rng, done_flag, last_info = carry_step
                 rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
                 pi0, _ = fcp_net.apply(fcp_param, obs["agent_0"])
-                # act0 = pi0.sample(seed=act_rng)
-                act0 = pi0.mode()
+                act0 = pi0.sample(seed=act_rng) # sample because mode does worse on LBF
                 pi1, _ = partner_net.apply({'params': partner_param}, obs["agent_1"])
-                # act1 = pi1.sample(seed=part_rng)
-                act1 = pi1.mode()
+                act1 = pi1.sample(seed=part_rng)
                 both_actions = [act0, act1]
                 env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
                 obs_next, env_state_next, reward, done, info = env.step(step_rng, env_state, env_act)
@@ -133,7 +128,6 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
             '''Evaluate all checkpoints (m_fcp) for a single FCP seed against 
             all eval partners (num_eval_total).'''
             # For each checkpoint (m_fcp) we need a set of rng keys for evaluation against all eval partners.
-            # rng has shape (2,), rng.val has shape (3,)
             total_rngs = jax.random.split(rng, m_fcp * num_eval_total)
             total_rngs = total_rngs.reshape(m_fcp, num_eval_total, -1)
             # For one checkpoint, evaluate over the partner pool defined by eval_params_flat, 
@@ -183,28 +177,41 @@ if __name__ == "__main__":
         "RESULTS_PATH": "results/lbf"
     }
 
-    # training partners
+    # load checkpoints
     train_partner_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl"
-    partner_ckpts = load_checkpoints(train_partner_path)
+    train_partner_ckpts = load_checkpoints(train_partner_path)
 
-    # test_partner_path = "results/lbf/2025-02-13_21-42-20/train_run.pkl"
-    # partner_ckpts = load_checkpoints(test_partner_path)
+    test_partner_path = "results/lbf/2025-02-13_21-42-20/train_run.pkl"
+    test_partner_ckpts = load_checkpoints(test_partner_path)
 
-    fcp_path = "results/lbf/2025-02-17_14-38-26/train_run.pkl"
+    fcp_path = "results/lbf/2025-02-18_11-14-31/train_run.pkl"
     fcp_ckpts = load_checkpoints(fcp_path)
 
-    print("Starting eval.")
-    eval_metrics = eval_fcp_agent(config, fcp_ckpts, partner_ckpts, 
-                                  num_episodes=32)
+    # perform eval
+    eval_res = {}
+    eval_res["train"] = eval_fcp_agent(config, fcp_ckpts, train_partner_ckpts, num_episodes=32)
+    eval_res["test"] = eval_fcp_agent(config, fcp_ckpts, test_partner_ckpts, num_episodes=32)
     
-    # save eval_metrics to pickle
-    with open("results/lbf/2025-02-17_14-38-26/eval_run.pkl", "wb") as f:
-        pickle.dump(eval_metrics, f)
+    fcp_basepath = os.path.dirname(fcp_path)
+    for k, eval_metrics in eval_res.items():
+        print(f"{k} metrics:")
+        # save metrics
+        with open(os.path.join(fcp_basepath, f"{k}_eval_run.pkl"), "wb") as f:
+            pickle.dump(eval_metrics, f)
     
-    # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
-    # the FCP agent is always agent 0, the partner is agent 1
-    print("Mean Return of FCP agent:", eval_metrics["returned_episode_returns"][:, -1,:, :, 0].mean())
-    print("Std Return of FCP agent:", eval_metrics["returned_episode_returns"][:, -1,:, :, 0].std())
+        # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
+        # the FCP agent is always agent 0, the partner is agent 1
+        plot_eval_metrics(eval_metrics, metric_name="percent_eaten", agent_idx=0)
+        plot_eval_metrics(eval_metrics, metric_name="returned_episode_lengths", 
+                        higher_is_better=False, agent_idx=0)
 
-    print("Mean Percent Eaten of FCP agent:", eval_metrics["percent_eaten"][:, -1,:, :, 0].mean())
-    print("Std Percent Eaten of FCP agent:", eval_metrics["percent_eaten"][:, -1,:, :, 0].std())
+        # print some stats
+        num_fcp_ckpts = eval_metrics["returned_episode_lengths"].shape[1]
+        for fcp_ckpt_idx in range(num_fcp_ckpts):
+            ep_len_arr = eval_metrics["returned_episode_lengths"][:, fcp_ckpt_idx, :, :, 0]
+            percent_eaten_arr = eval_metrics["percent_eaten"][:, fcp_ckpt_idx, :, :, 0]
+
+            print(f"FCP ckpt {fcp_ckpt_idx}. Ep length: ", ep_len_arr.mean(), "+/-", ep_len_arr.std())
+            print(f"FCP ckpt {fcp_ckpt_idx}. Percent Eaten: ", percent_eaten_arr.mean(), "+/-", percent_eaten_arr.std())
+        
+        print("##############################################\n\n")

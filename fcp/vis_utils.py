@@ -1,6 +1,7 @@
 from functools import partial
 import jax
 import jax.numpy as jnp
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 @partial(jax.jit, static_argnames=['stats', 'num_envs'])
@@ -37,7 +38,7 @@ def get_stats(metrics, stats: tuple, num_envs: int):
     
     return all_stats
 
-def plot_metrics(all_stats, num_seeds, num_updates, num_rollout_steps, num_envs):
+def plot_train_metrics(all_stats, num_seeds, num_updates, num_rollout_steps, num_envs):
     '''Each key in all_stats is a metric name, and the value is an array of shape (num_seeds, num_updates, 2)'''
     for stat_name, stats in all_stats.items():
         stat_name = stat_name.replace("_", " ").title()
@@ -66,3 +67,29 @@ def plot_metrics(all_stats, num_seeds, num_updates, num_rollout_steps, num_envs)
         plt.title(f"Learning Curve for {stat_name}")
         plt.legend()
         plt.show()
+
+def plot_eval_metrics(eval_metrics, metric_name, higher_is_better=True, agent_idx=0):
+    '''
+    Note that the FCP agent is always agent 0, the partner is agent 1. 
+    
+    eval_metrics is a dictionary with keys corresponding to metric names 
+    and values as arrays of shape (num_seeds, num_fcp_checkpoints, num_eval_checkpoints, num_episodes, num_agents)
+    '''
+    # Select agent 0's data and compute mean over seeds and episodes
+    heatmap_data = jnp.mean(eval_metrics[metric_name][:, :, :, :, agent_idx], axis=(0, 3))
+    
+    if higher_is_better:
+        colormap="coolwarm_r"
+        arrow_str = r" ($\uparrow$)"
+    else:    
+        colormap="coolwarm"
+        arrow_str = r" ($\downarrow$)"
+    # Plot as heatmap
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(heatmap_data, cmap=colormap, annot=False)
+    plt.gca().invert_yaxis()
+    plt.xlabel("Eval Checkpoint")
+    plt.ylabel("FCP Checkpoint")
+    title = f"Average {metric_name.replace('_', ' ').title()}"
+    plt.title(title + arrow_str)
+    plt.show()

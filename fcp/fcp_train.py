@@ -16,7 +16,7 @@ from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.ippo_checkpoints import make_train, unbatchify, Transition
 from fcp.networks import ActorCritic
 from fcp.utils import load_checkpoints, save_train_run
-from fcp.vis_utils import get_stats, plot_metrics
+from fcp.vis_utils import get_stats, plot_train_metrics
 
 
 def train_partners_in_parallel(config, base_seed):
@@ -431,7 +431,7 @@ if __name__ == "__main__":
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 3e6, # 3e6 
+        "TOTAL_TIMESTEPS": 3e5, # 3e6 
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 16, # 4,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
@@ -486,4 +486,4 @@ if __name__ == "__main__":
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
     all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
-    plot_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
+    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
