@@ -141,7 +141,6 @@ def train_fcp_agent(config, checkpoints):
 
             # Each environment picks a partner index in [0, n_seeds*m_ckpts)
             rng, partner_rng = jax.random.split(rng)
-            # TODO: consider resampling the partner indices every rollout? 
             partner_indices = jax.random.randint(
                 key=partner_rng,
                 shape=(config["NUM_ENVS"],),

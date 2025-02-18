@@ -18,9 +18,14 @@ def select_checkpoint_params(full_checkpoints, seed_idx, ckpt_idx):
     return jax.tree.map(lambda x: x[seed_idx, ckpt_idx], full_checkpoints)
 
 class ActorCriticPolicyWrapper():
-    def __init__(self, train_run_path, action_dim):
+    def __init__(self, train_run_path, action_dim, n=0, m=-1):
+        '''
+        train_run_path: path to the training run pickle file
+        action_dim: number of actions
+        n: seed index
+        m: checkpoint index
+        '''
         policy_checkpoints = load_checkpoints(train_run_path)
-        n, m = 0, -1  # select last checkpoint of first seed
         self.model_params = select_checkpoint_params(policy_checkpoints, n, m)
         self.model = ActorCritic(action_dim)
 
@@ -33,10 +38,20 @@ class ActorCriticPolicyWrapper():
         else:
             action = pi.sample(seed=act_rng)
         return action, rng
-    
+
+class RandomActor():
+    def __init__(self, action_space):
+        self.action_space = action_space
+
+    def act(self, obs, rng, test_mode=True):
+        rng, act_rng = jax.random.split(rng)
+        action = int(self.action_space.sample(act_rng))
+        return action, rng
+
+
 if __name__ == "__main__":
 
-    NUM_EPISODES = 1
+    NUM_EPISODES = 4
     RENDER = True
     SAVEVIDEO = False
 
@@ -45,10 +60,13 @@ if __name__ == "__main__":
     env = JumanjiToJaxMARL(env)
 
     # Instantiate a policy
-    # run_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl" # FCP training partner, trained for 3e6 steps
-    run_path = "results/lbf/2025-02-14_15-22-26/train_run.pkl" # FCP agent, trained for 3e6 steps
-
-    policy = ActorCriticPolicyWrapper(run_path, env.action_spaces['agent_0'].n)
+    ego_run_path = "results/lbf/2025-02-17_14-38-26/train_run.pkl" # FCP agent, trained for 3e6 steps
+    partner_run_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl" # FCP training partner, trained for 3e6 steps
+    
+    policies = {}
+    policies[0] = ActorCriticPolicyWrapper(ego_run_path, env.action_spaces['agent_0'].n, n=0, m=-1)
+    policies[1] = ActorCriticPolicyWrapper(partner_run_path, env.action_spaces['agent_1'].n, n=0, m=0) 
+    # policies[1] = RandomActor(env.action_space("agent_1"))
 
     # Rollout
     states = []
@@ -65,8 +83,8 @@ if __name__ == "__main__":
         while not done['__all__']:
             # Sample actions for each agent
             actions = {}
-            for agent in env.agents:
-                action, key = policy.act(obs[agent], key, test_mode=False)
+            for i, agent in enumerate(env.agents):
+                action, key = policies[i].act(obs[agent], key, test_mode=False)
                 actions[agent] = action
             
             key, subkey = jax.random.split(key)
@@ -95,4 +113,5 @@ if __name__ == "__main__":
         
     if RENDER and SAVEVIDEO:
         anim = env.animate(states, interval=150)
-        anim.save("figures/lbf.gif", writer="imagemagick")
+        anim.save("figures/lbf_fcp=2025-02-13_21-21-35_partner=2025-02-17_14-38-26.gif", 
+                  writer="imagemagick")
