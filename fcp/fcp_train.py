@@ -2,7 +2,9 @@
 Based on PureJaxRL Implementation of PPO. 
 Script adapted from JaxMARL IPPO RNN Smax script.
 """
+import os
 import time
+from datetime import datetime
 
 import jax
 import jax.numpy as jnp
@@ -24,12 +26,15 @@ def train_partners_in_parallel(config, base_seed):
     Train a pool of partners for FCP. Return checkpoints for all partners.
     Returns out, a dictionary of the final train_state, metrics, and checkpoints.
     '''
+    start_time = time.time()
     rng = jax.random.PRNGKey(base_seed)
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
 
     with jax.disable_jit(False):
         train_jit = jax.jit(jax.vmap(make_train(config)))
         out = train_jit(rngs)
+    end_time = time.time()
+    print(f"Training partners took {end_time - start_time:.2f} seconds.")
     return out
 
 def train_fcp_agent(config, checkpoints):
@@ -417,12 +422,16 @@ def train_fcp_agent(config, checkpoints):
     # ------------------------------
     # 4) Actually run the FCP training
     # ------------------------------
+    start_time = time.time()
     # training is vmapped across multiple seeds
     rng = jax.random.PRNGKey(config["TRAIN_SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     with jax.disable_jit(False):
         fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, partner_params)))
         out = fcp_train_fn(rngs)
+    
+    end_time = time.time()
+    print(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
     return out
 
 if __name__ == "__main__":
@@ -455,31 +464,20 @@ if __name__ == "__main__":
         "RESULTS_PATH": "results/lbf"
     }
     
-    # TODO: support modifying the savepath of the checkpoints to reflect method name
-    # TODO: support saving configs, labelled by the seed 
-    # TODO: move the main function out into a separate pipeline script
-    # TODO: figure out if partner agents should be put in eval mode.
-    start_time = time.time()
+    curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
     # train_out = train_partners_in_parallel(config, config["TRAIN_PARTNER_SEED"])
-    # savepath = save_train_run(config, train_out)
+    # savepath = save_train_run(savedir, train_out)
     # train_partner_ckpts = train_out["checkpoints"]
     # print(f"Saved train partner data to {savepath}")
 
     train_partner_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl"
     train_partner_ckpts = load_checkpoints(train_partner_path)
-    # train_partner_ckpts = jax.tree.map(lambda x: x[:, 3:], train_partner_ckpts)
-
-    # test_out = train_partners_in_parallel(config, config["EVAL_PARTNER_SEED"])
-    # savepath = save_train_run(config, test_out)
-    # print(f"Saved test partner data to {savepath}")
 
     fcp_out = train_fcp_agent(config, train_partner_ckpts)
-    savepath = save_train_run(config, fcp_out)
+    savepath = save_train_run(savedir, fcp_out)
     print(f"Saved FCP training data to {savepath}")
-
-    end_time = time.time()
-    print(f"Training took {end_time - start_time:.2f} seconds.")
     
     #################################
     # visualize results!

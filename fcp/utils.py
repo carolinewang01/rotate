@@ -1,15 +1,12 @@
 import os
-from datetime import datetime
 import pickle
 
 
-def save_train_run(config, out):
-    curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_dir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
+def save_train_run(savedir, out):
+    if not os.path.exists(savedir):
+        os.makedirs(savedir, exist_ok=True)
         
-    savepath = f"{save_dir}/train_run.pkl"
+    savepath = f"{savedir}/train_run.pkl"
     with open(savepath, "wb") as f:
         pickle.dump(out, f)
     return savepath

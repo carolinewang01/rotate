@@ -1,29 +1,38 @@
-"LR": 0.0001
-"NUM_ENVS": 128
-"NUM_STEPS": 128 # What is the meaning?
-"GRU_HIDDEN_DIM": 128
-"FC_DIM_SIZE": 128
-"TOTAL_TIMESTEPS": 1e6
-"UPDATE_EPOCHS": 4
-"NUM_MINIBATCHES": 4
-"GAMMA": 0.99
-"GAE_LAMBDA": 0.95
-"CLIP_EPS": 0.05
-"SCALE_CLIP_EPS": False
-"ENT_COEF": 0.01
-"VF_COEF": 0.5
-"MAX_GRAD_NORM": 0.25
-"ACTIVATION": "relu"
-"ENV_NAME": "LevelBasedForaging-v0"
-"SEED": 0
-"NUM_SEEDS": 3
-# "ENV_KWARGS": 
-#   "see_enemy_actions": True
-#   "walls_cause_death": True
-#   "attack_mode": "closest"
-"ANNEAL_LR": True
+TOTAL_TIMESTEPS: 3e5 # 3e6 
+# RL args
+LR: .0001
+NUM_ENVS: 16
+NUM_STEPS: 128 # rollout length
+UPDATE_EPOCHS: 15
+NUM_MINIBATCHES: 16
+GAMMA: 0.99
+GAE_LAMBDA: 0.95
+CLIP_EPS: 0.05
+ENT_COEF: 0.01
+VF_COEF: 1.0
+MAX_GRAD_NORM: 1.0
+ACTIVATION: tanh
+ANNEAL_LR: True
+# env args
+ENV_NAME: lbf
+ENV_KWARG: {}
+# fcp args
+TRAIN_PARTNER_PATH: results/lbf/2025-02-13_21-21-35/train_run.pkl
+EVAL_PARTNER_PATH: results/lbf/2025-02-13_21-21-35/train_run.pkl
+TRAIN_PARTNER_SEED: 112358
+EVAL_PARTNER_SEED: 1285842
+NUM_CHECKPOINTS: 5
+TRAIN_SEED: 38410
+EVAL_SEED: 12345
+NUM_SEEDS: 3
+RESULTS_PATH: results/lbf
 
 # WandB Params
-"ENTITY": ""
-"PROJECT": "continual-aht"
-"WANDB_MODE" : "disabled"
+ENTITY: 
+PROJECT: continual-aht
+WANDB_MODE : disabled
+
+# Hydra params
+hydra:
+  run:
+    dir: results/${ENV_NAME}

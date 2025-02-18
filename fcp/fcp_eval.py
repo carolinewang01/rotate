@@ -151,6 +151,37 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
     # eval_metrics has shape: (n_fcp, m_fcp, num_eval_total, num_episodes, ...info)
     return eval_metrics
 
+def main(config, eval_savedir, fcp_ckpts, train_partner_ckpts, eval_partner_ckpts=None, 
+         num_episodes=32):
+    eval_res = {}
+    eval_res["train"] = eval_fcp_agent(config, fcp_ckpts, train_partner_ckpts, num_episodes=num_episodes)
+    if eval_partner_ckpts is not None:
+        eval_res["test"] = eval_fcp_agent(config, fcp_ckpts, eval_partner_ckpts, num_episodes=num_episodes)
+    
+    for k, eval_metrics in eval_res.items():
+        print(f"{k} metrics:")
+        # save metrics
+        with open(os.path.join(eval_savedir, f"{k}_eval_run.pkl"), "wb") as f:
+            pickle.dump(eval_metrics, f)
+    
+        # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
+        # the FCP agent is always agent 0, the partner is agent 1
+        plot_eval_metrics(eval_metrics, metric_name="percent_eaten", agent_idx=0)
+        plot_eval_metrics(eval_metrics, metric_name="returned_episode_lengths", 
+                        higher_is_better=False, agent_idx=0)
+
+        # print some stats
+        num_fcp_ckpts = eval_metrics["returned_episode_lengths"].shape[1]
+        for fcp_ckpt_idx in range(num_fcp_ckpts):
+            ep_len_arr = eval_metrics["returned_episode_lengths"][:, fcp_ckpt_idx, :, :, 0]
+            percent_eaten_arr = eval_metrics["percent_eaten"][:, fcp_ckpt_idx, :, :, 0]
+
+            print(f"FCP ckpt {fcp_ckpt_idx}. Ep length: ", ep_len_arr.mean(), "+/-", ep_len_arr.std())
+            print(f"FCP ckpt {fcp_ckpt_idx}. Percent Eaten: ", percent_eaten_arr.mean(), "+/-", percent_eaten_arr.std())
+        
+        print("##############################################\n")
+
+
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
@@ -181,37 +212,13 @@ if __name__ == "__main__":
     train_partner_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl"
     train_partner_ckpts = load_checkpoints(train_partner_path)
 
-    test_partner_path = "results/lbf/2025-02-13_21-42-20/train_run.pkl"
-    test_partner_ckpts = load_checkpoints(test_partner_path)
+    eval_partner_path = "results/lbf/2025-02-13_21-42-20/train_run.pkl"
+    eval_partner_ckpts = load_checkpoints(eval_partner_path)
 
     fcp_path = "results/lbf/2025-02-18_11-14-31/train_run.pkl"
     fcp_ckpts = load_checkpoints(fcp_path)
 
     # perform eval
-    eval_res = {}
-    eval_res["train"] = eval_fcp_agent(config, fcp_ckpts, train_partner_ckpts, num_episodes=32)
-    eval_res["test"] = eval_fcp_agent(config, fcp_ckpts, test_partner_ckpts, num_episodes=32)
-    
-    fcp_basepath = os.path.dirname(fcp_path)
-    for k, eval_metrics in eval_res.items():
-        print(f"{k} metrics:")
-        # save metrics
-        with open(os.path.join(fcp_basepath, f"{k}_eval_run.pkl"), "wb") as f:
-            pickle.dump(eval_metrics, f)
-    
-        # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
-        # the FCP agent is always agent 0, the partner is agent 1
-        plot_eval_metrics(eval_metrics, metric_name="percent_eaten", agent_idx=0)
-        plot_eval_metrics(eval_metrics, metric_name="returned_episode_lengths", 
-                        higher_is_better=False, agent_idx=0)
-
-        # print some stats
-        num_fcp_ckpts = eval_metrics["returned_episode_lengths"].shape[1]
-        for fcp_ckpt_idx in range(num_fcp_ckpts):
-            ep_len_arr = eval_metrics["returned_episode_lengths"][:, fcp_ckpt_idx, :, :, 0]
-            percent_eaten_arr = eval_metrics["percent_eaten"][:, fcp_ckpt_idx, :, :, 0]
-
-            print(f"FCP ckpt {fcp_ckpt_idx}. Ep length: ", ep_len_arr.mean(), "+/-", ep_len_arr.std())
-            print(f"FCP ckpt {fcp_ckpt_idx}. Percent Eaten: ", percent_eaten_arr.mean(), "+/-", percent_eaten_arr.std())
-        
-        print("##############################################\n\n")
+    fcp_basedir = os.path.dirname(fcp_path)
+    main(config, fcp_basedir, 
+         fcp_ckpts, train_partner_ckpts, eval_partner_ckpts, num_episodes=32)
