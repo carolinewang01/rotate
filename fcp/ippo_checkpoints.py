@@ -75,13 +75,13 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_agents):
     x = x.reshape((num_agents, num_envs, -1))
     return {a: x[i] for i, a in enumerate(agent_list)}
 
-def make_train(config):
-    # env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    if config["ENV_NAME"] == 'lbf':
-        env = jumanji.make('LevelBasedForaging-v0')
-        env = JumanjiToJaxMARL(env)
-    else: 
-        jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+def make_train(config, env):
+    #env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    # if config["ENV_NAME"] == 'lbf':
+    #     env = jumanji.make('LevelBasedForaging-v0')
+    #     env = JumanjiToJaxMARL(env)
+    # else: 
+    #     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
