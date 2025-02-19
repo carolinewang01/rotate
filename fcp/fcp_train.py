@@ -424,7 +424,7 @@ def train_fcp_agent(config, checkpoints):
     # ------------------------------
     start_time = time.time()
     # training is vmapped across multiple seeds
-    rng = jax.random.PRNGKey(config["TRAIN_SEED"])
+    rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
     with jax.disable_jit(False):
         fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, partner_params)))
@@ -452,14 +452,12 @@ if __name__ == "__main__":
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
         "ACTIVATION": "tanh",
+        "ANNEAL_LR": True,
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {
         },
-        "ANNEAL_LR": True,
-        "TRAIN_PARTNER_SEED": 112358,
-        "EVAL_PARTNER_SEED": 1285842,
-        "TRAIN_SEED": 38410,
-        "EVAL_SEED": 12345,
+        "SEED": 38410, 
+        "PARTNER_SEED": 112358,
         "NUM_SEEDS": 3,
         "RESULTS_PATH": "results/lbf"
     }
@@ -467,7 +465,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    # train_out = train_partners_in_parallel(config, config["TRAIN_PARTNER_SEED"])
+    # train_out = train_partners_in_parallel(config, config["PARTNER_SEED"])
     # savepath = save_train_run(savedir, train_out)
     # train_partner_ckpts = train_out["checkpoints"]
     # print(f"Saved train partner data to {savepath}")

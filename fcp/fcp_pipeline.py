@@ -14,29 +14,31 @@ from fcp.utils import save_train_run, load_checkpoints
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 
-@hydra.main(version_base=None, config_path="config", config_name="fcp_ippo")
+@hydra.main(version_base=None, config_path="config", config_name="fcp_master")
 def fcp_pipeline(config):
     '''Runs the full FCP training and evaluation pipeline.'''
     # initialize config
-    config = OmegaConf.to_container(config)
+    print(OmegaConf.to_yaml(config, resolve=True))
+    config = OmegaConf.to_container(config, resolve=True)
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-    
+
     # Train/Load partner policies
-    if config['TRAIN_PARTNER_PATH'] is not None:
-        train_partner_ckpts = load_checkpoints(config['TRAIN_PARTNER_PATH'])
-        print(f"Loaded training partners from {config['TRAIN_PARTNER_PATH']}")
+    train_partner_path = config["PARTNER_TRAIN_ARGS"]["TRAIN_PATH"]
+    if train_partner_path is not None:
+        train_partner_ckpts = load_checkpoints(train_partner_path)
+        print(f"Loaded training partners from {train_partner_path}")
     else:
-        # TODO: enable overriding total train time for training partners. 
-        train_out = train_partners_in_parallel(config, config["TRAIN_PARTNER_SEED"])
+        train_out = train_partners_in_parallel(config["PARTNER_TRAIN_ARGS"], config["PARTNER_TRAIN_ARGS"]["TRAIN_SEED"])
         savepath = save_train_run(savedir, train_out)
         train_partner_ckpts = train_out["checkpoints"]
         print(f"Saved train partner data to {savepath}")
 
-    if config['EVAL_PARTNER_PATH'] is not None:
-        eval_partner_ckpts = load_checkpoints(config['EVAL_PARTNER_PATH'])
-        print(f"Loaded testing partners from {config['EVAL_PARTNER_PATH']}")
+    eval_partner_path = config["PARTNER_TRAIN_ARGS"]["EVAL_PATH"]
+    if eval_partner_path is not None:
+        eval_partner_ckpts = load_checkpoints(eval_partner_path)
+        print(f"Loaded testing partners from {eval_partner_path}")
     else:
-        eval_out = train_partners_in_parallel(config, config["EVAL_PARTNER_SEED"])
+        eval_out = train_partners_in_parallel(config["PARTNER_TRAIN_ARGS"], config["PARTNER_TRAIN_ARGS"]["EVAL_SEED"])
         eval_partner_ckpts = eval_out["checkpoints"]
         savepath = save_train_run(savedir, eval_out)
         print(f"Saved test partner data to {savepath}")
@@ -44,19 +46,20 @@ def fcp_pipeline(config):
     # Train FCP agent
     print("-------------------------------------", 
           "\nTraining FCP Agent...")
-    fcp_out = train_fcp_agent(config, train_partner_ckpts)
+    train_cfg = config["FCP_TRAIN_ARGS"]
+    fcp_out = train_fcp_agent(train_cfg, train_partner_ckpts)
     savepath = save_train_run(savedir, fcp_out)
     print(f"Saved FCP training data to {savepath}")
 
     # Visualize training metrics
     metrics = fcp_out["metrics"]
-    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
-    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
+    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), train_cfg["NUM_ENVS"])
+    plot_train_metrics(all_stats, train_cfg["NUM_SEEDS"], train_cfg["NUM_UPDATES"], train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
 
     # Perform evaluation
     print("-------------------------------------", 
           "\nEvaluating FCP Agent...")
-    eval_main(config, eval_savedir=savedir, 
+    eval_main(config["FCP_EVAL_ARGS"], eval_savedir=savedir, 
               fcp_ckpts=fcp_out["checkpoints"], 
               train_partner_ckpts=train_partner_ckpts, 
               eval_partner_ckpts=eval_partner_ckpts, 

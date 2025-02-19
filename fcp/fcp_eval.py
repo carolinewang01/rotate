@@ -143,7 +143,7 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
         return jax.vmap(eval_fcp_seed, in_axes=(0, 0))(rngs, fcp_params)
 
     # --- 6. JIT-compile and run ---
-    base_rng = jax.random.PRNGKey(config["EVAL_SEED"])
+    base_rng = jax.random.PRNGKey(config["SEED"])
     # Prepare one RNG per FCP seed (n_fcp total).
     rngs = jax.random.split(base_rng, n_fcp)
     with jax.disable_jit(False):
@@ -161,7 +161,7 @@ def main(config, eval_savedir, fcp_ckpts, train_partner_ckpts, eval_partner_ckpt
     for k, eval_metrics in eval_res.items():
         print(f"{k} metrics:")
         # save metrics
-        with open(os.path.join(eval_savedir, f"{k}_eval_run.pkl"), "wb") as f:
+        with open(os.path.join(eval_savedir, f"{k}_eval_metrics.pkl"), "wb") as f:
             pickle.dump(eval_metrics, f)
     
         # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
@@ -199,11 +199,13 @@ if __name__ == "__main__":
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
         "ACTIVATION": "tanh",
+        "ANNEAL_LR": True,
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {
         },
-        "ANNEAL_LR": True,
-        "EVAL_SEED": 12345,
+        "EVAL_KWARGS": {
+            "SEED": 12345,
+        },
         "NUM_SEEDS": 3,
         "RESULTS_PATH": "results/lbf"
     }
