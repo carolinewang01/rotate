@@ -1,16 +1,18 @@
 import os
+import logging
+
 import jax
 import jax.numpy as jnp
 import jaxmarl
 import jumanji
 from jaxmarl.wrappers.baselines import LogWrapper
-import pickle
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.networks import ActorCritic
-from fcp.utils import load_checkpoints
+from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import plot_eval_metrics
 
+log = logging.getLogger(__name__)
 
 def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int):
     '''
@@ -159,11 +161,9 @@ def main(config, eval_savedir, fcp_ckpts, train_partner_ckpts, eval_partner_ckpt
         eval_res["test"] = eval_fcp_agent(config, fcp_ckpts, eval_partner_ckpts, num_episodes=num_episodes)
     
     for k, eval_metrics in eval_res.items():
-        print(f"{k} metrics:")
         # save metrics
-        with open(os.path.join(eval_savedir, f"{k}_eval_metrics.pkl"), "wb") as f:
-            pickle.dump(eval_metrics, f)
-    
+        savepath = save_train_run(eval_metrics, eval_savedir, savename=f"{k}_eval_metrics")
+        log.info(f"Saved {k} eval metrics to {savepath}")
         # each submetric shape is (num_fcp_seeds, num_fcp_ckpts, num_eval_ckpts, episodes, num_agents)
         # the FCP agent is always agent 0, the partner is agent 1
         plot_eval_metrics(eval_metrics, metric_name="percent_eaten", agent_idx=0)
@@ -176,10 +176,10 @@ def main(config, eval_savedir, fcp_ckpts, train_partner_ckpts, eval_partner_ckpt
             ep_len_arr = eval_metrics["returned_episode_lengths"][:, fcp_ckpt_idx, :, :, 0]
             percent_eaten_arr = eval_metrics["percent_eaten"][:, fcp_ckpt_idx, :, :, 0]
 
-            print(f"FCP ckpt {fcp_ckpt_idx}. Ep length: ", ep_len_arr.mean(), "+/-", ep_len_arr.std())
-            print(f"FCP ckpt {fcp_ckpt_idx}. Percent Eaten: ", percent_eaten_arr.mean(), "+/-", percent_eaten_arr.std())
+            log.info(f"FCP ckpt {fcp_ckpt_idx}. Ep length: ", ep_len_arr.mean(), "+/-", ep_len_arr.std())
+            log.info(f"FCP ckpt {fcp_ckpt_idx}. Percent Eaten: ", percent_eaten_arr.mean(), "+/-", percent_eaten_arr.std())
         
-        print("##############################################\n")
+        log.info("#####\n")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ Script adapted from JaxMARL IPPO RNN Smax script.
 import os
 import time
 from datetime import datetime
+import logging
 
 import jax
 import jax.numpy as jnp
@@ -19,6 +20,7 @@ from fcp.ippo_checkpoints import make_train, unbatchify, Transition
 from fcp.networks import ActorCritic
 from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import get_stats, plot_train_metrics
+log = logging.getLogger(__name__)
 
 
 def train_partners_in_parallel(config, base_seed):
@@ -34,7 +36,7 @@ def train_partners_in_parallel(config, base_seed):
         train_jit = jax.jit(jax.vmap(make_train(config)))
         out = train_jit(rngs)
     end_time = time.time()
-    print(f"Training partners took {end_time - start_time:.2f} seconds.")
+    log.info(f"Training partners took {end_time - start_time:.2f} seconds.")
     return out
 
 def train_fcp_agent(config, checkpoints):
@@ -431,7 +433,7 @@ def train_fcp_agent(config, checkpoints):
         out = fcp_train_fn(rngs)
     
     end_time = time.time()
-    print(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+    log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
     return out
 
 if __name__ == "__main__":
@@ -465,16 +467,16 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    # train_out = train_partners_in_parallel(config, config["PARTNER_SEED"])
-    # savepath = save_train_run(savedir, train_out)
-    # train_partner_ckpts = train_out["checkpoints"]
-    # print(f"Saved train partner data to {savepath}")
+    train_out = train_partners_in_parallel(config, config["PARTNER_SEED"])
+    savepath = save_train_run(train_out, savedir, savename="train_partners")
+    train_partner_ckpts = train_out["checkpoints"]
+    print(f"Saved train partner data to {savepath}")
 
-    train_partner_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl"
-    train_partner_ckpts = load_checkpoints(train_partner_path)
+    # train_partner_path = ""
+    # train_partner_ckpts = load_checkpoints(train_partner_path)
 
     fcp_out = train_fcp_agent(config, train_partner_ckpts)
-    savepath = save_train_run(savedir, fcp_out)
+    savepath = save_train_run(fcp_out, savedir, savename="fcp_train")
     print(f"Saved FCP training data to {savepath}")
     
     #################################

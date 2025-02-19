@@ -10,9 +10,9 @@ ENV_KWARGS: {}
 PARTNER_TRAIN_ARGS: 
   TOTAL_TIMESTEPS: 1e6 # specify arg to override default value
   ENV_NAME: ${ENV_NAME}
-  TRAIN_PATH: null # results/lbf/2025-02-13_21-21-35/train_run.pkl # set to null to train from scratch
+  TRAIN_PATH: null # set to null to train from scratch
   TRAIN_SEED: 1285842
-  EVAL_PATH: null # results/lbf/2025-02-13_21-42-20/train_run.pkl # set to null to train from scratch
+  EVAL_PATH: null # set to null to train from scratch
   EVAL_SEED: 112358
 
 FCP_TRAIN_ARGS: 
