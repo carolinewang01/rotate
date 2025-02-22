@@ -76,12 +76,6 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_agents):
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 def make_train(config, env):
-    #env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    # if config["ENV_NAME"] == 'lbf':
-    #     env = jumanji.make('LevelBasedForaging-v0')
-    #     env = JumanjiToJaxMARL(env)
-    # else: 
-    #     env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
@@ -137,7 +131,6 @@ def make_train(config, env):
                 rng, _rng = jax.random.split(rng)
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-
                 pi, value = network.apply(train_state.params, obs_batch)
                 action = pi.sample(seed=_rng)
                 log_prob = pi.log_prob(action)
@@ -151,6 +144,7 @@ def make_train(config, env):
                 obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     rng_step, env_state, env_act
                 )
+                
                 # note that num_actors = num_envs * num_agents
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
 
