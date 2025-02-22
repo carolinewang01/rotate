@@ -32,7 +32,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
         #    We'll assume exactly 2 agents: agent_0 = trainable, agent_1 = partner.
 
         # ------------------------------
-        env = fcp_env
+        env = minimax_env
         env = LogWrapper(env)
 
         num_agents = env.num_agents
@@ -813,7 +813,7 @@ if __name__ == "__main__":
     init_params = initialize_agent(config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
-    jax.lax.scan(partial_with_config, init_params, length=10)
+    jax.lax.scan(partial_with_config, init_params, length=3)
     
     #################################
     # visualize results!
