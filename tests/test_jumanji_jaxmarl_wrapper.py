@@ -49,7 +49,7 @@ for episode in range(NUM_EPISODES):
             # print("obs", obs[agent], "type", type(obs[agent]))
             # print("rewards", rewards[agent], "type", type(rewards[agent]))
             print("info", info, "type", type(info))
-            # print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
+            print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
             print("dones", done[agent], "type", type(done[agent]))
 
         num_steps += 1
