@@ -10,7 +10,6 @@ The purpose of this file is to test the JumanjiToJaxMARL wrapper for the LevelBa
 """
 
 # Instantiate a Jumanji environment
-# TODO: figure out how to support jumanji/environments/routing/lbf/generator.py
 env = jumanji.make('LevelBasedForaging-v0', 
                    generator=RandomGenerator(grid_size=8,
                                              fov=8,
