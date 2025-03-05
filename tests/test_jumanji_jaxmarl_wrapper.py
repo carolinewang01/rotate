@@ -1,5 +1,6 @@
 import jax
 import jumanji
+from jumanji.environments.routing.lbf.generator import RandomGenerator
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
@@ -9,7 +10,16 @@ The purpose of this file is to test the JumanjiToJaxMARL wrapper for the LevelBa
 """
 
 # Instantiate a Jumanji environment
-env = jumanji.make('LevelBasedForaging-v0')
+# TODO: figure out how to support jumanji/environments/routing/lbf/generator.py
+env = jumanji.make('LevelBasedForaging-v0', 
+                   generator=RandomGenerator(grid_size=8,
+                                             fov=8,
+                                             num_agents=3,
+                                             num_food=3,
+                                             force_coop=True,
+                                            ),
+                   time_limit=100, penalty=0.1)
+# breakpoint()
 wrapper = JumanjiToJaxMARL(env)
 wrapper = LogWrapper(wrapper)
 

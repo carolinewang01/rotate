@@ -2,6 +2,7 @@ import jax
 import jumanji
 from jumanji import specs
 import matplotlib.pyplot as plt
+from jumanji.environments.routing.lbf.generator import RandomGenerator
 
 
 # Define action sampling function
@@ -15,7 +16,13 @@ def sample_action(action_spec, key):
     return action
 
 # Instantiate a Jumanji environment using the registry
-env = jumanji.make('LevelBasedForaging-v0')
+env = jumanji.make('LevelBasedForaging-v0',
+                   generator=RandomGenerator(grid_size=8,
+                                             fov=8,
+                                             num_agents=3,
+                                             num_food=5,
+                                             force_coop=False,
+                                            ))
 
 NUM_EPISODES = 10
 RENDER = True
