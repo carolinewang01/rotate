@@ -3,16 +3,14 @@ from typing import NamedTuple
 import hydra
 import jax
 import jax.numpy as jnp
-import jaxmarl
-import jumanji
 import optax
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 from omegaconf import OmegaConf
 
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.networks import ActorCritic
 from fcp.vis_utils import get_stats, plot_train_metrics
+from fcp.utils import make_env
 
 
 class Transition(NamedTuple):
@@ -25,11 +23,7 @@ class Transition(NamedTuple):
     info: jnp.ndarray
 
 def get_rollout(train_state, config):
-    if config["ENV_NAME"] == 'lbf':
-        env = jumanji.make('LevelBasedForaging-v0')
-        env = JumanjiToJaxMARL(env)
-    else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
@@ -76,13 +70,12 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_agents):
     return {a: x[i] for i, a in enumerate(agent_list)}
 
 def make_train(config):
-    # env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    if config["ENV_NAME"] == 'lbf':
-        env = jumanji.make('LevelBasedForaging-v0')
-        env = JumanjiToJaxMARL(env)
-    else: 
-        jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-
+    # if config["ENV_NAME"] == 'lbf':
+    #     env = jumanji.make('LevelBasedForaging-v0')
+    #     env = JumanjiToJaxMARL(env)
+    # else: 
+    #     jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -383,9 +376,10 @@ if __name__ == "__main__":
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
         "ACTIVATION": "tanh",
-        "ENV_NAME": "lbf",
+        "ENV_NAME": "lbf", # "lbf",
         "ENV_KWARGS": {
         # "layout" : "cramped_room"
+        "num_food": 3,
         },
         "ANNEAL_LR": True,
         "SEED": 0,

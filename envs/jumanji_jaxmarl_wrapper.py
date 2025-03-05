@@ -26,12 +26,12 @@ class JumanjiToJaxMARL(object):
         self.name = env.__class__.__name__
         self.agents = [f"agent_{i}" for i in range(self.num_agents)]
 
-        # Adjust action and observation spaces
-        # TODO: understand why there are per-agent and non-per agent converter functions
+        # warning: this wrapper currently only supports homogeneous agent envs
         self.observation_spaces = {
-            agent: self._convert_jumanji_spec_to_jaxmarl_space_per_agent(env.observation_spec)
-            for agent in self.agents
+            agent: self._convert_jumanji_obs_spec_to_jaxmarl_space(env.observation_spec, agent_idx)
+            for agent_idx, agent in enumerate(self.agents)
         }
+
         self.action_spaces = {
             agent: self._convert_jumanji_action_spec_to_jaxmarl_space(env.action_spec, agent_idx)
             for agent_idx, agent in enumerate(self.agents)
@@ -129,7 +129,7 @@ class JumanjiToJaxMARL(object):
         avail_actions = {agent: timestep.observation.action_mask[i] for i, agent in enumerate(self.agents)}
         return avail_actions
 
-    def _convert_jumanji_spec_to_jaxmarl_space_per_agent(self, spec: jumanji_specs.Spec):
+    def _convert_jumanji_obs_spec_to_jaxmarl_space(self, spec: jumanji_specs.Spec, agent_idx: int):
         """Converts the observation spec for each agent to a JaxMARL space."""
         # Extract specs for 'agents_view', 'action_mask', and 'step_count'
         agents_view_spec = spec.agents_view
@@ -137,7 +137,7 @@ class JumanjiToJaxMARL(object):
         # step_count_spec = spec.step_count
 
         # Get per-agent specs
-        per_agent_view_spec = self._get_per_agent_spec(agents_view_spec)
+        per_agent_view_spec = self._get_per_agent_spec(agents_view_spec, agent_idx)
         # per_agent_mask_spec = self._get_per_agent_spec(action_mask_spec)
 
         # Flatten shapes
@@ -151,8 +151,12 @@ class JumanjiToJaxMARL(object):
 
         # Determine low and high bounds
         # For simplicity, use -inf and inf; adjust if you have specific bounds
-        low = -jnp.inf * jnp.ones(total_shape, dtype=jnp.float32)
-        high = jnp.inf * jnp.ones(total_shape, dtype=jnp.float32)
+        if hasattr(per_agent_view_spec, "minimum"):
+            low = per_agent_view_spec.minimum
+            high = per_agent_view_spec.maximum
+        else:
+            low = -jnp.inf * jnp.ones(total_shape, dtype=jnp.float32)
+            high = jnp.inf * jnp.ones(total_shape, dtype=jnp.float32)
 
         # Create Box space
         observation_space = jaxmarl_spaces.Box(
@@ -163,7 +167,7 @@ class JumanjiToJaxMARL(object):
         )
         return observation_space
 
-    def _get_per_agent_spec(self, spec: jumanji_specs.Spec):
+    def _get_per_agent_spec(self, spec: jumanji_specs.Spec, agent_idx: int):
         """Extracts the per-agent spec from a batched spec."""
         if isinstance(spec, jumanji_specs.BoundedArray):
             per_agent_shape = spec.shape[1:]
@@ -207,30 +211,30 @@ class JumanjiToJaxMARL(object):
         else:
             raise NotImplementedError(f"Spec type {type(spec)} not supported for action spaces.")
 
-    def _convert_jumanji_spec_to_jaxmarl_space(self, spec: jumanji_specs.Spec):
-        """Converts a Jumanji spec to a JaxMARL space."""
-        if isinstance(spec, jumanji_specs.DiscreteArray):
-            return jaxmarl_spaces.Discrete(num_categories=spec.num_values, dtype=spec.dtype)
-        elif isinstance(spec, jumanji_specs.MultiDiscreteArray):
-            return jaxmarl_spaces.MultiDiscrete(num_categories=spec.num_values)
-        elif isinstance(spec, jumanji_specs.BoundedArray):
-            # Handle per-agent minimum and maximum if needed
-            return jaxmarl_spaces.Box(
-                low=spec.minimum,
-                high=spec.maximum,
-                shape=spec.shape,
-                dtype=spec.dtype
-            )
-        elif isinstance(spec, jumanji_specs.Array):
-            # Assuming unbounded array
-            return jaxmarl_spaces.Box(
-                low=-jnp.inf,
-                high=jnp.inf,
-                shape=spec.shape,
-                dtype=spec.dtype
-            )
-        else:
-            raise NotImplementedError(f"Spec type {type(spec)} not supported.")
+    # def _convert_jumanji_spec_to_jaxmarl_space(self, spec: jumanji_specs.Spec):
+    #     """Converts a Jumanji spec to a JaxMARL space."""
+    #     if isinstance(spec, jumanji_specs.DiscreteArray):
+    #         return jaxmarl_spaces.Discrete(num_categories=spec.num_values, dtype=spec.dtype)
+    #     elif isinstance(spec, jumanji_specs.MultiDiscreteArray):
+    #         return jaxmarl_spaces.MultiDiscrete(num_categories=spec.num_values)
+    #     elif isinstance(spec, jumanji_specs.BoundedArray):
+    #         # Handle per-agent minimum and maximum if needed
+    #         return jaxmarl_spaces.Box(
+    #             low=spec.minimum,
+    #             high=spec.maximum,
+    #             shape=spec.shape,
+    #             dtype=spec.dtype
+    #         )
+    #     elif isinstance(spec, jumanji_specs.Array):
+    #         # Assuming unbounded array
+    #         return jaxmarl_spaces.Box(
+    #             low=-jnp.inf,
+    #             high=jnp.inf,
+    #             shape=spec.shape,
+    #             dtype=spec.dtype
+    #         )
+    #     else:
+    #         raise NotImplementedError(f"Spec type {type(spec)} not supported.")
 
     def render(self, state: WrappedEnvState):
         '''TODO: figure out if this aligns with JaxMARL rendering interface.'''

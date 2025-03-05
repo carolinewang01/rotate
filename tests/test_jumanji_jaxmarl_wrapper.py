@@ -1,5 +1,6 @@
 import jax
 import jumanji
+from jumanji.environments.routing.lbf.generator import RandomGenerator
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
@@ -9,7 +10,15 @@ The purpose of this file is to test the JumanjiToJaxMARL wrapper for the LevelBa
 """
 
 # Instantiate a Jumanji environment
-env = jumanji.make('LevelBasedForaging-v0')
+env = jumanji.make('LevelBasedForaging-v0', 
+                   generator=RandomGenerator(grid_size=8,
+                                             fov=8,
+                                             num_agents=3,
+                                             num_food=3,
+                                             force_coop=True,
+                                            ),
+                   time_limit=100, penalty=0.1)
+# breakpoint()
 wrapper = JumanjiToJaxMARL(env)
 wrapper = LogWrapper(wrapper)
 
@@ -49,7 +58,7 @@ for episode in range(NUM_EPISODES):
             # print("obs", obs[agent], "type", type(obs[agent]))
             # print("rewards", rewards[agent], "type", type(rewards[agent]))
             print("info", info, "type", type(info))
-            # print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
+            print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])
             print("dones", done[agent], "type", type(done[agent]))
 
         num_steps += 1

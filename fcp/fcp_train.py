@@ -9,16 +9,13 @@ import logging
 
 import jax
 import jax.numpy as jnp
-import jaxmarl
-import jumanji
 import optax
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.ippo_checkpoints import make_train, unbatchify, Transition
 from fcp.networks import ActorCritic
-from fcp.utils import load_checkpoints, save_train_run
+from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
 log = logging.getLogger(__name__)
 
@@ -94,12 +91,7 @@ def train_fcp_agent(config, checkpoints):
         # 2) Prepare environment (same as IPPO).
         #    We'll assume exactly 2 agents: agent_0 = trainable, agent_1 = partner.
         # ------------------------------
-        if config["ENV_NAME"] == 'lbf':
-            env = jumanji.make('LevelBasedForaging-v0')
-            env = JumanjiToJaxMARL(env)
-        else:
-            env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-
+        env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
         env = LogWrapper(env)
 
         num_agents = env.num_agents

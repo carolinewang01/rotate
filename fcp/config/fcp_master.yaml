@@ -4,6 +4,9 @@ defaults:
   - ippo_defaults@FCP_EVAL_ARGS  # import values from ippo_defaults.yaml to FCP_TRAIN_ARGS
   - _self_         # Ensures that values in this file override imported ones if needed
 
+# ENV_NAME: overcooked
+# ENV_KWARGS: {"layout": "cramped_room"}
+
 ENV_NAME: lbf
 ENV_KWARGS: {}
 

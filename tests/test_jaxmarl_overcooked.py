@@ -4,6 +4,7 @@ Short introduction to running the Overcooked environment and visualising it usin
 
 import jax 
 import jaxmarl
+import time
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 from jaxmarl.environments.overcooked import Overcooked, overcooked_layouts, layout_grid_to_dict
 from jaxmarl.wrappers.baselines import LogWrapper
@@ -15,7 +16,8 @@ key = jax.random.PRNGKey(0)
 key, key_r, key_a = jax.random.split(key, 3)
 
 # Get one of the classic layouts (cramped_room, asymm_advantages, coord_ring, forced_coord, counter_circuit)
-layout = overcooked_layouts["cramped_room"]
+map_name = "counter_circuit"
+layout = overcooked_layouts[map_name]
 
 # Or make your own!
 # custom_layout_grid = """
@@ -29,10 +31,9 @@ layout = overcooked_layouts["cramped_room"]
 
 # Instantiate environment
 env = jaxmarl.make('overcooked', layout=layout, max_steps=max_steps)
-env = LogWrapper(env)
-
 
 obs, state = env.reset(key_r)
+breakpoint()
 print('list of agents in environment', env.agents)
 
 # Sample random actions
@@ -62,10 +63,10 @@ for _ in range(episodes):
 # Visualization code: 
 # viz = OvercookedVisualizer()
 
-# # Render to screen
+# # # Render to screen
 # for s in state_seq:
 #     viz.render(env.agent_view_size, s, highlight=False)
 #     time.sleep(0.25)
 
 # # Or save an animation
-# viz.animate(state_seq, agent_view_size=5, filename='animation.gif')
+# viz.animate(state_seq, agent_view_size=5, filename=f'results/overcooked/gifs/overcooked_{map_name}.gif')
