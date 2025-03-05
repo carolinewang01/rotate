@@ -3,14 +3,12 @@ import logging
 
 import jax
 import jax.numpy as jnp
-import jaxmarl
-import jumanji
 from jaxmarl.wrappers.baselines import LogWrapper
 
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.networks import ActorCritic
 from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import plot_eval_metrics
+from fcp.utils import make_env
 
 log = logging.getLogger(__name__)
 
@@ -27,11 +25,7 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
        (num_fcp_seeds, num_fcp_ckpts, num_eval_total, num_episodes)
     '''
     # --- 1. Prepare the environment ---
-    if config["ENV_NAME"] == 'lbf':
-        env = jumanji.make('LevelBasedForaging-v0')
-        env = JumanjiToJaxMARL(env)
-    else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
     num_agents = env.num_agents
     assert num_agents == 2, "This eval code assumes exactly 2 agents."

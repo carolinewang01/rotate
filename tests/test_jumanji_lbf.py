@@ -1,7 +1,6 @@
 import jax
 import jumanji
 from jumanji import specs
-import matplotlib.pyplot as plt
 from jumanji.environments.routing.lbf.generator import RandomGenerator
 
 

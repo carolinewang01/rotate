@@ -1,13 +1,6 @@
 import jax
-import jumanji
-from jumanji import specs
-import matplotlib.pyplot as plt
-import pickle
-
 from fcp.networks import ActorCritic
-from fcp.utils import load_checkpoints
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-
+from fcp.utils import load_checkpoints, make_env
 
 def select_checkpoint_params(full_checkpoints, seed_idx, ckpt_idx):
     """
@@ -56,8 +49,9 @@ if __name__ == "__main__":
     SAVEVIDEO = False
 
     # Instantiate a Jumanji environment using the registry
-    env = jumanji.make('LevelBasedForaging-v0')
-    env = JumanjiToJaxMARL(env)
+    # env = jumanji.make('LevelBasedForaging-v0')
+    # env = JumanjiToJaxMARL(env)
+    env = make_env('lbf')
 
     # Instantiate a policy
     ego_run_path = "results/lbf/2025-02-17_14-38-26/train_run.pkl" # FCP agent, trained for 3e6 steps
