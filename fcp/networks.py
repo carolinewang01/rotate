@@ -47,8 +47,6 @@ class ActorCritic(nn.Module):
         return pi, jnp.squeeze(critic, axis=-1)
 
 class ScannedRNN(nn.Module):
-    gru_hidden_dim: int = 64
-
     @functools.partial(
         nn.scan,
         variable_broadcast="params",
@@ -69,11 +67,11 @@ class ScannedRNN(nn.Module):
         new_rnn_state, y = nn.GRUCell(features=ins.shape[1])(rnn_state, ins)
         return new_rnn_state, y
 
-    # @staticmethod
-    def initialize_carry(self, batch_size):
+    @staticmethod
+    def initialize_carry(batch_size, hidden_size):
         # Use a dummy key since the default state init fn is just zeros.
-        cell = nn.GRUCell(features=self.hidden_size)
-        return cell.initialize_carry(jax.random.PRNGKey(0), (batch_size, self.hidden_size))
+        cell = nn.GRUCell(features=hidden_size)
+        return cell.initialize_carry(jax.random.PRNGKey(0), (batch_size, hidden_size))
 
 
 class ActorCriticRNN(nn.Module):

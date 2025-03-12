@@ -9,20 +9,16 @@ import flax.linen as nn
 import numpy as np
 import optax
 from flax.linen.initializers import constant, orthogonal
-from typing import Sequence, NamedTuple, Any, Dict
+from typing import Sequence, NamedTuple, Dict
 from flax.training.train_state import TrainState
 import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
-
-import jumanji
-from jaxmarl.wrappers.baselines import LogWrapper
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-
+from jaxmarl.wrappers.baselines import SMAXLogWrapper
+from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
 
 import wandb
 import functools
-import matplotlib.pyplot as plt
 
 
 class ScannedRNN(nn.Module):
@@ -114,10 +110,8 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 
 def make_train(config):
-    # scenario = map_name_to_scenario(config["MAP_NAME"])
-    # env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
-    env = jumanji.make(config['ENV_NAME'])
-    env = JumanjiToJaxMARL(env)
+    scenario = map_name_to_scenario(config["MAP_NAME"])
+    env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
 
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
@@ -132,8 +126,7 @@ def make_train(config):
         else config["CLIP_EPS"]
     )
 
-    # env = SMAXLogWrapper(env)
-    env = LogWrapper(env)
+    env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
         frac = (
@@ -180,8 +173,6 @@ def make_train(config):
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
             # COLLECT TRAJECTORIES
-            runner_state, update_steps = update_runner_state
-
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, last_done, hstate, rng = runner_state
 
@@ -193,9 +184,9 @@ def make_train(config):
                 )
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
                 ac_in = (
-                    obs_batch[np.newaxis, :],
-                    last_done[np.newaxis, :],
-                    avail_actions,
+                    obs_batch[np.newaxis, :], # shape (1, num_actors, feat_size)
+                    last_done[np.newaxis, :], # shape (1, num_actors)
+                    avail_actions, # shape (num_actors, num_actions)
                 )
                 hstate, pi, value = network.apply(train_state.params, hstate, ac_in)
                 action = pi.sample(seed=_rng)
@@ -227,22 +218,28 @@ def make_train(config):
                 runner_state = (train_state, env_state, obsv, done_batch, hstate, rng)
                 return runner_state, transition
 
-            initial_hstate = runner_state[-2]
+            runner_state, update_steps = update_runner_state
+            init_hstate = runner_state[-2]
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["NUM_STEPS"]
             )
 
             # CALCULATE ADVANTAGE
+            # Note - the hidden state here is the hidden state corresponding to the last observation in each rollout
+            # hstate has shape (num_actors=num_envs*num_agents, gru_hidden_dim) = (10, 128)
             train_state, env_state, last_obs, last_done, hstate, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
             avail_actions = jnp.ones(
                 (config["NUM_ACTORS"], env.action_space(env.agents[0]).n)
             )
             ac_in = (
-                last_obs_batch[np.newaxis, :],
-                last_done[np.newaxis, :],
-                avail_actions,
+                last_obs_batch[np.newaxis, :], # shape (1, num_actors, feat_shape) = (1, 20, 127)
+                last_done[np.newaxis, :], # shape (1, num_actors) = (1, 20)
+                avail_actions, # shape (num_actors, num_actions) = (20, 10)
             )
+            # Note: apply implicitly scans over the rollout dimension, using hstate as the initial state
+            # We use hstate rather than init hstate because here we are only computing the value at the 
+            # last timestep of the rollout
             _, _, last_val = network.apply(train_state.params, hstate, ac_in)
             last_val = last_val.squeeze()
 
@@ -281,8 +278,11 @@ def make_train(config):
                         # RERUN NETWORK
                         _, pi, value = network.apply(
                             params,
-                            init_hstate.squeeze(),
-                            (traj_batch.obs, traj_batch.done, traj_batch.avail_actions),
+                            init_hstate.squeeze(), # shape is (num_agents, gru_hidden_dim) = (1, 5, 128); value is all zeros
+                            (traj_batch.obs, # shape is (rollout_len, num_agents, feat_shape) = (32, 5, 127)
+                             traj_batch.done, # shape is (rollout_len, num_agents) = (32, 5)
+                             traj_batch.avail_actions # shape is (rollout_len, num_agents, num_actions) = (32, 5, 10)
+                             ),
                         )
                         log_prob = pi.log_prob(traj_batch.action)
 
@@ -341,27 +341,36 @@ def make_train(config):
                 ) = update_state
                 rng, _rng = jax.random.split(rng)
 
-                # adding an additional "fake" dimensionality to perform minibatching correctly
+
+                # DEBUG FLAG
+                # adding an additional sequence dimensionality to perform minibatching correctly
+                # pre reshape has shape (num_actors, hidden_dim) = (10, 128)
+                # post reshape has shape (1, num_actors, hidden_dim) = (1, 10, 128)
+                # init_hstate is all zeros here
                 init_hstate = jnp.reshape(
                     init_hstate, (1, config["NUM_ACTORS"], -1)
                 )
                 batch = (
-                    init_hstate,
-                    traj_batch,
-                    advantages.squeeze(),
-                    targets.squeeze(),
+                    init_hstate, # shape (1, num_actors, hidden_dim) = (1, 20, 128)
+                    traj_batch, # a pytree, but obs has shape (rollout_len, num_actors, feat_shape) = (32, 20, 127)
+                    advantages.squeeze(), # shape (rollout_len, num_actors) = (32, 20)
+                    targets.squeeze(), # shape (rollout_len, num_actors) = (32, 20)
                 )
                 permutation = jax.random.permutation(_rng, config["NUM_ACTORS"])
 
+                # each leaf of batch has shape (rollout_len, num_actors, feat_shape) = (32, 20, -1)
+                # except for batch[0] which has shape (1, num_actors, hidden_dim) = (1, 20, 128)
                 shuffled_batch = jax.tree_util.tree_map(
                     lambda x: jnp.take(x, permutation, axis=1), batch
                 )
-
+                
+                # each leaf of minibatches has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape) = (4, 32, 5, -1)
+                # except for minibatches[0] which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim) = (4, 1, 5, 128)
                 minibatches = jax.tree_util.tree_map(
                     lambda x: jnp.swapaxes(
                         jnp.reshape(
                             x,
-                            [x.shape[0], config["NUM_MINIBATCHES"], -1]
+                            [x.shape[0], config["NUM_MINIBATCHES"], -1] 
                             + list(x.shape[2:]),
                         ),
                         1,
@@ -382,11 +391,10 @@ def make_train(config):
                     rng,
                 )
                 return update_state, total_loss
-
             update_state = (
                 train_state,
-                initial_hstate,
-                traj_batch,
+                init_hstate, # shape is (num_actors, gru_hidden_dim); values are all 0
+                traj_batch, # obs has shape (rollout_len, num_actors, -1)
                 advantages,
                 targets,
                 rng,
@@ -418,19 +426,23 @@ def make_train(config):
             rng = update_state[-1]
 
             def callback(metric):
-                wandb.log(
-                    {
-                        # the metrics have an agent dimension, but this is identical
-                        # for all agents so index into the 0th item of that dimension.
-                        "returns": metric["returned_episode_returns"][:, :, 0][
-                            metric["returned_episode"][:, :, 0]
-                        ].mean(),
-                        "env_step": metric["update_steps"]
-                        * config["NUM_ENVS"]
-                        * config["NUM_STEPS"],
-                        **metric["loss"],
-                    }
-                )
+                pass
+                # wandb.log(
+                #     {
+                #         # the metrics have an agent dimension, but this is identical
+                #         # for all agents so index into the 0th item of that dimension.
+                #         "returns": metric["returned_episode_returns"][:, :, 0][
+                #             metric["returned_episode"][:, :, 0]
+                #         ].mean(),
+                #         "win_rate": metric["returned_won_episode"][:, :, 0][
+                #             metric["returned_episode"][:, :, 0]
+                #         ].mean(),
+                #         "env_step": metric["update_steps"]
+                #         * config["NUM_ENVS"]
+                #         * config["NUM_STEPS"],
+                #         **metric["loss"],
+                #     }
+                # )
 
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric)
@@ -455,39 +467,60 @@ def make_train(config):
     return train
 
 
-@hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_lbf")
+# @hydra.main(version_base=None, config_path="config", config_name="ippo_rnn_lbf")
 def main(config):
-    config = OmegaConf.to_container(config)
-    wandb.init(
-        entity=config["ENTITY"],
-        project=config["PROJECT"],
-        tags=["IPPO", "RNN"],
-        config=config,
-        mode=config["WANDB_MODE"],
-    )
+    # config = OmegaConf.to_container(config)
+    # wandb.init(
+    #     entity=config["ENTITY"],
+    #     project=config["PROJECT"],
+    #     tags=["IPPO", "RNN"],
+    #     config=config,
+    #     mode=config["WANDB_MODE"],
+    # )
 
     # run single seed
     rng = jax.random.PRNGKey(config["SEED"])
-    train_jit = jax.jit(make_train(config), device=jax.devices()[0])
-    out = train_jit(rng)
+    debug_mode = True
+    with jax.disable_jit(debug_mode):
+        if debug_mode: 
+            out = make_train(config)(rng)
+        else:
+            train_jit = jax.jit(make_train(config), device=jax.devices()[0])
+            out = train_jit(rng)
 
     # Visualize Results
-    # shape is (num_updates, num_steps, num_envs, num_agents)
+    # shape is (num_updates, num_rollout_steps, num_envs, num_agents)
     # no idea why the returns are so small
     print("Mean Return (Last): ", out["metrics"]["returned_episode_returns"][-1].mean())
     print("Std Return (Last): ", out["metrics"]["returned_episode_returns"][-1].std())
 
-    print("Mean Percent Eaten (Last): ", out["metrics"]["percent_eaten"][-1].mean())
-    print("Std Percent Eaten (Last): ", out["metrics"]["percent_eaten"][-1].std())
-    
-    # plot % eaten
-    xs = out["metrics"]["update_steps"] * config["NUM_ENVS"] * config["NUM_STEPS"]
-    ys = out["metrics"]["percent_eaten"].mean((1, 2, 3))
-    plt.plot(xs, ys)
-    plt.xlabel("Time Step")
-    plt.ylabel("Percent Eaten")
-    plt.show()
-
 
 if __name__ == "__main__":
-    main()
+    config = {
+        "LR": 0.004,
+        "NUM_ENVS": 4, # 128,
+        "NUM_STEPS": 32,# 128,
+        "GRU_HIDDEN_DIM": 128,
+        "FC_DIM_SIZE": 128,
+        "TOTAL_TIMESTEPS": 1e7,
+        "UPDATE_EPOCHS": 4,
+        "NUM_MINIBATCHES": 4,
+        "GAMMA": 0.99,
+        "GAE_LAMBDA": 0.95,
+        "CLIP_EPS": 0.05,
+        "SCALE_CLIP_EPS": False,
+        "ENT_COEF": 0.01,
+        "VF_COEF": 0.5,
+        "MAX_GRAD_NORM": 0.25,
+        "ACTIVATION": "relu",
+        "ENV_NAME": "HeuristicEnemySMAX",
+        "MAP_NAME": "2s3z",
+        "SEED": 0,
+        "ENV_KWARGS": { 
+        "see_enemy_actions": True,
+        "walls_cause_death": True,
+        "attack_mode": "closest",
+        },
+        "ANNEAL_LR": True,
+    }
+    main(config)
