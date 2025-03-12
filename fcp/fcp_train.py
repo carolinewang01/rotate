@@ -431,12 +431,12 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "LR": 1.e-4,
-        "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
         "TOTAL_TIMESTEPS": 3e5, # 3e6 
+        "LR": 1.e-4,
+        "NUM_ENVS": 64,
+        "NUM_STEPS": 128, 
         "UPDATE_EPOCHS": 15,
-        "NUM_MINIBATCHES": 16, # 4,
+        "NUM_MINIBATCHES": 64,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
@@ -453,21 +453,23 @@ if __name__ == "__main__":
         "SEED": 38410, 
         "PARTNER_SEED": 112358,
         "NUM_SEEDS": 3,
-        "RESULTS_PATH": "results/lbf"
+        "RESULTS_PATH": "results/lbf/debug"
     }
     
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_out = train_partners_in_parallel(config, config["PARTNER_SEED"])
-    savepath = save_train_run(train_out, savedir, savename="train_partners")
-    train_partner_ckpts = train_out["checkpoints"]
-    print(f"Saved train partner data to {savepath}")
-
-    # train_partner_path = ""
-    # train_partner_ckpts = load_checkpoints(train_partner_path)
+    train_partner_path = "results/lbf/2025-03-11_17-05-21/train_partners.pkl"
+    if train_partner_path != "":
+        train_partner_ckpts = load_checkpoints(train_partner_path)
+    else:
+        train_out = train_partners_in_parallel(config, config["PARTNER_SEED"])
+        savepath = save_train_run(train_out, savedir, savename="train_partners")
+        train_partner_ckpts = train_out["checkpoints"]
+        print(f"Saved train partner data to {savepath}")
 
     fcp_out = train_fcp_agent(config, train_partner_ckpts)
+
     savepath = save_train_run(fcp_out, savedir, savename="fcp_train")
     print(f"Saved FCP training data to {savepath}")
     

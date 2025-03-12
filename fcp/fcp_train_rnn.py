@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 import logging
 from typing import NamedTuple
+
 import jax
 import jax.numpy as jnp
 import optax
@@ -17,6 +18,7 @@ from fcp.ippo_checkpoints import make_train, unbatchify # , Transition
 from fcp.networks import ActorCritic, ActorCriticRNN, ScannedRNN
 from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
+
 log = logging.getLogger(__name__)
 
 class Transition(NamedTuple):
@@ -414,42 +416,41 @@ def train_fcp_agent(config, checkpoints):
                 2. Compute advantage
                 3. PPO updates
                 """
-                (train_state, env_state, last_obs, last_done, hstate_0, partner_indices, rng, update_steps) = update_runner_state
+                (train_state, env_state, last_obs, last_done, last_hstate_0, partner_indices, rng, update_steps) = update_runner_state
                 # 1) rollout
                 runner_state = (
                     train_state, 
                     env_state, 
                     last_obs, 
                     last_done, 
-                    hstate_0, 
+                    last_hstate_0, 
                     partner_indices, 
                     rng
                 )
                 runner_state, traj_batch = jax.lax.scan(
                     _env_step, runner_state, None, config["NUM_STEPS"])
-                (train_state, env_state, last_obs, last_done, hstate_0, partner_indices, rng) = runner_state
+                (train_state, env_state, last_obs, last_done, last_hstate_0, partner_indices, rng) = runner_state
 
                 # 2) advantage
                 last_obs_batch_0 = last_obs["agent_0"]
-                # jnp.stack([last_obs[i]["agent_0"].flatten() for i in range(config["NUM_CONTROLLED_ACTORS"])])
                 avail_actions_0 = jnp.ones((config["NUM_CONTROLLED_ACTORS"], config["NUM_ACTIONS"]))
-                rnn_input_0 = ( # TODO: determine if we need to reshape this btach
+                rnn_input_0 = (
                     last_obs_batch_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
                     last_done.reshape(1, config["NUM_CONTROLLED_ACTORS"]),
                     avail_actions_0 
                 )
 
-                _, _, last_val = agent0_net.apply(train_state.params, hstate_0, rnn_input_0) # APPLY FLAG
+                _, _, last_val = agent0_net.apply(train_state.params, last_hstate_0, rnn_input_0)
                 last_val = last_val.squeeze()
                 advantages, targets = _calculate_gae(traj_batch, last_val)
             
                 # 3) PPO update
                 update_state = (
                     train_state,
-                    init_hstate_0, # shape should be (num_controlled_actors, gru_hidden_dim) with all-0s value
+                    init_hstate_0, # shape is (num_controlled_actors, gru_hidden_dim) with all-0s value
                     traj_batch, # obs has shape (rollout_len, num_controlled_actors, -1)
-                    advantages, # .squeeze(), # DEBUG FLAG
-                    targets, # .squeeze(), # DEBUG FLAG
+                    advantages,
+                    targets,
                     rng
                 )
                 update_state, _ = jax.lax.scan(
@@ -467,9 +468,7 @@ def train_fcp_agent(config, checkpoints):
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
-                # TODO: check against SMAC script whether we really need to pass the 
-                # last done / hstate thru the carry. Why?
-                new_runner_state = (train_state, env_state, last_obs, last_done, hstate_0, new_partner_idx, rng, update_steps + 1)
+                new_runner_state = (train_state, env_state, last_obs, last_done, last_hstate_0, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
             # --------------------------
@@ -522,7 +521,6 @@ def train_fcp_agent(config, checkpoints):
 
             # initial runner state for scanningp
             update_steps = 0
-            # TODO: verify shape of init_done
             init_done = jnp.zeros((config["NUM_CONTROLLED_ACTORS"]), dtype=bool)
             update_runner_state = (
                 train_state,
@@ -560,6 +558,7 @@ def train_fcp_agent(config, checkpoints):
     # training is vmapped across multiple seeds
     rng = jax.random.PRNGKey(config["SEED"])
     rngs = jax.random.split(rng, config["NUM_SEEDS"])
+    
     debug_mode = False
     with jax.disable_jit(debug_mode):
         if debug_mode:
@@ -575,12 +574,12 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
+        "TOTAL_TIMESTEPS": 3e5, #  3e6
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 3e5, # 3e6 
+        "NUM_STEPS": 100, 
         "UPDATE_EPOCHS": 15,
-        "NUM_MINIBATCHES": 4,
+        "NUM_MINIBATCHES": 8,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
