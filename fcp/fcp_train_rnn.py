@@ -564,11 +564,15 @@ def train_fcp_agent(config, checkpoints):
         if debug_mode:
             out = make_fcp_train(config, partner_params)(rngs)
         else:
+            compile_start = time.time()
             fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, partner_params)))
+            print("Time to compile: ", time.time() - compile_start)
             out = fcp_train_fn(rngs)
     
     end_time = time.time()
-    log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+    # log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+    print(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+
     return out
 
 if __name__ == "__main__":
