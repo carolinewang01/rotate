@@ -364,24 +364,11 @@ def train_fcp_agent(config, checkpoints):
                     advantages, # shape (rollout_len, num_agents) = (128, 16)
                     targets # shape (rollout_len, num_agents) = (128, 16)
                 )
-                # batch = jax.tree.map(
-                #     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-                # )
-
                 # each leaf of shuffled batch has shape (rollout_len, num_agents, feat_shape)
                 # except for init_hstate_0 which has shape (1, num_agents, hidden_dim)
                 shuffled_batch = jax.tree.map(
                     lambda x: jnp.take(x, permutation, axis=1), batch
                 )
-
-                # minibatches = jax.tree.map(
-                #     lambda x: jnp.reshape(
-                #         x, [config["NUM_MINIBATCHES"], -1] 
-                #         + list(x.shape[1:])
-                #     ),
-                #     shuffled_batch,
-                # )
-
                 # each leaf has shape (num_minibatches, rollout_len, num_agents/num_minibatches, feat_shape)
                 # except for init_hstate_0 which has shape (num_minibatches, 1, num_agents/num_minibatches, hidden_dim)
                 minibatches = jax.tree_util.tree_map(
@@ -458,17 +445,23 @@ def train_fcp_agent(config, checkpoints):
                 )
                 train_state = update_state[0]
 
-                # Re-sample partner for each env for next rollout
+                # Resample partner for each env for next rollout
+                # Note that we reset the hidden state after resampling partners by returning init_hstate_0
                 rng, p_rng = jax.random.split(rng)
                 new_partner_idx = jax.random.randint(
                     key=p_rng, shape=(config["NUM_UNCONTROLLED_ACTORS"],),
                     minval=0, maxval=num_total_partners
-                )
+                )                
+                # Reset environment due to partner change
+                rng, reset_rng = jax.random.split(rng)
+                reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
+                obs, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
+                init_done = jnp.zeros((config["NUM_CONTROLLED_ACTORS"]), dtype=bool)
 
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
-                new_runner_state = (train_state, env_state, last_obs, last_done, last_hstate_0, new_partner_idx, rng, update_steps + 1)
+                new_runner_state = (train_state, env_state, obs, init_done, init_hstate_0, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
             # --------------------------
