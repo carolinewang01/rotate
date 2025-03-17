@@ -14,8 +14,9 @@ import optax
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 
+from common.mlp_actor_critic import ActorCritic
+from common.rnn_actor_critic import ActorCriticRNN, ScannedRNN
 from fcp.ippo_checkpoints import make_train, unbatchify # , Transition
-from fcp.networks import ActorCritic, ActorCriticRNN, ScannedRNN
 from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
 
@@ -117,7 +118,6 @@ def train_fcp_agent(config, checkpoints):
         config["NUM_UNCONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
-        # config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["NUM_STEPS"]) // config["NUM_MINIBATCHES"]
         config["NUM_ACTIONS"] = env.action_space(env.agents[0]).n
 
         def linear_schedule(count):
@@ -128,7 +128,6 @@ def train_fcp_agent(config, checkpoints):
             # --------------------------
             # 3a) Init agent_0 network
             # --------------------------
-            # agent0_net = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
             agent0_net = ActorCriticRNN(action_dim=env.action_space(env.agents[0]).n,
                                         fc_hidden_dim=config["FC_HIDDEN_DIM"],
                                         gru_hidden_dim=config["GRU_HIDDEN_DIM"],
@@ -136,7 +135,6 @@ def train_fcp_agent(config, checkpoints):
                                         )
 
             rng, init_rng = jax.random.split(rng)
-            # dummy_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
             init_x = (
                 # init obs, dones, avail_actions
                 jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"], env.observation_space(env.agents[0]).shape[0])),
@@ -342,15 +340,6 @@ def train_fcp_agent(config, checkpoints):
                  ) = update_state
                 rng, perm_rng = jax.random.split(rng)
 
-                # DEBUG FLAG
-                # Divide batch size by TWO because we are only training on data of agent_0
-                # batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // config["NUM_AGENTS"] 
-                # assert (
-                #     batch_size == config["NUM_STEPS"] * config["NUM_ENVS"]
-                # ), "batch size must be equal to number of steps * number of actors"
-
-                # permutation = jax.random.permutation(perm_rng, batch_size)
-                
                 # batch_size is now config["NUM_ENVS"]
                 init_hstate_0 = jnp.reshape(
                     init_hstate_0, (1, config["NUM_CONTROLLED_ACTORS"], -1)
@@ -377,10 +366,7 @@ def train_fcp_agent(config, checkpoints):
                             x,
                             [x.shape[0], config["NUM_MINIBATCHES"], -1] 
                             + list(x.shape[2:]),
-                        ),
-                        1,
-                        0,
-                    ),
+                    ), 1, 0,),
                     shuffled_batch,
                 )
 
