@@ -21,6 +21,7 @@ from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 class Transition(NamedTuple):
     # global_done: jnp.ndarray
@@ -322,7 +323,7 @@ def train_fcp_agent(config, checkpoints):
                         )
                         _, pi, value = agent0_net.apply(
                             params, 
-                            init_hstate_0, # .squeeze(), # DEBUG FLAG
+                            init_hstate_0,
                             rnn_input_0
                         )
                         log_prob = pi.log_prob(traj_batch.action)
@@ -401,7 +402,7 @@ def train_fcp_agent(config, checkpoints):
                 )
                 update_state = (
                     train_state, 
-                    init_hstate_0, # .squeeze(),
+                    init_hstate_0,
                     traj_batch, 
                     advantages, 
                     targets, 
@@ -573,9 +574,7 @@ def train_fcp_agent(config, checkpoints):
             out = fcp_train_fn(rngs)
     
     end_time = time.time()
-    # log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
-    print.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
-
+    log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
     return out
 
 if __name__ == "__main__":
@@ -598,9 +597,9 @@ if __name__ == "__main__":
         "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
 
-        "S5_ACTOR_CRITIC_HIDDEN_DIM": 128, # 256,
-        "S5_D_MODEL": 128, # 256,
-        "S5_SSM_SIZE": 128, # 256,
+        "S5_ACTOR_CRITIC_HIDDEN_DIM": 128,
+        "S5_D_MODEL": 128,
+        "S5_SSM_SIZE": 128,
         "S5_N_LAYERS": 4,
         "S5_BLOCKS": 1,
         "S5_ACTIVATION": "full_glu",
