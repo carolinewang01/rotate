@@ -8,7 +8,7 @@ from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 from omegaconf import OmegaConf
 
-from fcp.networks import ActorCritic
+from common.mlp_actor_critic import ActorCritic
 from fcp.vis_utils import get_stats, plot_train_metrics
 from fcp.utils import make_env
 

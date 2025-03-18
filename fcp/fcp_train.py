@@ -14,10 +14,12 @@ from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from fcp.ippo_checkpoints import make_train, unbatchify, Transition
-from fcp.networks import ActorCritic
+from common.mlp_actor_critic import ActorCritic
 from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
+
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def train_partners_in_parallel(config, base_seed):
@@ -431,12 +433,12 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e5, # 3e6 
+        "TOTAL_TIMESTEPS": 3e6, 
         "LR": 1.e-4,
-        "NUM_ENVS": 64,
-        "NUM_STEPS": 128, 
+        "NUM_ENVS": 16, # 64,
+        "NUM_STEPS": 100,
         "UPDATE_EPOCHS": 15,
-        "NUM_MINIBATCHES": 64,
+        "NUM_MINIBATCHES": 8, #64,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
@@ -459,7 +461,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = "results/lbf/2025-03-11_17-05-21/train_partners.pkl"
+    train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl"
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:
