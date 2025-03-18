@@ -433,12 +433,12 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e5, # 3e6 
+        "TOTAL_TIMESTEPS": 3e6, 
         "LR": 1.e-4,
-        "NUM_ENVS": 64,
-        "NUM_STEPS": 128, 
+        "NUM_ENVS": 16, # 64,
+        "NUM_STEPS": 100,
         "UPDATE_EPOCHS": 15,
-        "NUM_MINIBATCHES": 64,
+        "NUM_MINIBATCHES": 8, #64,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
@@ -461,7 +461,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = "results/lbf/2025-03-11_17-05-21/train_partners.pkl"
+    train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl"
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:

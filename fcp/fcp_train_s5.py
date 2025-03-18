@@ -580,7 +580,7 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e6,
+        "TOTAL_TIMESTEPS": 3e5,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 100, 
