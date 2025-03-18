@@ -21,6 +21,7 @@ from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 class Transition(NamedTuple):
     # global_done: jnp.ndarray

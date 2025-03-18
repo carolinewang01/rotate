@@ -17,7 +17,9 @@ from fcp.ippo_checkpoints import make_train, unbatchify, Transition
 from common.mlp_actor_critic import ActorCritic
 from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
+
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def train_partners_in_parallel(config, base_seed):

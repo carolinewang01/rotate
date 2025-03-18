@@ -580,7 +580,7 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e5, #  3e6
+        "TOTAL_TIMESTEPS": 3e6,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 100, 
@@ -597,10 +597,10 @@ if __name__ == "__main__":
         "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
 
-        "S5_ACTOR_CRITIC_HIDDEN_DIM": 128,
-        "S5_D_MODEL": 128,
-        "S5_SSM_SIZE": 128,
-        "S5_N_LAYERS": 4,
+        "S5_ACTOR_CRITIC_HIDDEN_DIM": 64,
+        "S5_D_MODEL": 16,
+        "S5_SSM_SIZE": 16,
+        "S5_N_LAYERS": 2,
         "S5_BLOCKS": 1,
         "S5_ACTIVATION": "full_glu",
         "S5_DO_NORM": True,
@@ -619,7 +619,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = "results/lbf/2025-03-11_17-05-21/train_partners.pkl"
+    train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:
