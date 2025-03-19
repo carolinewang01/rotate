@@ -29,11 +29,12 @@ def get_rollout(train_state, config):
     key = jax.random.PRNGKey(0)
     key, key_r, key_a = jax.random.split(key, 3)
 
-    init_x = jnp.zeros(env.observation_space().shape)
-    init_x = init_x.flatten()
-    init_avail = jnp.ones((env.action_space(env.agents[0]).n,))  # All actions available initially
-
-    network.init(key_a, (init_x, init_avail))
+    init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
+    init_x = ( # init obs, avail_actions
+            jnp.zeros(env.observation_space(env.agents[0]).shape),
+            jnp.ones(env.action_space(env.agents[0]).n),
+        )
+    network.init(key_a, init_x)
     network_params = train_state.params
 
     done = False
@@ -43,7 +44,8 @@ def get_rollout(train_state, config):
     while not done:
         key, key_a, key_s = jax.random.split(key, 3)
         obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
-        avail_batch = jnp.ones((config["NUM_ACTORS"], env.action_space(env.agents[0]).n))  # TODO: get actual avail actions
+        # Get actual available actions from environment state
+        avail_batch = env.get_avail_actions(state.env_state).astype(jnp.float32)  # Convert bool to float
         
         pi, value = network.apply(network_params, (obs_batch, avail_batch))
         actions = pi.sample(seed=key_a)
@@ -92,11 +94,11 @@ def make_train(config):
         # INIT NETWORK
         network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
-        init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
-        init_x = init_x.flatten()
-        init_avail = jnp.ones((env.action_space(env.agents[0]).n,))  # All actions available initially
-
-        network_params = network.init(_rng, (init_x, init_avail))
+        init_x = ( # init obs, avail_actions
+            jnp.zeros(env.observation_space(env.agents[0]).shape),
+            jnp.ones(env.action_space(env.agents[0]).n),
+        )
+        network_params = network.init(_rng, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -128,7 +130,10 @@ def make_train(config):
                 rng, _rng = jax.random.split(rng)
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                avail_batch = jnp.ones((config["NUM_ACTORS"], env.action_space(env.agents[0]).n))  # TODO: get actual avail actions
+                # Get actual available actions from environment state
+                avail_batch = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_batch = jax.lax.stop_gradient(batchify(avail_batch, 
+                    env.agents, config["NUM_ACTORS"]).astype(jnp.float32))
 
                 pi, value = network.apply(train_state.params, (obs_batch, avail_batch))
                 action = pi.sample(seed=_rng)
@@ -166,7 +171,9 @@ def make_train(config):
             # CALCULATE ADVANTAGE
             train_state, env_state, last_obs, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-            last_avail_batch = jnp.ones((config["NUM_ACTORS"], env.action_space(env.agents[0]).n))  # TODO: get actual avail actions
+            last_avail_batch = jax.vmap(env.get_avail_actions)(env_state.env_state)
+            last_avail_batch = jax.lax.stop_gradient(batchify(last_avail_batch, 
+                env.agents, config["NUM_ACTORS"]).astype(jnp.float32))
             _, last_val = network.apply(train_state.params, (last_obs_batch, last_avail_batch))
 
             def _calculate_gae(traj_batch, last_val):
@@ -280,9 +287,6 @@ def make_train(config):
             
             rng = update_state[-1]
             update_steps += 1
-            
-                            # TODO: consider whether we need to return NEW env state, last obs, etc. 
-
             runner_state = (train_state, env_state, last_obs, rng)
             return (runner_state, update_steps), metric
 
@@ -362,10 +366,10 @@ if __name__ == "__main__":
 
     # set hyperparameters:
     config = {
+        "TOTAL_TIMESTEPS": 1e6,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 1e6,
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 16, # 4,
         "NUM_CHECKPOINTS": 5,
@@ -391,7 +395,6 @@ if __name__ == "__main__":
     with jax.disable_jit(False):
         train_jit = jax.jit(jax.vmap(make_train(config)))
         out = train_jit(rngs)
-
 
     # out['checkpoints']['params']['Dense_0']['kernel'] has shape (num_seeds, num_ckpts, *param_shape)
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs*num_agents)

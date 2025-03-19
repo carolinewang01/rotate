@@ -49,8 +49,6 @@ if __name__ == "__main__":
     SAVEVIDEO = False
 
     # Instantiate a Jumanji environment using the registry
-    # env = jumanji.make('LevelBasedForaging-v0')
-    # env = JumanjiToJaxMARL(env)
     env = make_env('lbf')
 
     # Instantiate a policy

@@ -22,15 +22,6 @@ from fcp.vis_utils import get_stats, plot_train_metrics
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-class Transition(NamedTuple):
-    done: jnp.ndarray
-    action: jnp.ndarray
-    value: jnp.ndarray
-    reward: jnp.ndarray
-    log_prob: jnp.ndarray
-    obs: jnp.ndarray
-    info: jnp.ndarray
-    avail_actions: jnp.ndarray
 
 def train_partners_in_parallel(config, base_seed):
     '''
@@ -110,6 +101,8 @@ def train_fcp_agent(config, checkpoints):
         assert num_agents == 2, "This FCP snippet assumes exactly 2 agents."
 
         config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
+        config["NUM_UNCONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
+        config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
         config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["NUM_STEPS"]) // config["NUM_MINIBATCHES"]
 
@@ -124,8 +117,12 @@ def train_fcp_agent(config, checkpoints):
             agent0_net = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
             rng, init_rng = jax.random.split(rng)
             dummy_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
-            
-            init_params = agent0_net.init(init_rng, dummy_obs)
+            init_x = ( # init obs, avail_actions
+                jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"], env.observation_space(env.agents[0]).shape[0])),
+                jnp.ones((1, config["NUM_CONTROLLED_ACTORS"], env.action_space(env.agents[0]).n)),
+            )
+
+            init_params = agent0_net.init(init_rng, init_x)
 
             if config["ANNEAL_LR"]:
                 tx = optax.chain(
@@ -154,7 +151,7 @@ def train_fcp_agent(config, checkpoints):
             rng, partner_rng = jax.random.split(rng)
             partner_indices = jax.random.randint(
                 key=partner_rng,
-                shape=(config["NUM_ENVS"],),
+                shape=(config["NUM_UNCONTROLLED_ACTORS"],),
                 minval=0,
                 maxval=num_total_partners
             )
@@ -173,9 +170,11 @@ def train_fcp_agent(config, checkpoints):
                 obs_0 = last_obs["agent_0"]
                 obs_1 = last_obs["agent_1"]
                 
-                # Get available actions for agent 0
-                # TODO: get actual avail actions from env
-                avail_actions_0 = jnp.ones((config["NUM_ENVS"], config["NUM_ACTIONS"]))
+                # Get available actions for agent 0 from environment state
+                avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(avail_actions)
+                avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
+                avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
 
                 # Agent_0 action
                 pi_0, val_0 = agent0_net.apply(train_state.params, 
@@ -188,16 +187,16 @@ def train_fcp_agent(config, checkpoints):
                 # Note that partner idxs are resampled after every update
                 gathered_params = gather_partner_params(partner_params, partner_indices)
                 # We'll vmap the partner net apply
-                def apply_partner(p, input, rng_):
+                def apply_partner(p, input_x, rng_):
                     # p: single-partner param dictionary
-                    # input: single input for partner network
+                    # input_x: single input for partner network
                     # rng_: single environment's RNG
                     pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
-                                        activation=config["ACTIVATION"]).apply({'params': p}, input)
+                                        activation=config["ACTIVATION"]).apply({'params': p}, input_x)
                     return pi.sample(seed=rng_)
 
-                rng_partner = jax.random.split(partner_rng, config["NUM_ENVS"])
-                partner_input = (obs_1, jnp.ones_like(obs_1))
+                rng_partner = jax.random.split(partner_rng, config["NUM_UNCONTROLLED_ACTORS"])
+                partner_input = (obs_1, avail_actions_1)
                 act_1 = jax.vmap(apply_partner)(gathered_params, partner_input, rng_partner)
 
                 # Combine actions into the env format
@@ -338,8 +337,11 @@ def train_fcp_agent(config, checkpoints):
 
                 # 2) advantage
                 last_obs_batch_0 = last_obs["agent_0"]
-                # jnp.stack([last_obs[i]["agent_0"].flatten() for i in range(config["NUM_ENVS"])])
-                _, last_val = agent0_net.apply(train_state.params, last_obs_batch_0)
+                # Get available actions for agent 0 from environment state
+                avail_actions_0 = jax.vmap(env.get_avail_actions)(env_state.env_state)["agent_0"].astype(jnp.float32)
+                input_0 = (last_obs_batch_0, 
+                           jax.lax.stop_gradient(avail_actions_0))
+                _, last_val = agent0_net.apply(train_state.params, input_0)
                 advantages, targets = _calculate_gae(traj_batch, last_val)
 
                 # 3) PPO update
@@ -351,7 +353,7 @@ def train_fcp_agent(config, checkpoints):
                 # Re-sample partner for each env for next rollout
                 rng, p_rng = jax.random.split(rng)
                 new_partner_idx = jax.random.randint(
-                    key=p_rng, shape=(config["NUM_ENVS"],),
+                    key=p_rng, shape=(config["NUM_UNCONTROLLED_ACTORS"],),
                     minval=0, maxval=num_total_partners
                 )
 
@@ -449,7 +451,7 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e6, 
+        "TOTAL_TIMESTEPS": 3e5, 
         "LR": 1.e-4,
         "NUM_ENVS": 16, # 64,
         "NUM_STEPS": 100,
@@ -495,5 +497,5 @@ if __name__ == "__main__":
     # visualize results!
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
-    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
-    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
+    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])
