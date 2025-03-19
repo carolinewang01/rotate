@@ -24,7 +24,6 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class Transition(NamedTuple):
-    # global_done: jnp.ndarray
     done: jnp.ndarray
     action: jnp.ndarray
     value: jnp.ndarray

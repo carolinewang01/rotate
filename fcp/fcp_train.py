@@ -6,6 +6,7 @@ import os
 import time
 from datetime import datetime
 import logging
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -21,6 +22,15 @@ from fcp.vis_utils import get_stats, plot_train_metrics
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+class Transition(NamedTuple):
+    done: jnp.ndarray
+    action: jnp.ndarray
+    value: jnp.ndarray
+    reward: jnp.ndarray
+    log_prob: jnp.ndarray
+    obs: jnp.ndarray
+    info: jnp.ndarray
+    avail_actions: jnp.ndarray
 
 def train_partners_in_parallel(config, base_seed):
     '''
@@ -162,9 +172,14 @@ def train_fcp_agent(config, checkpoints):
 
                 obs_0 = last_obs["agent_0"]
                 obs_1 = last_obs["agent_1"]
+                
+                # Get available actions for agent 0
+                # TODO: get actual avail actions from env
+                avail_actions_0 = jnp.ones((config["NUM_ENVS"], config["NUM_ACTIONS"]))
 
                 # Agent_0 action
-                pi_0, val_0 = agent0_net.apply(train_state.params, obs_0)
+                pi_0, val_0 = agent0_net.apply(train_state.params, 
+                                               (obs_0, avail_actions_0))
                 act_0 = pi_0.sample(seed=actor_rng)
                 logp_0 = pi_0.log_prob(act_0)
 
@@ -173,17 +188,17 @@ def train_fcp_agent(config, checkpoints):
                 # Note that partner idxs are resampled after every update
                 gathered_params = gather_partner_params(partner_params, partner_indices)
                 # We'll vmap the partner net apply
-                def apply_partner(p, o, rng_):
+                def apply_partner(p, input, rng_):
                     # p: single-partner param dictionary
-                    # o: single obs vector
+                    # input: single input for partner network
                     # rng_: single environment's RNG
                     pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
-                                        activation=config["ACTIVATION"]).apply({'params': p}, o)
+                                        activation=config["ACTIVATION"]).apply({'params': p}, input)
                     return pi.sample(seed=rng_)
 
                 rng_partner = jax.random.split(partner_rng, config["NUM_ENVS"])
-                # TODO: verify that the vmap has been performed correctly
-                act_1 = jax.vmap(apply_partner)(gathered_params, obs_1, rng_partner)
+                partner_input = (obs_1, jnp.ones_like(obs_1))
+                act_1 = jax.vmap(apply_partner)(gathered_params, partner_input, rng_partner)
 
                 # Combine actions into the env format
                 combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
@@ -206,7 +221,8 @@ def train_fcp_agent(config, checkpoints):
                     reward=reward["agent_0"],
                     log_prob=logp_0,
                     obs=obs_0,
-                    info=info_0
+                    info=info_0,
+                    avail_actions=avail_actions_0
                 )
                 new_runner_state = (train_state, env_state_next, obs_next, partner_indices, rng)
                 return new_runner_state, transition
@@ -242,7 +258,7 @@ def train_fcp_agent(config, checkpoints):
                 def _update_minbatch(train_state, batch_info):
                     traj_batch, advantages, returns = batch_info
                     def _loss_fn(params, traj_batch, gae, target_v):
-                        pi, value = agent0_net.apply(params, traj_batch.obs)
+                        pi, value = agent0_net.apply(params, (traj_batch.obs, traj_batch.avail_actions))
                         log_prob = pi.log_prob(traj_batch.action)
 
                         # Value loss
