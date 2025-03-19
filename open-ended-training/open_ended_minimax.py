@@ -228,6 +228,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 train_state, total_loss = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
+
                 update_state = (train_state, traj_batch, advantages, targets, rng)
                 return update_state, total_loss
 
@@ -253,13 +254,16 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
 
                 # 3) PPO update
                 update_state = (train_state, traj_batch, advantages, targets, rng)
-                update_state, _ = jax.lax.scan(
+                update_state, all_losses = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state = update_state[0]
 
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
+                metric["value_losses"] = all_losses[1][0]
+                metric["pg_losses"] = all_losses[1][1]
+                metric["entropy_losses"] = all_losses[1][2]
                 new_runner_state = (train_state, env_state, last_obs, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
@@ -274,10 +278,70 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 return jax.tree.map(
                     lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), 
                     params_pytree)
+            
+            def run_single_episode(rng, fcp_param, partner_param):
+                # Reset the env.
+                rng, reset_rng = jax.random.split(rng)
+                obs, env_state = env.reset(reset_rng)
+                # Do one step to get a dummy info structure.
+                rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
+                pi0, _ = agent0_net.apply(partner_param, obs["agent_0"])
+                # for LBF, IPPO policies do better when sampled than when taking the mode. 
+                act0 = pi0.sample(seed=act_rng)
+                ego_agent_net = ActorCritic(env.action_space(env.agents[1]).n,
+                                activation=config["ACTIVATION"])
+                pi1, _ = ego_agent_net.apply({'params': fcp_param}, obs["agent_1"])
+                act1 = pi1.sample(seed=part_rng)
+                    
+                both_actions = [act0, act1]
+                env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
+                _, _, _, dones, dummy_info = env.step(step_rng, env_state, env_act)
+                done_flag = dones["__all__"]
+
+                # We'll use a scan to iterate steps until the episode is done.
+                ep_ts = 1
+                init_carry = (ep_ts, env_state, obs, rng, done_flag, dummy_info)
+                def scan_step(carry, _):
+                    def take_step(carry_step):
+                        ep_ts, env_state, obs, rng, done_flag, last_info = carry_step
+                        rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
+                        pi0, _ = agent0_net.apply(partner_param, obs["agent_0"])
+                        act0 = pi0.sample(seed=act_rng) # sample because mode does worse on LBF
+                        pi1, _ = ego_agent_net.apply({'params': fcp_param}, obs["agent_1"])
+                        act1 = pi1.sample(seed=part_rng)
+                        both_actions = [act0, act1]
+                        env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
+                        obs_next, env_state_next, reward, done, info = env.step(step_rng, env_state, env_act)
+
+                        return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], info)
+                            
+                    ep_ts, env_state, obs, rng, done_flag, last_info = carry
+                    new_carry = jax.lax.cond(
+                        done_flag,
+                        # if done, execute true function(operand). else, execute false function(operand).
+                        lambda curr_carry: curr_carry, # True fn
+                        take_step, # False fn
+                        operand=carry
+                    )
+                    return new_carry, None
+
+                final_carry, _ = jax.lax.scan(
+                    scan_step, init_carry, None, length=max_episode_steps)
+                # Return the final info (which includes the episode return via LogWrapper).
+                return final_carry[-1]
+
+            def run_episodes(rng, fcp_param, partner_param, num_eps):
+                def body_fn(carry, _):
+                    rng = carry
+                    rng, ep_rng = jax.random.split(rng)
+                    ep_info = run_single_episode(ep_rng, fcp_param, partner_param)
+                    return rng, ep_info
+                rng, ep_infos = jax.lax.scan(body_fn, rng, None, length=num_eps)
+                return ep_infos  # each leaf has shape (num_eps, ...)
 
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, rng, update_steps),
-                 checkpoint_array, ckpt_idx) = state_with_ckpt
+                 checkpoint_array, ckpt_idx, ep_infos) = state_with_ckpt
 
                 # Single PPO update
                 (new_runner_state, metric) = _update_step(
@@ -289,23 +353,27 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
 
-                def store_ckpt(args):
-                    ckpt_arr, cidx = args
+                def store_and_eval_ckpt(args):
+                    rng = config["EVAL_SEED"]
+                    ep_infos = run_episodes(gen_eval_rng, ego_policy["params"], train_state.params, max_episode_steps)
+                    ckpt_arr_and_ep_infos, cidx = args
+                    ckpt_arr, prev_ep_infos = ckpt_arr_and_ep_infos
                     new_ckpt_arr = jax.tree.map(
                         lambda c_arr, p: c_arr.at[cidx].set(p),
                         ckpt_arr, train_state.params
                     )
-                    return (new_ckpt_arr, cidx + 1)
+                    return ((new_ckpt_arr, ep_infos), cidx + 1)
 
                 def skip_ckpt(args):
                     return args
 
-                (checkpoint_array, ckpt_idx) = jax.lax.cond(
-                    to_store, store_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx)
+                (checkpoint_array_and_infos, ckpt_idx) = jax.lax.cond(
+                    to_store, store_and_eval_ckpt, skip_ckpt, ((checkpoint_array, ep_infos), ckpt_idx)
                 )
+                checkpoint_array, ckpt_infos = checkpoint_array_and_infos
 
                 return ((train_state, env_state, last_obs, rng, update_steps),
-                        checkpoint_array, ckpt_idx), metric
+                        checkpoint_array, ckpt_idx, ckpt_infos), metric
 
             # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
@@ -313,8 +381,12 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
 
             # initial runner state for scanning
             update_steps = 0
+            gen_eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
+            max_episode_steps = config["MAX_EVAL_EPISODES"]
+            ep_infos = run_episodes(gen_eval_rng, ego_policy["params"], train_state.params, max_episode_steps)
+
             update_runner_state = (train_state, env_state, obsv, rng, update_steps)
-            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx)
+            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, ep_infos)
 
             # run training
             state_with_ckpt, metrics = jax.lax.scan(
@@ -323,12 +395,13 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 xs=None,
                 length=config["NUM_UPDATES"]
             )
-            (final_runner_state, checkpoint_array, final_ckpt_idx) = state_with_ckpt
+            (final_runner_state, checkpoint_array, final_ckpt_idx, all_ep_infos) = state_with_ckpt
 
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
                 "checkpoints": checkpoint_array,
+                "all_ep_infos": all_ep_infos 
             }
             return out
 
@@ -636,7 +709,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
 
                 # 3) PPO update
                 update_state = (train_state, traj_batch, advantages, targets, rng)
-                update_state, _ = jax.lax.scan(
+                update_state, all_losses = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state = update_state[0]
 
@@ -650,6 +723,9 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
+                metric["actor_loss"] = all_losses[1][0]
+                metric["value_loss"] = all_losses[1][1]
+                metric["entropy_loss"] = all_losses[1][2]
                 new_runner_state = (train_state, env_state, last_obs, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
@@ -665,9 +741,86 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                     lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), 
                     params_pytree)
 
+            max_episode_steps = config["MAX_EVAL_EPISODES"]
+
+            # TODO Gather single episode data
+            def run_single_episode(rng, partner_param):
+                # Reset the env.
+                rng, reset_rng = jax.random.split(rng)
+                obs, env_state = env.reset(reset_rng)
+                # Do one step to get a dummy info structure.
+                rng, act_rng, part_rng, part_idx_rng, step_rng = jax.random.split(rng, 5)
+                
+                # fcp param must be train_state.params
+                pi0, _ = agent0_net.apply(train_state.params, obs["agent_0"])
+                # for LBF, IPPO policies do better when sampled than when taking the mode. 
+                act0 = pi0.sample(seed=act_rng)
+
+                def apply_partner(p, o, rng_):
+                    # p: single-partner param dictionary
+                    # o: single obs vector
+                    # rng_: single environment's RNG
+                    partner_pol, _ = ActorCritic(env.action_space(env.agents[1]).n,
+                                        activation=config["ACTIVATION"]).apply({'params': p}, o)
+                    return partner_pol.sample(seed=rng_)
+                
+                act1 = apply_partner(partner_param, obs["agent_1"], part_rng)    
+                both_actions = [act0, act1]
+                env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
+                _, _, _, dones, dummy_info = env.step(step_rng, env_state, env_act)
+                done_flag = dones["__all__"]
+
+                # We'll use a scan to iterate steps until the episode is done.
+                ep_ts = 1
+                init_carry = (ep_ts, env_state, obs, rng, done_flag, dummy_info)
+                def scan_step(carry, _):
+                    def take_step(carry_step):
+                        ep_ts, env_state, obs, rng, done_flag, last_info = carry_step
+                        rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
+                        pi0, _ = agent0_net.apply(train_state.params, obs["agent_0"])
+                        act0 = pi0.sample(seed=act_rng) # sample because mode does worse on LBF
+                        def apply_partner(p, o, rng_):
+                            # p: single-partner param dictionary
+                            # o: single obs vector
+                            # rng_: single environment's RNG
+                            partner_pol, _ = ActorCritic(env.action_space(env.agents[1]).n,
+                                                activation=config["ACTIVATION"]).apply({'params': p}, o)
+                            return partner_pol.sample(seed=rng_)
+                        act1 = apply_partner(partner_param, obs["agent_1"], part_rng) 
+                        both_actions = [act0, act1]
+                        env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
+                        obs_next, env_state_next, reward, done, info = env.step(step_rng, env_state, env_act)
+
+                        return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], info)
+                            
+                    ep_ts, env_state, obs, rng, done_flag, last_info = carry
+                    new_carry = jax.lax.cond(
+                        done_flag,
+                        # if done, execute true function(operand). else, execute false function(operand).
+                        lambda curr_carry: curr_carry, # True fn
+                        take_step, # False fn
+                        operand=carry
+                    )
+                    return new_carry, None
+
+                final_carry, _ = jax.lax.scan(
+                    scan_step, init_carry, None, length=max_episode_steps)
+                # Return the final info (which includes the episode return via LogWrapper).
+                return final_carry[-1]
+            
+            def run_episodes(rng, partner_param, num_eps):
+                def body_fn(carry, _):
+                    rng = carry
+                    rng, ep_rng = jax.random.split(rng)
+                    ep_info = run_single_episode(ep_rng, partner_param)
+                    return rng, ep_info
+                rng, ep_infos = jax.lax.scan(body_fn, rng, None, length=num_eps)
+                return ep_infos  # each leaf has shape (num_eps, ...)
+
+            
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
-                 checkpoint_array, ckpt_idx) = state_with_ckpt
+                 checkpoint_array, ckpt_idx, init_eval_info) = state_with_ckpt
 
                 # Single PPO update
                 (new_runner_state, metric) = _update_step(
@@ -680,31 +833,44 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
 
                 def store_ckpt(args):
-                    ckpt_arr, cidx = args
+                    ckpt_arr, cidx, prev_eval_ret_info = args
                     new_ckpt_arr = jax.tree.map(
                         lambda c_arr, p: c_arr.at[cidx].set(p),
                         ckpt_arr, train_state.params
                     )
-                    return (new_ckpt_arr, cidx + 1)
+
+                    eval_partner_indices = jnp.arange(num_total_partners)
+                    gathered_params = gather_partner_params(partner_params, eval_partner_indices)
+                    eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
+                    eval_ep_return_infos = jax.vmap(lambda x: run_episodes(eval_rng, x, max_episode_steps))(gathered_params)
+                    # run_episodes(eval_r
+                    # ng, gathered_params[0], max_episode_steps)
+                    return (new_ckpt_arr, cidx + 1, eval_ep_return_infos)
 
                 def skip_ckpt(args):
                     return args
 
-                (checkpoint_array, ckpt_idx) = jax.lax.cond(
-                    to_store, store_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx)
+                (checkpoint_array, ckpt_idx, ep_ret_infos) = jax.lax.cond(
+                    to_store, store_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, init_eval_info)
                 )
 
                 return ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
-                        checkpoint_array, ckpt_idx), metric
+                        checkpoint_array, ckpt_idx, ep_ret_infos), metric
 
             # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
 
+            # Init eval
+            eval_partner_indices = jnp.arange(num_total_partners)
+            gathered_params = gather_partner_params(partner_params, eval_partner_indices)
+            eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
+            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(eval_rng, x, max_episode_steps))(gathered_params)
+            
             # initial runner state for scanning
             update_steps = 0
             update_runner_state = (train_state, env_state, obsv, partner_indices, rng, update_steps)
-            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx)
+            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_ep_return_infos)
 
             # run training
             state_with_ckpt, metrics = jax.lax.scan(
@@ -713,12 +879,13 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 xs=None,
                 length=config["NUM_UPDATES"]
             )
-            (final_runner_state, checkpoint_array, final_ckpt_idx) = state_with_ckpt
+            (final_runner_state, checkpoint_array, final_ckpt_idx, eval_ep_return_infos) = state_with_ckpt
 
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
                 "checkpoints": checkpoint_array,
+                "eval_ep_return_infos": eval_ep_return_infos
             }
             return out
 
@@ -774,6 +941,7 @@ if __name__ == "__main__":
         "NUM_STEPS": 128, 
         "TOTAL_TIMESTEPS": 3e6, # 3e6 
         "UPDATE_EPOCHS": 15,
+        "MAX_EVAL_EPISODES": 20,
         "NUM_MINIBATCHES": 16, # 4,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
@@ -808,12 +976,28 @@ if __name__ == "__main__":
     else:
         fcp_env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
-
+    start_time = time.time()
     partial_with_config = lambda x, y : open_ended_training(x, y, config, teammate_train_env, fcp_env)
     init_params = initialize_agent(config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
-    jax.lax.scan(partial_with_config, init_params, length=3)
+    final_params, outs = jax.lax.scan(partial_with_config, init_params, length=1)
+    outs_train, outs_fcp = outs
+
+    #print(jnp.shape(outs_train["all_ep_infos"]))
+    print(jnp.shape(outs_train["all_ep_infos"]["returned_episode_returns"]))
+    print(jnp.shape(outs_train["metrics"]["value_losses"]))
+    print(jnp.shape(outs_train["metrics"]["pg_losses"]))
+    print(jnp.shape(outs_train["metrics"]["entropy_losses"]))
+    print(jnp.shape(outs_fcp["metrics"]["returned_episode_lengths"]))
+    print(jnp.shape(outs_fcp["metrics"]["value_loss"]))
+    print(jnp.shape(outs_fcp["metrics"]["actor_loss"]))
+    print(jnp.shape(outs_fcp["metrics"]["entropy_loss"]))
+    print(jnp.shape(outs_fcp["eval_ep_return_infos"]["returned_episode_returns"]))
+    end_time = time.time()
+    print("Config: ",config)
+
+    print(f"Training took {end_time - start_time:.2f} seconds.")
     
     #################################
     # visualize results!
