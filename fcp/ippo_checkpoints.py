@@ -366,10 +366,10 @@ if __name__ == "__main__":
 
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 1e6,
+        "TOTAL_TIMESTEPS": 3e6,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
+        "NUM_STEPS": 400, 
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 16, # 4,
         "NUM_CHECKPOINTS": 5,
@@ -380,10 +380,11 @@ if __name__ == "__main__":
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
         "ACTIVATION": "tanh",
-        "ENV_NAME": "lbf", # "lbf",
+        "ENV_NAME": "overcooked", # "lbf",
         "ENV_KWARGS": {
-        # "layout" : "cramped_room"
-        "num_food": 3,
+            "layout": "cramped_room",
+            "random_reset": False,
+            "max_steps": 400,
         },
         "ANNEAL_LR": True,
         "SEED": 0,
@@ -398,6 +399,12 @@ if __name__ == "__main__":
 
     # out['checkpoints']['params']['Dense_0']['kernel'] has shape (num_seeds, num_ckpts, *param_shape)
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs*num_agents)
-    all_stats = get_stats(out['metrics'], ("percent_eaten", "returned_episode_returns"), num_envs=config["NUM_ENVS"])
+    metrics = out['metrics']
+    if config["ENV_NAME"] == "lbf":
+        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
+    elif config["ENV_NAME"] == "overcooked":
+        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_ENVS"])
+    else: 
+        all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_ENVS"])
     plot_train_metrics(all_stats, config["NUM_SEEDS"], 
                  config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])

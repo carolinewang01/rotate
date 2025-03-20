@@ -573,10 +573,10 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 1e3,
+        "TOTAL_TIMESTEPS": 3e6,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 100, 
+        "NUM_STEPS": 400, # 100
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 8,
         # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
@@ -603,7 +603,7 @@ if __name__ == "__main__":
         "ENV_NAME": "overcooked", # "lbf",
         "ENV_KWARGS": {
             "layout": "cramped_room",
-            "random_reset": True,
+            "random_reset": False,
             "max_steps": 400,
         },
         "SEED": 38410, 
@@ -615,7 +615,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = "results/overcooked/debug/2025-03-20_10-20-27/train_partners.pkl" 
+    train_partner_path = ""
     # train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)

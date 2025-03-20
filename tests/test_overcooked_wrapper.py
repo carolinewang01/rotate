@@ -23,7 +23,6 @@ key = jax.random.PRNGKey(20394)
 # reset outside of for loop over episodes to test auto-reset behavior
 key, subkey = jax.random.split(key)
 obs, state = wrapper.reset(subkey)
-breakpoint()
 
 for episode in range(NUM_EPISODES):
     done = {agent: False for agent in wrapper.agents}
