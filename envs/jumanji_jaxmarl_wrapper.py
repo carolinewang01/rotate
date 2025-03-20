@@ -83,11 +83,11 @@ class JumanjiToJaxMARL(object):
 
     @partial(jax.jit, static_argnums=(0,))
     def get_step_count(self, state: WrappedEnvState) -> jnp.array:
-        """Returns the available actions for each agent."""
+        """Returns the step count of the environment."""
         return state.step
 
     def _extract_observations(self, observation):
-        # Extract per-agent observations and flatten them into arrays
+        '''Extract per-agent observations and flatten them into arrays'''
         obs = {}
         for i in range(self.num_agents):
             agent_view = observation.agents_view[i].flatten()
@@ -101,31 +101,31 @@ class JumanjiToJaxMARL(object):
         return obs
 
     def _actions_to_array(self, actions: Dict[str, Any]):
-        # Convert dict of actions to array
+        '''Convert dict of actions to array'''
         actions_array = jnp.array([actions[agent] for agent in self.agents], dtype=jnp.int32)
         return actions_array
 
     def _extract_rewards(self, reward):
-        # Extract per-agent rewards
+        '''Extract per-agent rewards'''
         rewards = {agent: reward[i] for i, agent in enumerate(self.agents)}
         return rewards
 
     def _extract_dones(self, timestep):
-        # Extract per-agent done flags
+        '''Extract per-agent done flags'''
         done = timestep.last() # jumanji lbf returns a single boolean done for all agents
         dones = {agent: done for agent in self.agents}
         dones["__all__"] = done
         return dones
 
     def _extract_infos(self, timestep):
-        # Broadcast info into per-agent shape
+        '''Broadcast info into per-agent shape'''
         info = {}
         for k, v in timestep.extras.items():
             info[k] = jnp.array([v for _ in range(self.num_agents)])
         return info
     
     def _extract_avail_actions(self, timestep):
-        # Extract per-agent avail_actions
+        '''Extract per-agent avail_actions'''
         avail_actions = {agent: timestep.observation.action_mask[i] for i, agent in enumerate(self.agents)}
         return avail_actions
 

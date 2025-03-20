@@ -8,7 +8,7 @@ from jaxmarl.wrappers.baselines import LogWrapper
 from common.mlp_actor_critic import ActorCritic
 from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import plot_eval_metrics
-from fcp.utils import make_env
+from envs import make_env
 
 log = logging.getLogger(__name__)
 

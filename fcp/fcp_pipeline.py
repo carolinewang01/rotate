@@ -56,7 +56,12 @@ def fcp_pipeline(config):
 
     # Visualize training metrics
     metrics = fcp_out["metrics"]
-    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), train_cfg["NUM_ENVS"])
+    if config["ENV_NAME"] == "lbf":
+        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), train_cfg["NUM_ENVS"])
+    elif config["ENV_NAME"] == "overcooked":
+        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), train_cfg["NUM_ENVS"])
+    else: 
+        all_stats = get_stats(metrics, ("returned_episode_returns"), train_cfg["NUM_ENVS"])
     plot_train_metrics(all_stats, train_cfg["NUM_SEEDS"], train_cfg["NUM_UPDATES"], train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
 
     # Perform evaluation

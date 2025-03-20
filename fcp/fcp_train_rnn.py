@@ -6,7 +6,6 @@ import os
 import time
 from datetime import datetime
 import logging
-from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -16,8 +15,9 @@ from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
 from common.rnn_actor_critic import ActorCriticRNN, ScannedRNN
+from envs import make_env
 from fcp.ippo_checkpoints import make_train, unbatchify, Transition
-from fcp.utils import load_checkpoints, save_train_run, make_env
+from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
