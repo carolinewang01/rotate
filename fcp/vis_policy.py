@@ -1,6 +1,7 @@
 import jax
 from common.mlp_actor_critic import ActorCritic
-from fcp.utils import load_checkpoints, make_env
+from envs import make_env
+from fcp.utils import load_checkpoints
 
 def select_checkpoint_params(full_checkpoints, seed_idx, ckpt_idx):
     """

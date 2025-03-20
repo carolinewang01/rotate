@@ -16,8 +16,9 @@ from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
 from common.s5_actor_critic import ActorCriticS5, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
+from envs import make_env
 from fcp.ippo_checkpoints import make_train, unbatchify, Transition
-from fcp.utils import load_checkpoints, save_train_run, make_env
+from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
