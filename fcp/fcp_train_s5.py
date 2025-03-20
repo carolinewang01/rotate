@@ -616,6 +616,7 @@ if __name__ == "__main__":
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
     train_partner_path = ""
+    # train_partner_path = "results/overcooked/debug/2025-03-20_11-32-04/train_partners.pkl" # trained for 3M steps
     # train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
