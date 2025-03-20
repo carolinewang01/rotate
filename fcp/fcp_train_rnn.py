@@ -16,22 +16,13 @@ from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
 from common.rnn_actor_critic import ActorCriticRNN, ScannedRNN
-from fcp.ippo_checkpoints import make_train, unbatchify # , Transition
+from fcp.ippo_checkpoints import make_train, unbatchify, Transition
 from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-class Transition(NamedTuple):
-    done: jnp.ndarray
-    action: jnp.ndarray
-    value: jnp.ndarray
-    reward: jnp.ndarray
-    log_prob: jnp.ndarray
-    obs: jnp.ndarray
-    info: jnp.ndarray
-    avail_actions: jnp.ndarray
 
 def train_partners_in_parallel(config, base_seed):
     '''
