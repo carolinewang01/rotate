@@ -354,7 +354,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
 
                 def store_and_eval_ckpt(args):
-                    rng = config["EVAL_SEED"]
+                    gen_eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
                     ep_infos = run_episodes(gen_eval_rng, ego_policy["params"], train_state.params, max_episode_steps)
                     ckpt_arr_and_ep_infos, cidx = args
                     ckpt_arr, prev_ep_infos = ckpt_arr_and_ep_infos
@@ -817,7 +817,6 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 rng, ep_infos = jax.lax.scan(body_fn, rng, None, length=num_eps)
                 return ep_infos  # each leaf has shape (num_eps, ...)
 
-            
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
                  checkpoint_array, ckpt_idx, init_eval_info) = state_with_ckpt
@@ -985,17 +984,17 @@ if __name__ == "__main__":
     outs_train, outs_fcp = outs
 
     #print(jnp.shape(outs_train["all_ep_infos"]))
-    print(jnp.shape(outs_train["all_ep_infos"]["returned_episode_returns"]))
-    print(jnp.shape(outs_train["metrics"]["value_losses"]))
-    print(jnp.shape(outs_train["metrics"]["pg_losses"]))
-    print(jnp.shape(outs_train["metrics"]["entropy_losses"]))
-    print(jnp.shape(outs_fcp["metrics"]["returned_episode_lengths"]))
-    print(jnp.shape(outs_fcp["metrics"]["value_loss"]))
-    print(jnp.shape(outs_fcp["metrics"]["actor_loss"]))
-    print(jnp.shape(outs_fcp["metrics"]["entropy_loss"]))
-    print(jnp.shape(outs_fcp["eval_ep_return_infos"]["returned_episode_returns"]))
+    # print(jnp.shape(outs_train["all_ep_infos"]["returned_episode_returns"]))
+    # print(jnp.shape(outs_train["metrics"]["value_losses"]))
+    # print(jnp.shape(outs_train["metrics"]["pg_losses"]))
+    # print(jnp.shape(outs_train["metrics"]["entropy_losses"]))
+    # print(jnp.shape(outs_fcp["metrics"]["returned_episode_lengths"]))
+    # print(jnp.shape(outs_fcp["metrics"]["value_loss"]))
+    # print(jnp.shape(outs_fcp["metrics"]["actor_loss"]))
+    # print(jnp.shape(outs_fcp["metrics"]["entropy_loss"]))
+    # print(jnp.shape(outs_fcp["eval_ep_return_infos"]["returned_episode_returns"]))
     end_time = time.time()
-    print("Config: ",config)
+    # print("Config: ",config)
 
     print(f"Training took {end_time - start_time:.2f} seconds.")
     
