@@ -6,7 +6,6 @@ import os
 import time
 from datetime import datetime
 import logging
-from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -574,7 +573,7 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e5,
+        "TOTAL_TIMESTEPS": 1e3,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 100, 
@@ -601,19 +600,23 @@ if __name__ == "__main__":
         "S5_PRENORM": True,
         "S5_DO_GTRXL_NORM": True,
 
-        "ENV_NAME": "lbf",
+        "ENV_NAME": "overcooked", # "lbf",
         "ENV_KWARGS": {
+            "layout": "cramped_room",
+            "random_reset": True,
+            "max_steps": 400,
         },
         "SEED": 38410, 
         "PARTNER_SEED": 112358,
         "NUM_SEEDS": 3,
-        "RESULTS_PATH": "results/lbf/debug/"
+        "RESULTS_PATH": "results/overcooked/debug/"
     }
     
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
+    train_partner_path = "results/overcooked/debug/2025-03-20_10-20-27/train_partners.pkl" 
+    # train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:
@@ -630,5 +633,10 @@ if __name__ == "__main__":
     # visualize results!
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
-    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+    if config["ENV_NAME"] == "lbf":
+        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+    elif config["ENV_NAME"] == "overcooked":
+        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+    else: 
+        all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
     plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])

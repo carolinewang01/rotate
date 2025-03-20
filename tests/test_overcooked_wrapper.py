@@ -23,6 +23,7 @@ key = jax.random.PRNGKey(20394)
 # reset outside of for loop over episodes to test auto-reset behavior
 key, subkey = jax.random.split(key)
 obs, state = wrapper.reset(subkey)
+breakpoint()
 
 for episode in range(NUM_EPISODES):
     done = {agent: False for agent in wrapper.agents}
@@ -47,8 +48,8 @@ for episode in range(NUM_EPISODES):
 
             print(f"\nEpisode {episode}, agent {agent}, timestep {wrapper.get_step_count(state.env_state)}")
 
+            print("obs shape is ", obs[agent].shape, "type", type(obs[agent]))
             print("action is ", actions[agent])
-            print("obs", obs[agent], "type", type(obs[agent]))
             print("rewards", rewards[agent], "type", type(rewards[agent]))
             print("info", info, "type", type(info))
             print("avail actions are ", wrapper.get_avail_actions(state.env_state)[agent])

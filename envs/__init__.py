@@ -1,9 +1,13 @@
+import copy
+
 import jaxmarl
 from jaxmarl.environments.overcooked import overcooked_layouts
-import copy
 import jumanji
 from jumanji.environments.routing.lbf.generator import RandomGenerator
+
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+from envs.overcooked_wrapper import OvercookedWrapper
+
 
 def make_env(env_name: str, env_kwargs: dict = {}):
     if env_name == 'lbf':
@@ -24,8 +28,9 @@ def make_env(env_name: str, env_kwargs: dict = {}):
         
     elif env_name == 'overcooked':
         layout = overcooked_layouts[env_kwargs['layout']]
-        env_kwargs["layout"] = layout
-        env = jaxmarl.make('overcooked', **env_kwargs)
+        env_kwargs_copy = copy.deepcopy(env_kwargs)
+        env_kwargs_copy["layout"] = layout
+        env = OvercookedWrapper(**env_kwargs_copy)
     else:
         env = jaxmarl.make(env_name, **env_kwargs)
     return env

@@ -20,7 +20,7 @@ def get_stats(metrics, stats: tuple, num_envs: int):
     
     # Initialize output dictionary
     all_stats = {}
-    
+    stats = list(stats) # convert to list to correctly iterate if the tuple only has a single element
     for stat_name in stats:
         # Get the metric array
         metric_data = metrics[stat_name][..., :num_envs]  # Shape: (num_seeds, num_updates, rollout_length, num_envs)

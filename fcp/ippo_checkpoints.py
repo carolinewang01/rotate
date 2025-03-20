@@ -398,6 +398,6 @@ if __name__ == "__main__":
 
     # out['checkpoints']['params']['Dense_0']['kernel'] has shape (num_seeds, num_ckpts, *param_shape)
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs*num_agents)
-    all_stats = get_stats(out['metrics'], stats=("percent_eaten", "returned_episode_returns"), num_envs=config["NUM_ENVS"])
+    all_stats = get_stats(out['metrics'], ("percent_eaten", "returned_episode_returns"), num_envs=config["NUM_ENVS"])
     plot_train_metrics(all_stats, config["NUM_SEEDS"], 
                  config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])

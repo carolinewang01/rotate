@@ -6,7 +6,6 @@ import os
 import time
 from datetime import datetime
 import logging
-from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
