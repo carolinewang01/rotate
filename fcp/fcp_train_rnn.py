@@ -16,23 +16,13 @@ from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
 from common.rnn_actor_critic import ActorCriticRNN, ScannedRNN
-from fcp.ippo_checkpoints import make_train, unbatchify # , Transition
+from fcp.ippo_checkpoints import make_train, unbatchify, Transition
 from fcp.utils import load_checkpoints, save_train_run, make_env
 from fcp.vis_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-class Transition(NamedTuple):
-    # global_done: jnp.ndarray
-    done: jnp.ndarray
-    action: jnp.ndarray
-    value: jnp.ndarray
-    reward: jnp.ndarray
-    log_prob: jnp.ndarray
-    obs: jnp.ndarray
-    info: jnp.ndarray
-    avail_actions: jnp.ndarray
 
 def train_partners_in_parallel(config, base_seed):
     '''
@@ -140,7 +130,7 @@ def train_fcp_agent(config, checkpoints):
                 # init obs, dones, avail_actions
                 jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"], env.observation_space(env.agents[0]).shape[0])),
                 jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"])),
-                jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"], env.action_space(env.agents[0]).n)),
+                jnp.ones((1, config["NUM_CONTROLLED_ACTORS"], env.action_space(env.agents[0]).n)),
             )
             init_hstate_0 = ScannedRNN.initialize_carry(config["NUM_CONTROLLED_ACTORS"], config["GRU_HIDDEN_DIM"])
             init_params = agent0_net.init(init_rng, init_hstate_0, init_x)
@@ -193,9 +183,11 @@ def train_fcp_agent(config, checkpoints):
                 
                 # Prepare inputs for agent 0 (RNN)
                 obs_0 = prev_obs["agent_0"]
-                # TODO: this is just a dummy for now. But don't forget to 
-                # use stop_grad on the actual avail_actions value (as shown in the rnn smax implementation)
-                avail_actions_0 = jnp.ones((config["NUM_ENVS"], config["NUM_ACTIONS"]))
+                # Get available actions for agent 0 from environment state
+                avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(avail_actions)
+                avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
+                avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
                 # obs, done should have shape (sequence_length, num_actors, features) for the RNN
                 # hstate should have shape (1, num_actors, hidden_dim)
                 rnn_input_0 = (
@@ -215,17 +207,18 @@ def train_fcp_agent(config, checkpoints):
                 # Note that partner idxs are resampled after every update
                 gathered_params = gather_partner_params(partner_params, partner_indices)
                 # We'll vmap the partner net apply
-                def apply_partner(p, o, rng_):
+                def apply_partner(p, input_x, rng_):
                     # p: single-partner param dictionary
-                    # o: single obs vector
+                    # input_x: single obs vector
                     # rng_: single environment's RNG
                     pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
-                                        activation=config["ACTIVATION"]).apply({'params': p}, o)
+                                        activation=config["ACTIVATION"]).apply({'params': p}, input_x)
                     return pi.sample(seed=rng_)
 
                 rng_partner = jax.random.split(partner_rng, config["NUM_UNCONTROLLED_ACTORS"])
                 obs_1 = prev_obs["agent_1"]
-                act_1 = jax.vmap(apply_partner)(gathered_params, obs_1, rng_partner)
+                partner_input = (obs_1, avail_actions_1)
+                act_1 = jax.vmap(apply_partner)(gathered_params, partner_input, rng_partner)
 
                 # Combine actions into the env format
                 combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
@@ -250,7 +243,7 @@ def train_fcp_agent(config, checkpoints):
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
-                    avail_actions=avail_actions_0 # TODO actually compute the avail actions
+                    avail_actions=avail_actions_0
                 )
                 new_runner_state = (train_state, env_state_next, obs_next, done_0, hstate_0, partner_indices, rng)
                 return new_runner_state, transition
@@ -407,13 +400,13 @@ def train_fcp_agent(config, checkpoints):
 
                 # 2) advantage
                 last_obs_batch_0 = last_obs["agent_0"]
-                avail_actions_0 = jnp.ones((config["NUM_CONTROLLED_ACTORS"], config["NUM_ACTIONS"]))
+                # Get available actions for agent 0 from environment state
+                avail_actions_0 = jax.vmap(env.get_avail_actions)(env_state.env_state)["agent_0"].astype(jnp.float32)
                 rnn_input_0 = (
                     last_obs_batch_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
                     last_done.reshape(1, config["NUM_CONTROLLED_ACTORS"]),
-                    avail_actions_0 
+                    jax.lax.stop_gradient(avail_actions_0)
                 )
-
                 _, _, last_val = agent0_net.apply(train_state.params, last_hstate_0, rnn_input_0)
                 last_val = last_val.squeeze()
                 advantages, targets = _calculate_gae(traj_batch, last_val)
@@ -544,11 +537,15 @@ def train_fcp_agent(config, checkpoints):
         if debug_mode:
             out = make_fcp_train(config, partner_params)(rngs)
         else:
+            compile_start = time.time()
             fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, partner_params)))
+            print("Time to compile: ", time.time() - compile_start)
             out = fcp_train_fn(rngs)
     
     end_time = time.time()
-    log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+    # log.info(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+    print(f"Training FCP agent took {end_time - start_time:.2f} seconds.")
+
     return out
 
 if __name__ == "__main__":

@@ -19,9 +19,11 @@ class ActorCritic(nn.Module):
             activation = nn.relu
         else:
             activation = nn.tanh
+
+        obs, avail_actions = x
         actor_mean = nn.Dense(
             self.fc_hidden_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(x)
+        )(obs)
         actor_mean = activation(actor_mean)
         actor_mean = nn.Dense(
             self.fc_hidden_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
@@ -30,11 +32,16 @@ class ActorCritic(nn.Module):
         actor_mean = nn.Dense(
             self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0)
         )(actor_mean)
+        
+        # Mask unavailable actions if avail_actions is provided
+        unavail_actions = 1 - avail_actions
+        actor_mean = actor_mean - (unavail_actions * 1e10)
+            
         pi = distrax.Categorical(logits=actor_mean)
 
         critic = nn.Dense(
             self.fc_hidden_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
-        )(x)
+        )(obs)
         critic = activation(critic)
         critic = nn.Dense(
             self.fc_hidden_dim, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0)
