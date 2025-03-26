@@ -9,8 +9,10 @@ import jax.numpy as jnp
 import jaxmarl
 import jumanji
 import optax
+from omegaconf import OmegaConf, open_dict
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
+from common.wandb_visualizations import Logger
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from fcp.ippo_checkpoints import make_train, unbatchify, Transition
@@ -19,7 +21,7 @@ from common.s5_actor_critic import ActorCriticS5, StackedEncoderModel, init_S5SS
 from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import get_stats, plot_train_metrics
 from functools import partial
-
+from common.wandb_visualizations import Logger
 
 def train_adversarial_partners(config, ego_policy, minimax_env):
     '''
@@ -1090,7 +1092,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
             update_steps = 0
             update_runner_state = (train_state, env_state, obsv, partner_indices, rng, update_steps)
             state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_ep_return_infos)
-            
+
             init_done = jnp.zeros((config["NUM_CONTROLLED_ACTORS"]), dtype=bool)
             update_runner_state = (
                 train_state,
@@ -1202,77 +1204,41 @@ def initialize_agent(config, base_seed):
     
     return init_params
 
-if __name__ == "__main__":
-    # set hyperparameters:
-    config = {
-        "LR": 1.e-4,
-        "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 3e6, # 3e6 
-        "UPDATE_EPOCHS": 15,
-        "MAX_EVAL_EPISODES": 20,
-        "NUM_MINIBATCHES": 16, # 4,
-        # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
-        "NUM_CHECKPOINTS": 5,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.05,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 1.0,
-        "MAX_GRAD_NORM": 1.0,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "lbf",
-        "ENV_KWARGS": {
-        },
-        "ANNEAL_LR": True,
-        "TRAIN_PARTNER_SEED": 112358,
-        "EVAL_PARTNER_SEED": 1285842,
-        "TRAIN_SEED": 38410,
-        "EVAL_SEED": 12345,
-        "NUM_SEEDS": 3,
-        "S5_ACTOR_CRITIC_HIDDEN_DIM": 64,
-        "S5_D_MODEL": 16,
-        "S5_SSM_SIZE": 16,
-        "S5_N_LAYERS": 2,
-        "S5_BLOCKS": 1,
-        "S5_ACTIVATION": "full_glu",
-        "S5_DO_NORM": True,
-        "S5_PRENORM": True,
-        "S5_DO_GTRXL_NORM": True,
-        "RESULTS_PATH": "results/lbf"
-    }
+def run(config):
+    algorithm_config = dict(config["algorithm"])
+    logger = Logger(config)
 
-    if config["ENV_NAME"] == 'lbf':
+    if algorithm_config["ENV_NAME"] == 'lbf':
         teammate_train_env = jumanji.make('LevelBasedForaging-v0')
         teammate_train_env = JumanjiToJaxMARL(teammate_train_env)
     else: 
-        teammate_train_env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        teammate_train_env = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
 
-    if config["ENV_NAME"] == 'lbf':
+    if algorithm_config["ENV_NAME"] == 'lbf':
         fcp_env = jumanji.make('LevelBasedForaging-v0')
         fcp_env = JumanjiToJaxMARL(fcp_env)
     else:
-        fcp_env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+        fcp_env = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
 
     start_time = time.time()
-    partial_with_config = lambda x, y : open_ended_training(x, y, config, teammate_train_env, fcp_env)
-    init_params = initialize_agent(config, 1000)
+    partial_with_config = lambda x, y : open_ended_training(x, y, algorithm_config, teammate_train_env, fcp_env)
+    init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
     final_params, outs = jax.lax.scan(partial_with_config, init_params, length=1)
     outs_train, outs_fcp = outs
 
-    #
-    # (jnp.shape(outs_train["all_ep_infos"]))
-    # print(jnp.shape(outs_train["all_ep_infos"]["returned_episode_returns"]))
-    # print(jnp.shape(outs_train["metrics"]["value_losses"]))
-    # print(jnp.shape(outs_train["metrics"]["pg_losses"]))
-    # print(jnp.shape(outs_train["metrics"]["entropy_losses"]))
-    # print(jnp.shape(outs_fcp["metrics"]["returned_episode_lengths"]))
-    # print(jnp.shape(outs_fcp["metrics"]["value_loss"]))
-    # print(jnp.shape(outs_fcp["metrics"]["actor_loss"]))
-    # print(jnp.shape(outs_fcp["metrics"]["entropy_loss"]))
-    # print(jnp.shape(outs_fcp["eval_ep_return_infos"]["returned_episode_returns"]))
+    
+    #(jnp.shape(outs_train["all_ep_infos"]))
+    print(jnp.shape(outs_train["all_ep_infos"]["returned_episode_returns"]))
+    print(jnp.shape(outs_train["metrics"]["value_losses"]))
+    print(jnp.shape(outs_train["metrics"]["pg_losses"]))
+    print(jnp.shape(outs_train["metrics"]["entropy_losses"]))
+    print(jnp.shape(outs_fcp["metrics"]["returned_episode_lengths"]))
+    print(jnp.shape(outs_fcp["metrics"]["value_loss"]))
+    print(jnp.shape(outs_fcp["metrics"]["actor_loss"]))
+    print(jnp.shape(outs_fcp["metrics"]["entropy_loss"]))
+    print(jnp.shape(outs_fcp["eval_ep_return_infos"]["returned_episode_returns"]))
     end_time = time.time()
     # print("Config: ",config)
 

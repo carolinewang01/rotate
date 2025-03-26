@@ -1,0 +1,7 @@
+job:
+  chdir: true
+run:
+  dir: /scratch/cluster/arrasy/outputs/${name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+sweep:
+  dir: ./outputs_sweep
+  subdir: ${run.seed}
