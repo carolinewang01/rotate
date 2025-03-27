@@ -1,11 +1,13 @@
 from functools import partial
+from typing import Tuple, Dict, Any
+
+from flax import struct
 import jax
 import jax.numpy as jnp
 from jax import lax
 from jaxmarl.environments.overcooked.overcooked import Actions
-from typing import Tuple, Dict, Any
-import chex
-from flax import struct
+
+from .base_agent import BaseAgent
 
 # Define agent state constants
 HOLDING_NOTHING = 0
@@ -32,17 +34,7 @@ class HeuristicAgent:
     """A heuristic agent for the Overcooked environment that can create and deliver onion soups."""
     
     def __init__(self, agent_name: str, layout: Dict[str, Any]):
-        self.agent_id = int(agent_name[-1])
-        self.map_width = layout["width"]
-        self.map_height = layout["height"]
-        self.obs_shape = (self.map_height, self.map_width, 26)  # Overcooked uses 26 channels
-        # Initial state - will be passed into and returned from get_action
-        self.initial_state = AgentState(
-            holding=HOLDING_NOTHING,
-            goal=GOAL_GET_ONION,
-            onions_in_pot=0,
-            rng_key=jax.random.PRNGKey(self.agent_id)
-        )
+        super().__init__(agent_name, layout)
         
     def get_action(self, obs: jnp.ndarray, state: AgentState = None) -> Tuple[int, AgentState]:
         """Non-jitted version of get_action for initialization purposes"""
@@ -376,72 +368,3 @@ class HeuristicAgent:
         )
         
         return action, updated_state
-        
-    @partial(jax.jit, static_argnums=(0,))
-    def _move_towards(self, start_y: int, start_x: int, 
-                      target_y: int, target_x: int, 
-                      obs: jnp.ndarray, key: jax.random.PRNGKey) -> int:
-        """Move towards target position while avoiding collisions."""
-        # Calculate differences
-        x_diff = target_x - start_x
-        y_diff = target_y - start_y
-        
-        # Get occupied spaces (walls, other agent, and counters)
-        wall_mask = obs[:, :, 11] > 0       # Channel 11: counter/wall locations
-        other_agent_mask = obs[:, :, 1] > 0  # Channel 1: other agent position
-        occupied_mask = jnp.logical_or(wall_mask, other_agent_mask)
-        
-        # Add small random noise to break ties
-        key1, key2 = jax.random.split(key)
-        noise = jax.random.uniform(key1, shape=(4,), minval=-0.1, maxval=0.1)
-        
-        # Check if moving in each direction would lead to an occupied space
-        up_valid = (start_y > 0) & (~occupied_mask[start_y - 1, start_x])
-        down_valid = (start_y < self.map_height - 1) & (~occupied_mask[start_y + 1, start_x])
-        right_valid = (start_x < self.map_width - 1) & (~occupied_mask[start_y, start_x + 1])
-        left_valid = (start_x > 0) & (~occupied_mask[start_y, start_x - 1])
-        
-        # Base scores: prefer directions that reduce distance to target
-        up_score = -y_diff + noise[0]
-        down_score = y_diff + noise[1]
-        right_score = x_diff + noise[2] 
-        left_score = -x_diff + noise[3]
-        
-        # Combine scores
-        scores = jnp.array([
-            up_score * up_valid,
-            down_score * down_valid,
-            right_score * right_valid,
-            left_score * left_valid
-        ])
-        
-        # Set scores to large negative number for invalid moves
-        scores = jnp.where(
-            jnp.array([up_valid, down_valid, right_valid, left_valid]),
-            scores,
-            -1000.0
-        )
-        
-        # Choose direction with highest score
-        direction = jnp.argmax(scores)
-        
-        # Map direction to action
-        action = lax.switch(
-            direction,
-            [
-                lambda: Actions.up,
-                lambda: Actions.down,
-                lambda: Actions.right,
-                lambda: Actions.left
-            ]
-        )
-        
-        # If all moves are invalid, stay put
-        all_invalid = jnp.all(~jnp.array([up_valid, down_valid, right_valid, left_valid]))
-        
-        return lax.cond(
-            all_invalid,
-            lambda _: Actions.stay,
-            lambda _: action,
-            None
-        )

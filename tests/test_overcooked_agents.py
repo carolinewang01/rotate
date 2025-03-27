@@ -1,7 +1,7 @@
 import jax
 from jaxmarl.environments.overcooked import overcooked_layouts
 from envs.overcooked_wrapper import OvercookedWrapper
-from agents.overcooked import HeuristicAgent, StaticAgent, RandomAgent, HeuristicAgentV0
+from agents.overcooked import HeuristicAgent, StaticAgent, RandomAgent, BaseAgent
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 import numpy as np
 from typing import Dict, Tuple
@@ -72,7 +72,7 @@ def main():
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = HeuristicAgentV0("agent_0", layout=layout) # red
+    agent0 = BaseAgent("agent_0", layout=layout) # red
     agent1 = StaticAgent("agent_1") # blue
     print("Agents initialized")
     

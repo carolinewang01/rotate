@@ -1,11 +1,11 @@
 from functools import partial
+from typing import Any, Dict, Tuple
+
 import jax
 import jax.numpy as jnp
+from flax import struct
 from jax import lax
 from jaxmarl.environments.overcooked.overcooked import Actions
-from typing import Tuple, Dict, Any
-import chex
-from flax import struct
 
 # Define agent state constants
 HOLDING_NOTHING = 0
@@ -28,8 +28,16 @@ class AgentState:
     onions_in_pot: int
     rng_key: jax.random.PRNGKey
 
-class HeuristicAgentV0:
-    """A heuristic agent for the Overcooked environment that can create and deliver onion soups."""
+class BaseAgent:
+    """A base heuristic agent for the Overcooked environment.
+    
+    TODO: 
+    - extend go_to_obj to interact with obj once there
+    - create simple child agent that simply tries to stay out of way of other agent
+    - create simple child agent that gets onions and places them in pot
+    - create simple child agent that gets plate and attempts to deliver soup when ready.
+    - create more complex child agent that can do both of the above
+    """
     
     def __init__(self, agent_name: str, layout: Dict[str, Any]):
         self.agent_id = int(agent_name[-1])
@@ -70,36 +78,38 @@ class HeuristicAgentV0:
         # Reshape flattened observation back to 3D
         obs_3d = jnp.reshape(obs, self.obs_shape)
         
-        # Get agent's position (channel 0 is a one-hot encoding of the agent's position)
-        agent_pos_layer = obs_3d[:, :, 0]
-        agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
-        agent_y, agent_x = agent_pos
-
-        # Get target positions
-        pot_y, pot_x = self._get_nearest_pot_pos(obs_3d, agent_y, agent_x)
-        onion_x, onion_y = self._get_nearest_onion_or_plate_pos(obs_3d, agent_y, agent_x, "onion")
-        plate_x, plate_y = self._get_nearest_onion_or_plate_pos(obs_3d, agent_y, agent_x, "plate")
-        
-        # select target position 
-        target_y, target_x = plate_x, plate_y
-
-        # Move towards target
-        nearest_free_y, nearest_free_x = self._get_nearest_free_space(target_y, target_x, obs_3d)
-        print(f"Nearest free space: {nearest_free_y}, {nearest_free_x}")
-
-        action = self._move_towards(agent_y, agent_x, 
-                nearest_free_y, nearest_free_x, obs_3d, state.rng_key)
+        action, rng_key = self._go_to_obj(obs_3d, "pot", state.rng_key)
         
         # Update state with new RNG key
         new_state = AgentState(
             holding=state.holding,
             goal=state.goal,
             onions_in_pot=state.onions_in_pot,
-            rng_key=jax.random.split(state.rng_key)[0]  # Use new key for next step
+            rng_key=rng_key  # Use new key for next step
         )
         
         return action, new_state
     
+    def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> int:
+        """Go to the nearest object of the given type."""
+        agent_pos_layer = obs[:, :, 0]
+        agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
+        agent_y, agent_x = agent_pos
+        
+        if obj_type == "pot":
+            target_y, target_x = self._get_nearest_pot_pos(obs, agent_y, agent_x)
+        elif obj_type == "onion":
+            target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "onion")
+        elif obj_type == "plate":
+            target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
+        
+        # Move towards target
+        nearest_free_y, nearest_free_x = self._get_nearest_free_space(target_y, target_x, obs)
+
+        action, rng_key = self._move_towards(agent_y, agent_x, 
+                nearest_free_y, nearest_free_x, obs, rng_key)
+        return action, rng_key
+
     def _get_nearest_pot_pos(self, obs: jnp.ndarray, agent_y: int, agent_x: int) -> Tuple[int, int]:
         '''Returns position of the nearest pot.
         
@@ -283,11 +293,9 @@ class HeuristicAgentV0:
             -1000.0
         )
 
-        print(f"Scores w/o noise: {scores}")
-
         # Add small random noise to break ties
-        key1, key2 = jax.random.split(key)
-        noise = jax.random.uniform(key1, shape=(5,), minval=-0.01, maxval=0.01)
+        key, subkey = jax.random.split(key)
+        noise = jax.random.uniform(subkey, shape=(5,), minval=-0.01, maxval=0.01)
 
         scores += noise
                 
@@ -305,4 +313,4 @@ class HeuristicAgentV0:
                 lambda: Actions.stay
             ]
         )
-        return action
+        return action, key
