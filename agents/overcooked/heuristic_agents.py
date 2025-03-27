@@ -4,6 +4,8 @@ import jax.numpy as jnp
 from jax import lax
 from jaxmarl.environments.overcooked.overcooked import Actions
 from typing import Tuple, Dict, Any
+import chex
+from flax import struct
 
 # Define agent state constants
 HOLDING_NOTHING = 0
@@ -18,35 +20,43 @@ GOAL_GET_PLATE = 2
 GOAL_GET_SOUP = 3
 GOAL_DELIVER = 4
 
+@struct.dataclass
+class AgentState:
+    """Agent state for the heuristic agent."""
+    holding: int
+    goal: int
+    onions_in_pot: int
+    rng_key: jax.random.PRNGKey
+
 class HeuristicAgent:
-    """A heuristic agent for the Overcooked environment that can create and deliver dishes."""
+    """A heuristic agent for the Overcooked environment that can create and deliver onion soups."""
     
-    def __init__(self, agent_name: str, map_width: int = 7, map_height: int = 7):
+    def __init__(self, agent_name: str, layout: Dict[str, Any]):
         self.agent_id = int(agent_name[-1])
-        self.map_width = map_width
-        self.map_height = map_height
-        self.obs_shape = (map_width, map_height, 26)  # Overcooked uses 26 channels
+        self.map_width = layout["width"]
+        self.map_height = layout["height"]
+        self.obs_shape = (self.map_height, self.map_width, 26)  # Overcooked uses 26 channels
         # Initial state - will be passed into and returned from get_action
-        self.initial_state = {
-            'holding': HOLDING_NOTHING,
-            'goal': GOAL_GET_ONION,
-            'onions_in_pot': 0,
-            'rng_key': jax.random.PRNGKey(self.agent_id)
-        }
+        self.initial_state = AgentState(
+            holding=HOLDING_NOTHING,
+            goal=GOAL_GET_ONION,
+            onions_in_pot=0,
+            rng_key=jax.random.PRNGKey(self.agent_id)
+        )
         
-    def get_action(self, obs: jnp.ndarray, state: Dict[str, Any] = None) -> Tuple[int, Dict[str, Any]]:
+    def get_action(self, obs: jnp.ndarray, state: AgentState = None) -> Tuple[int, AgentState]:
         """Non-jitted version of get_action for initialization purposes"""
         if state is None:
             state = self.initial_state
         return self._get_action(obs, state)
         
     @partial(jax.jit, static_argnums=(0,))
-    def _get_action(self, obs: jnp.ndarray, state: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+    def _get_action(self, obs: jnp.ndarray, state: AgentState) -> Tuple[int, AgentState]:
         """Get action and updated state based on observation and current state.
         
         Args:
             obs: Flattened observation array
-            state: Dictionary containing agent's internal state
+            state: AgentState containing agent's internal state
             
         Returns:
             Tuple of (action, updated_state)
@@ -55,10 +65,10 @@ class HeuristicAgent:
         obs_3d = jnp.reshape(obs, self.obs_shape)
         
         # Extract state values
-        holding = state['holding']
-        goal = state['goal']
-        onions_in_pot = state['onions_in_pot']
-        rng_key = state['rng_key']
+        holding = state.holding
+        goal = state.goal
+        onions_in_pot = state.onions_in_pot
+        rng_key = state.rng_key
         
         # Split key for this step
         rng_key, subkey = jax.random.split(rng_key)
@@ -357,13 +367,13 @@ class HeuristicAgent:
             operand=None
         )
         
-        # Update state
-        updated_state = {
-            'holding': new_holding,
-            'goal': new_goal,
-            'onions_in_pot': new_onions_in_pot,
-            'rng_key': rng_key
-        }
+        # Update state using the dataclass
+        updated_state = AgentState(
+            holding=new_holding,
+            goal=new_goal,
+            onions_in_pot=new_onions_in_pot,
+            rng_key=rng_key
+        )
         
         return action, updated_state
         
