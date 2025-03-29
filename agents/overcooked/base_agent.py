@@ -5,20 +5,24 @@ import jax
 import jax.numpy as jnp
 from flax import struct
 from jax import lax
-from jaxmarl.environments.overcooked.overcooked import Actions
+from jaxmarl.environments.overcooked.overcooked import Actions, State as OvercookedState
+from jaxmarl.environments.overcooked.common import OBJECT_TO_INDEX
 
-# Define agent state constants
-HOLDING_NOTHING = 0
-HOLDING_ONION = 1
-HOLDING_PLATE = 2
-HOLDING_DISH = 3  # Completed soup
+@struct.dataclass
+class Holding:
+    nothing = 0
+    onion = 1
+    plate = 2
+    dish = 3 # Completed soup
 
-# Define agent goal states
-GOAL_GET_ONION = 0
-GOAL_PUT_ONION = 1
-GOAL_GET_PLATE = 2
-GOAL_GET_SOUP = 3
-GOAL_DELIVER = 4
+@struct.dataclass
+class Goal:
+    get_onion = 0
+    put_onion = 1
+    get_plate = 2
+    get_soup = 3
+    deliver = 4
+
 
 @struct.dataclass
 class AgentState:
@@ -26,6 +30,7 @@ class AgentState:
     holding: int
     goal: int
     onions_in_pot: int
+    soup_ready: bool  # Whether there is a ready soup in any pot
     rng_key: jax.random.PRNGKey
 
 class BaseAgent:
@@ -52,17 +57,85 @@ class BaseAgent:
 
         # Initial state - will be passed into and returned from get_action
         self.initial_state = AgentState(
-            holding=HOLDING_NOTHING,
-            goal=GOAL_GET_ONION,
+            holding=Holding.nothing,
+            goal=Goal.get_onion,
             onions_in_pot=0,
+            soup_ready=False,
             rng_key=jax.random.PRNGKey(self.agent_id)
         )
+    def get_name(self):
+        return self.__class__.__name__
+    
+    def get_action(self, 
+                   obs: jnp.ndarray, env_state: OvercookedState, 
+                   agent_state: AgentState = None) -> Tuple[int, AgentState]:
+        """Update agent state based on observation and get action."""
+        if agent_state is None:
+            agent_state = self.initial_state
+            
+        # Update state based on observation before getting action
+        agent_state = self._update_state(obs, env_state, agent_state)
+        action, agent_state = self._get_action(obs, agent_state)
+
+        return action, agent_state
         
-    def get_action(self, obs: jnp.ndarray, state: AgentState = None) -> Tuple[int, AgentState]:
-        """Non-jitted version of get_action for initialization purposes"""
-        if state is None:
-            state = self.initial_state
-        return self._get_action(obs, state)
+    # @partial(jax.jit, static_argnums=(0,))
+    def _update_state(self, obs: jnp.ndarray, env_state: OvercookedState, agent_state: AgentState) -> AgentState:
+        """Update agent state based on observation.
+        
+        Args:
+            obs: Flattened observation array
+            agent_state: Current agent state
+            
+        Returns:
+            Updated agent state
+        """
+        # Reshape observation to 3D
+        obs_3d = jnp.reshape(obs, self.obs_shape)
+        
+        # Update onions_in_pot based on pot status layer (channel 16)
+        pot_layer = obs_3d[:, :, 10]  # Channel 10: pot locations
+        pot_status = obs_3d[:, :, 16]  # Channel 16: number of onions in pot
+        # TODO: we should really track the number of onions in each pot
+        # and not just the total number of onions in pots...
+        onions_in_pot = jnp.sum(pot_status * pot_layer)
+        
+        # Update soup_ready based on soup ready layer (channel 21)
+        soup_ready_layer = obs_3d[:, :, 21]  # Channel 21: soup ready
+        soup_ready = jnp.any(soup_ready_layer > 0)
+        
+        # Update holding based on agent inventory information
+        inv_idx = env_state.agent_inv[self.agent_id] # an integer coding the object in the agent's inventory
+        
+        # Map inventory values (1, 3, 5, 9) to Holding enum values (0, 1, 2, 3)
+        holding = lax.cond(
+            inv_idx == OBJECT_TO_INDEX['empty'],
+            lambda _: Holding.nothing,
+            lambda _: lax.cond(
+                inv_idx == OBJECT_TO_INDEX['onion'],
+                lambda _: Holding.onion,
+                lambda _: lax.cond(
+                    inv_idx == OBJECT_TO_INDEX['plate'],
+                    lambda _: Holding.plate,
+                    lambda _: lax.cond(
+                        inv_idx == OBJECT_TO_INDEX['dish'],
+                        lambda _: Holding.dish,
+                        lambda _: -1, # non-supported index
+                        None),
+                    None),
+                None),
+            None)
+                    
+        # Create updated state
+        updated_agent_state = AgentState(
+            holding=holding,
+            goal=agent_state.goal,  # Keep current goal
+            onions_in_pot=onions_in_pot,
+            soup_ready=soup_ready,
+            rng_key=agent_state.rng_key  # Keep current rng key
+        )
+        
+        return updated_agent_state
         
     @partial(jax.jit, static_argnums=(0,))
     def _get_action(self, obs: jnp.ndarray, state: AgentState) -> Tuple[int, AgentState]:
@@ -73,24 +146,11 @@ class BaseAgent:
             state: AgentState containing agent's internal state
             
         Returns:
-            Tuple of (action, updated_state)
+            action
         """
-        # Reshape flattened observation back to 3D
-        obs_3d = jnp.reshape(obs, self.obs_shape)
-        
-        action, rng_key = self._go_to_obj(obs_3d, "pot", state.rng_key)
-        
-        # Update state with new RNG key
-        new_state = AgentState(
-            holding=state.holding,
-            goal=state.goal,
-            onions_in_pot=state.onions_in_pot,
-            rng_key=rng_key  # Use new key for next step
-        )
-        
-        return action, new_state
-    
-    def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> int:
+        raise NotImplementedError("Subclasses must implement this method")
+
+    def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
         """Go to the nearest object of the given type."""
         agent_pos_layer = obs[:, :, 0]
         agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
@@ -314,3 +374,45 @@ class BaseAgent:
             ]
         )
         return action, key
+
+    def _go_to_obj_and_interact(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
+        """Go to the nearest object of the given type and interact with it when adjacent.
+        
+        Args:
+            obs: 3D observation array
+            obj_type: Type of object to go to ("pot", "onion", "plate")
+            rng_key: Random key for action selection
+            
+        Returns:
+            Tuple of (action, new_rng_key)
+        """
+        # Get agent position
+        agent_pos_layer = obs[:, :, 0]
+        agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
+        agent_y, agent_x = agent_pos
+        
+        # Get target position based on object type
+        if obj_type == "pot":
+            target_y, target_x = self._get_nearest_pot_pos(obs, agent_y, agent_x)
+        elif obj_type == "onion":
+            target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "onion")
+        elif obj_type == "plate":
+            target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
+        else:
+            raise ValueError(f"Invalid object type: {obj_type}")
+            
+        # Check if agent is adjacent to target
+        is_adjacent = jnp.logical_or(
+            jnp.logical_and(jnp.abs(agent_y - target_y) == 1, agent_x == target_x),
+            jnp.logical_and(jnp.abs(agent_x - target_x) == 1, agent_y == target_y)
+        )
+        
+        # If adjacent, return interact action, otherwise return movement action.
+        action, rng_key = lax.cond(
+            is_adjacent,
+            lambda _: (Actions.interact, rng_key),
+            lambda _: self._go_to_obj(obs, obj_type, rng_key),
+            None
+        )
+        
+        return action, rng_key

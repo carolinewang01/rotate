@@ -1,10 +1,11 @@
+import numpy as np
+from typing import Dict, Tuple
+
 import jax
 from jaxmarl.environments.overcooked import overcooked_layouts
 from envs.overcooked_wrapper import OvercookedWrapper
-from agents.overcooked import HeuristicAgent, StaticAgent, RandomAgent, BaseAgent
+from agents.overcooked import OnionAgent, StaticAgent, RandomAgent
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
-import numpy as np
-from typing import Dict, Tuple
 import time
 
 def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, float], int]:
@@ -19,7 +20,7 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
     print("Resetting environment...")
     key, subkey = jax.random.split(key)
     obs, state = env.reset(subkey)
-    print("Environment reset complete. Observation shape:", obs["agent_0"].shape)
+    print("Environment reset complete.")
     
     # Initialize episode tracking
     done = {agent: False for agent in env.agents}
@@ -35,12 +36,10 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
     while not done['__all__'] and num_steps < max_steps:
         # Get actions from both agents with their states
         print(f"Step {num_steps}")
-        action0, agent0_state = agent0.get_action(obs["agent_0"], agent0_state)
-        action1, agent1_state = agent1.get_action(obs["agent_1"], agent1_state)
+        action0, agent0_state = agent0.get_action(obs["agent_0"], state, agent0_state)
+        action1, agent1_state = agent1.get_action(obs["agent_1"], state, agent1_state)
         
         actions = {"agent_0": action0, "agent_1": action1}
-        if action0 == 5:
-            print(f"actions:", actions)
         
         # Step environment
         key, subkey = jax.random.split(key)
@@ -54,8 +53,13 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
                 
         # Print progress every 10 steps
         if num_steps % 10 == 0:
-            print(f"Agent 0 reward: {total_rewards['agent_0']:.2f}")
-            print(f"Agent 1 reward: {total_rewards['agent_1']:.2f}")
+            agent0_name = agent0.get_name()
+            agent1_name = agent1.get_name()
+            print(f"Agent 0 {(agent0_name)} state: {agent0_state}")
+            print(f"Agent 1 {(agent1_name)} state: {agent1_state}")
+            print("Actions:", actions)
+            print(f"Agent 0 {(agent0_name)} reward: {total_rewards['agent_0']:.2f}")
+            print(f"Agent 1 {(agent1_name)} reward: {total_rewards['agent_1']:.2f}")
     
     return total_rewards, num_steps, state_seq
 
@@ -66,19 +70,23 @@ def main():
     env = OvercookedWrapper(
         layout=layout,
         random_reset=True,
-        max_steps=100,
+        max_steps=50,
     )
     print("Environment initialized")
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = BaseAgent("agent_0", layout=layout) # red
-    agent1 = StaticAgent("agent_1") # blue
+    agent0 = OnionAgent("agent_0", layout=layout) # red
+    agent1 = StaticAgent("agent_1", layout=layout) # blue
     print("Agents initialized")
+    
+    print("Agent 0:", agent0.get_name())
+    print("Agent 1:", agent1.get_name())
     
     # Run multiple episodes
     NUM_EPISODES = 5
-    VISUALIZE = True
+    VISUALIZE = False
+    SAVE_GIF = not VISUALIZE
     key = jax.random.PRNGKey(0)
     
     # Initialize returns list
@@ -110,12 +118,16 @@ def main():
 
     # Visualize state sequences
     if VISUALIZE:
+        print("Visualizing state sequences...")
         viz = OvercookedVisualizer()
         for state in state_seq:
             viz.render(env.agent_view_size, state, highlight=False)
             time.sleep(.01)
-        # viz.animate(state_seq, agent_view_size=5, 
-        #     filename='results/overcooked/gifs/heuristic_agentv0_vs_static_agent.gif')
+    if SAVE_GIF:
+        print("Saving gif...")
+        viz = OvercookedVisualizer()
+        viz.animate(state_seq, agent_view_size=5, 
+            filename=f'results/overcooked/gifs/{agent0.get_name()}_vs_{agent1.get_name()}.gif')
 
 if __name__ == "__main__":
     main() 

@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
+from common.s5_actor_critic import S5ActorCritic
 from fcp.utils import load_checkpoints, save_train_run
 from fcp.vis_utils import plot_eval_metrics
 from envs import make_env
@@ -135,7 +136,6 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
                 )(rngs_ckpt, eval_params_flat)
             # Vmap over the m_fcp checkpoints.
             return jax.vmap(eval_for_checkpoint, in_axes=(0, 0))(fcp_params_seed, total_rngs)
-        # TODO: figure out why vmapping over axis 0 of fcp_params works.
         return jax.vmap(eval_fcp_seed, in_axes=(0, 0))(rngs, fcp_params)
 
     # --- 6. JIT-compile and run ---
