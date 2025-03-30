@@ -34,13 +34,15 @@ class OnionAgent(BaseAgent):
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "onion", rng_key)
             return (action, new_rng_key)
         
+        # Get action and update RNG key
         action, rng_key = lax.cond(
             agent_state.holding == Holding.nothing,
             go_to_onion,
             lambda _: (Actions.stay, agent_state.rng_key),
             (obs_3d, agent_state.rng_key)
         )
-        # update state with rng_key
+        
+        # Create new state with updated key, preserving other state values
         updated_agent_state = AgentState(
             holding=agent_state.holding,
             goal=agent_state.goal,

@@ -3,9 +3,9 @@ from typing import Dict, Tuple
 
 import jax
 from jaxmarl.environments.overcooked import overcooked_layouts
-from envs.overcooked_wrapper import OvercookedWrapper
+from envs.overcooked.overcooked_wrapper import OvercookedWrapper
+from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
 from agents.overcooked import OnionAgent, StaticAgent, RandomAgent
-from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 import time
 
 def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, float], int]:
@@ -32,10 +32,14 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
     agent0_state = agent0.initial_state
     agent1_state = agent1.initial_state
     
-    state_seq = [state]
-    while not done['__all__'] and num_steps < max_steps:
+    # Initialize state sequence
+    state_seq = []
+    print(f"Starting state collection. Will collect {max_steps} states.")
+    
+    # Always collect exactly max_steps states
+    for ts in range(max_steps):
         # Get actions from both agents with their states
-        print(f"Step {num_steps}")
+        print(f"Step {ts}")
         action0, agent0_state = agent0.get_action(obs["agent_0"], state, agent0_state)
         action1, agent1_state = agent1.get_action(obs["agent_1"], state, agent1_state)
         
@@ -44,7 +48,11 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
         # Step environment
         key, subkey = jax.random.split(key)
         obs, state, rewards, done, info = env.step(subkey, state, actions)
+        
+        # Add state to sequence and print debug info
         state_seq.append(state)
+        print(f"State added to sequence. Total states: {len(state_seq)}")
+        
         # Update rewards
         for agent in env.agents:
             total_rewards[agent] += rewards[agent]
@@ -61,6 +69,7 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
             print(f"Agent 0 {(agent0_name)} reward: {total_rewards['agent_0']:.2f}")
             print(f"Agent 1 {(agent1_name)} reward: {total_rewards['agent_1']:.2f}")
     
+    print(f"Episode finished. Total states collected: {len(state_seq)}")
     return total_rewards, num_steps, state_seq
 
 def main():
@@ -84,7 +93,7 @@ def main():
     print("Agent 1:", agent1.get_name())
     
     # Run multiple episodes
-    NUM_EPISODES = 5
+    NUM_EPISODES = 1
     VISUALIZE = False
     SAVE_GIF = not VISUALIZE
     key = jax.random.PRNGKey(0)
@@ -92,12 +101,13 @@ def main():
     # Initialize returns list
     returns = []
     
-    state_seq = []
+    state_seq_all = []
     for episode in range(NUM_EPISODES):
         print(f"\nEpisode {episode + 1}/{NUM_EPISODES}")
         key, subkey = jax.random.split(key)
         total_rewards, num_steps, ep_states = run_episode(env, agent0, agent1, subkey)
-        state_seq += ep_states
+        state_seq_all.extend(ep_states)  # Changed from += to extend for better list handling
+        print(f"Total states in sequence after episode: {len(state_seq_all)}")
         
         # Calculate episode return
         episode_return = sum(total_rewards.values())
@@ -108,7 +118,7 @@ def main():
         print(f"Episode return: {episode_return:.2f}")
         print("Final rewards:")
         for agent in env.agents:
-            print(f"  {agent}: {total_rewards[agent]:.2f}")
+            print(f" {agent}: {total_rewards[agent]:.2f}")
     
     # Print statistics
     mean_return = np.mean(returns)
@@ -119,15 +129,17 @@ def main():
     # Visualize state sequences
     if VISUALIZE:
         print("Visualizing state sequences...")
-        viz = OvercookedVisualizer()
-        for state in state_seq:
+        viz = OvercookedVisualizerV2()
+        for state in state_seq_all:
             viz.render(env.agent_view_size, state, highlight=False)
-            time.sleep(.01)
+            time.sleep(.1)
     if SAVE_GIF:
-        print("Saving gif...")
-        viz = OvercookedVisualizer()
-        viz.animate(state_seq, agent_view_size=5, 
-            filename=f'results/overcooked/gifs/{agent0.get_name()}_vs_{agent1.get_name()}.gif')
+        print(f"\nSaving mp4 with {len(state_seq_all)} frames...")
+        viz = OvercookedVisualizerV2()
+        viz.animate_mp4(state_seq_all, env.agent_view_size, 
+            filename=f'results/overcooked/mp4/{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
+            pixels_per_tile=32, fps=5)
+        print("MP4 saved successfully!")
 
 if __name__ == "__main__":
     main() 

@@ -79,7 +79,7 @@ class BaseAgent:
 
         return action, agent_state
         
-    # @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=(0,))
     def _update_state(self, obs: jnp.ndarray, env_state: OvercookedState, agent_state: AgentState) -> AgentState:
         """Update agent state based on observation.
         
@@ -120,7 +120,7 @@ class BaseAgent:
                     lambda _: lax.cond(
                         inv_idx == OBJECT_TO_INDEX['dish'],
                         lambda _: Holding.dish,
-                        lambda _: -1, # non-supported index
+                        lambda _: Holding.nothing,  # Default to nothing for unsupported indices
                         None),
                     None),
                 None),
@@ -129,10 +129,10 @@ class BaseAgent:
         # Create updated state
         updated_agent_state = AgentState(
             holding=holding,
-            goal=agent_state.goal,  # Keep current goal
+            goal=agent_state.goal,
             onions_in_pot=onions_in_pot,
             soup_ready=soup_ready,
-            rng_key=agent_state.rng_key  # Keep current rng key
+            rng_key=agent_state.rng_key
         )
         
         return updated_agent_state

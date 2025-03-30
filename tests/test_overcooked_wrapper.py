@@ -2,7 +2,7 @@ import jax
 from jaxmarl.wrappers.baselines import LogWrapper
 from jaxmarl.environments.overcooked import overcooked_layouts
 
-from envs.overcooked_wrapper import OvercookedWrapper
+from envs.overcooked.overcooked_wrapper import OvercookedWrapper
 
 
 """
