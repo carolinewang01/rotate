@@ -1,13 +1,12 @@
 import copy
 
 import jaxmarl
-from jaxmarl.environments.overcooked import overcooked_layouts
 import jumanji
 from jumanji.environments.routing.lbf.generator import RandomGenerator
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from envs.overcooked.overcooked_wrapper import OvercookedWrapper
-
+from envs.overcooked.augmented_layouts import augmented_layouts
 def make_env(env_name: str, env_kwargs: dict = {}):
     if env_name == 'lbf':
         generator_args = {"grid_size": 8, "fov": 8, 
@@ -26,7 +25,7 @@ def make_env(env_name: str, env_kwargs: dict = {}):
         env = JumanjiToJaxMARL(env)
         
     elif env_name == 'overcooked-v2':
-        layout = overcooked_layouts[env_kwargs['layout']]
+        layout = augmented_layouts[env_kwargs['layout']]
         env_kwargs_copy = copy.deepcopy(env_kwargs)
         env_kwargs_copy["layout"] = layout
         env = OvercookedWrapper(**env_kwargs_copy)

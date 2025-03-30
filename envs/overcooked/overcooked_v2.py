@@ -1,35 +1,33 @@
 import numpy as np
 from typing import Tuple, Dict
-from scipy.ndimage import label
 
 import chex
+from flax.core.frozen_dict import FrozenDict
 import jax
 from jax import lax
 import jax.numpy as jnp
-
 from jaxmarl.environments.overcooked.overcooked import Overcooked, State
 from jaxmarl.environments.overcooked.common import (
     OBJECT_TO_INDEX,
-    COLOR_TO_INDEX,
-    OBJECT_INDEX_TO_VEC,
     DIR_TO_VEC,
     make_overcooked_map)
 
-from jaxmarl.environments.overcooked.layouts import overcooked_layouts as layouts
-from flax.core.frozen_dict import FrozenDict
+from envs.overcooked.augmented_layouts import augmented_layouts as layouts
 
 
 class OvercookedV2(Overcooked):
-    '''This environment is a modified version of the 
-    JaxMARL Overcooked environment that ensures environments are solvable. 
+    '''This environment is a modified version of the JaxMARL Overcooked environment 
+    that ensures environments are solvable. 
+    
     The main modifications are: 
-    - Initialization randomization: Previously, setting `random_reset` would lead to 
+    - Random resets: Previously, setting `random_reset` would lead to 
         random initial agent positions, and randomized initial object states (e.g. pot might be initialized with onions already in it, agents might be initialized holding plates, etc.). We separate the functionality of the argument `random_reset` into two arguments: `random_reset` and `random_obj_state`, 
         where `random_reset` only controls the initial positions of the two agents. 
-    - Initialization of agent positions: Previously, two agents on the same side of a disconnected map. 
-        Now, the two agents are always initialized on opposite sides of the map. 
+    - Initial agent positions: Previously, agent positions were initialized by choosing randomly from any free space on 
+        the map, which could lead to the two agents being on the same side of a disconnected map. 
+        Now, we ensure that the two agents are always initialized in separate components of the map
+        (if there are at least two components). 
     '''
-    
     def __init__(self, 
             layout = FrozenDict(layouts["cramped_room"]),
             random_reset: bool = False,
@@ -41,133 +39,56 @@ class OvercookedV2(Overcooked):
                          max_steps=max_steps)
         self.random_obj_state = random_obj_state # controls whether pot state and inventory are randomized
     
-    def _find_connected_components(self, wall_map: jnp.ndarray) -> Tuple[jnp.ndarray, int]:
-        """Find connected components in the map (excluding walls) using JAX operations.
-        
-        Args:
-            wall_map: Boolean mask indicating wall positions (True for walls)
-            
-        Returns:
-            Tuple of (labeled_array, num_features) where:
-                - labeled_array: Array where each connected component has a unique label
-                - num_features: Number of connected components found
-        """
-        h, w = wall_map.shape
-        # Create a binary mask where 1 represents walkable areas
-        walkable = ~wall_map
-        
-        # Initialize labels array
-        labels = jnp.zeros_like(wall_map, dtype=jnp.int32)
-        current_label = 1
-        
-        # Helper function to check if a position is valid and walkable
-        def is_valid_pos(pos):
-            x, y = pos
-            return (x >= 0) & (x < h) & (y >= 0) & (y < w) & walkable[x, y]
-        
-        # Helper function to get neighbors of a position
-        def get_neighbors(pos):
-            x, y = pos
-            return jnp.array([
-                [x-1, y], [x+1, y],  # up, down
-                [x, y-1], [x, y+1]   # left, right
-            ])
-        
-        # Flood fill algorithm using JAX operations
-        def flood_fill(pos, label):
-            x, y = pos
-            # If position is already labeled or is a wall, return
-            if labels[x, y] != 0:
-                return labels
-            
-            # Label current position
-            labels = labels.at[x, y].set(label)
-            
-            # Get valid neighbors
-            neighbors = get_neighbors(pos)
-            valid_neighbors = jax.vmap(is_valid_pos)(neighbors)
-            valid_neighbors = neighbors[valid_neighbors]
-            
-            # Recursively label valid neighbors
-            for neighbor in valid_neighbors:
-                labels = flood_fill(neighbor, label)
-            
-            return labels
-        
-        # Find first unlabeled walkable position
-        def find_next_unlabeled(pos):
-            x, y = pos
-            if x >= h:
-                return None
-            if y >= w:
-                return find_next_unlabeled(jnp.array([x + 1, 0]))
-            if walkable[x, y] & (labels[x, y] == 0):
-                return jnp.array([x, y])
-            return find_next_unlabeled(jnp.array([x, y + 1]))
-        
-        # Main loop to find and label all components
-        def label_components(init_state):
-            labels, current_label = init_state
-            next_pos = find_next_unlabeled(jnp.array([0, 0]))
-            
-            def cond_fn(state):
-                labels, current_label, next_pos = state
-                return next_pos is not None
-            
-            def body_fn(state):
-                labels, current_label, next_pos = state
-                labels = flood_fill(next_pos, current_label)
-                return labels, current_label + 1, find_next_unlabeled(next_pos)
-            
-            labels, current_label, _ = lax.while_loop(cond_fn, body_fn, (labels, current_label, next_pos))
-            return labels, current_label - 1
-        
-        # Initialize and run the labeling
-        labels, num_features = label_components((labels, current_label))
-        return labels, num_features
-
-    def _get_component_positions(self, labeled_array, component_idx):
-        """Get all positions belonging to a specific component"""
-        return jnp.where(labeled_array == component_idx)[0]
-
-    def _initialize_agent_positions(self, key: chex.PRNGKey, wall_map, layout, num_agents: int, all_pos: jnp.ndarray) -> Tuple[chex.PRNGKey, jnp.ndarray]:
+    def _initialize_agent_positions(self, key: chex.PRNGKey, all_pos: jnp.ndarray, num_agents: int) -> Tuple[chex.PRNGKey, jnp.ndarray]:
         """Initialize agent positions ensuring they are on separate halves of the map if possible.
-        
+        Function assumes there are two agents.
+
         Args:
             key: JAX PRNG key
-            wall_map: Boolean mask indicating wall positions
-            layout: Environment layout dictionary
-            num_agents: Number of agents to initialize
             all_pos: Array of all possible positions
-            
+            num_agents: Number of agents to initialize
         Returns:
             Tuple of (new_key, agent_idx) where agent_idx contains the initialized agent positions
         """
-        # Find connected components in the map
-        labeled_array, num_features = self._find_connected_components(wall_map)
-        
-        if self.random_reset and num_features >= 2:
+        free_space_map = self.layout["free_space_map"]
+        wall_map = self.layout["wall_map"]
+        num_components = self.layout["num_components"]
+
+        if self.random_reset and num_components >= 2:
             # If we have at least 2 components, ensure agents are in different components
             key, subkey = jax.random.split(key)
-            # Randomly choose two different components
-            component_indices = jax.random.choice(subkey, jnp.arange(1, num_features + 1), shape=(2,), replace=False)
+            # Randomly choose num_agents different components
+            component_indices = jax.random.choice(subkey, jnp.arange(1, num_components + 1), 
+                shape=(num_agents,), replace=False)
             
-            # Get positions for each component
-            agent_positions = []
-            for i, comp_idx in enumerate(component_indices):
-                comp_positions = self._get_component_positions(labeled_array, comp_idx)
+            # Randomly sample each agent's position from each component
+            # Note that the free_space_map is an h x w array where each connected components 
+            # is labelled by a unique integer counting up from 1. 
+            # Example: 
+            # free_space_map = [[0 0 0 0 0 0 0 0 0]
+            #                   [0 1 0 0 0 0 0 2 0]
+            #                   [0 1 1 1 0 2 2 2 0]
+            #                   [0 1 1 1 0 2 2 2 0]
+            #                   [0 0 0 0 0 0 0 0 0]]
+            # Here, there are two components: one with label 1 and one with label 2.
+            # Each component has 6 positions.
+            
+            # For each agent, find positions in their assigned component and sample one
+            agent_idx = jnp.zeros(num_agents, dtype=jnp.uint32)
+            for i in range(num_agents):
+                component_idx = component_indices[i]
+                # Create a mask where 1 indicates positions in the desired component
+                component_mask = (free_space_map.reshape(-1) == component_idx).astype(jnp.float32)
+                # Randomly sample one position from this component
                 key, subkey = jax.random.split(key)
-                # Randomly choose a position from this component
-                pos_idx = jax.random.choice(subkey, comp_positions)
-                agent_positions.append(pos_idx)
-            
-            agent_idx = jnp.array(agent_positions)
+                agent_idx = agent_idx.at[i].set(jax.random.choice(subkey, all_pos, p=component_mask))
         else:
-            # Use default layout positions or random positions if no components found
+            # Use default layout positions or random positions if only a single component
             key, subkey = jax.random.split(key)
             agent_idx = jax.random.choice(subkey, all_pos, shape=(num_agents,),
-                                      p=(~wall_map.reshape(-1).astype(jnp.bool_)).astype(jnp.float32), replace=False)
-            agent_idx = self.random_reset*agent_idx + (1-self.random_reset)*layout.get("agent_idx", agent_idx)
+                                      p=(~wall_map.reshape(-1).astype(jnp.bool_)).astype(jnp.float32), 
+                                      replace=False)
+            agent_idx = self.random_reset*agent_idx + (1-self.random_reset)*self.layout.get("agent_idx", agent_idx)
             
         return key, agent_idx
 
@@ -188,16 +109,13 @@ class OvercookedV2(Overcooked):
         w = self.width
         num_agents = self.num_agents
         all_pos = np.arange(np.prod([h, w]), dtype=jnp.uint32)
-
+        
+        wall_map = layout.get("wall_map")
         wall_idx = layout.get("wall_idx")
-        occupied_mask = jnp.zeros_like(all_pos)
-        occupied_mask = occupied_mask.at[wall_idx].set(1)
-        wall_map = occupied_mask.reshape(h, w).astype(jnp.bool_)
 
         # Initialize agent positions
-        key, agent_idx = self._initialize_agent_positions(key, wall_map, layout, num_agents, all_pos)
+        key, agent_idx = self._initialize_agent_positions(key, all_pos, num_agents)
         agent_pos = jnp.array([agent_idx % w, agent_idx // w], dtype=jnp.uint32).transpose() # dim = n_agents x 2
-        occupied_mask = occupied_mask.at[agent_idx].set(1)
 
         key, subkey = jax.random.split(key)
         agent_dir_idx = jax.random.choice(subkey, jnp.arange(len(DIR_TO_VEC), dtype=jnp.int32), shape=(num_agents,))

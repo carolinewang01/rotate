@@ -2,9 +2,9 @@ import numpy as np
 from typing import Dict, Tuple
 
 import jax
-from jaxmarl.environments.overcooked import overcooked_layouts
 from envs.overcooked.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
+from envs.overcooked.augmented_layouts import augmented_layouts
 from agents.overcooked import OnionAgent, StaticAgent, RandomAgent
 import time
 
@@ -75,7 +75,7 @@ def main(num_episodes,
          save_gif=False):
     # Initialize environment
     print("Initializing environment...")
-    layout = overcooked_layouts[layout_name]
+    layout = augmented_layouts[layout_name]
     env = OvercookedWrapper(
         layout=layout,
         random_reset=random_reset,
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     # TODO: modify asymm_advantages and forced coord (maps with two disconnected components) 
     # such that agents are always initialized on one side or another
 
-    for layout_name in ["coord_ring"]:
+    for layout_name in ["forced_coord"]:
         with jax.disable_jit(DEBUG):
             main(num_episodes=NUM_EPISODES, 
                 layout_name=layout_name,
