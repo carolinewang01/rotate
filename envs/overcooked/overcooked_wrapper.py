@@ -1,12 +1,17 @@
 from functools import partial
-from jaxmarl.environments import overcooked
-from jaxmarl.environments.overcooked.overcooked import State as OvercookedState
-from jaxmarl.environments import spaces
-import jax
-import jax.numpy as jnp
 from typing import Dict
 
-class OvercookedWrapper(overcooked.Overcooked):
+import jax
+import jax.numpy as jnp
+from jaxmarl.environments.overcooked.overcooked import State as OvercookedState
+from jaxmarl.environments import spaces
+
+from envs.overcooked.overcooked_v2 import OvercookedV2  
+
+
+class OvercookedWrapper(OvercookedV2):
+    '''Wrapper for the Overcooked environment to ensure that it follows a common interface 
+    with other environments provided in this library.'''
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

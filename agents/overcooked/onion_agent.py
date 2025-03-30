@@ -29,7 +29,7 @@ class OnionAgent(BaseAgent):
         obs_3d = jnp.reshape(obs, self.obs_shape)
         
         # Define helper functions for each state
-        def go_to_onion(carry):
+        def get_onion(carry):
             '''Go to the nearest onion and pick it up. '''
             obs_3d, rng_key = carry
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "onion", rng_key)
@@ -38,7 +38,7 @@ class OnionAgent(BaseAgent):
         # Get action and update RNG key
         action, rng_key = lax.cond(
             agent_state.holding == Holding.nothing,
-            go_to_onion,
+            get_onion,
             lambda _: (Actions.stay, agent_state.rng_key),
             (obs_3d, agent_state.rng_key)
         )

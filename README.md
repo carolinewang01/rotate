@@ -1,6 +1,6 @@
 # continual-aht
 
-### TODOs
+## TODOs
 
 Experiment Infrastructure
 - Implement wandb logging.
@@ -18,19 +18,28 @@ Environments with Diverse Coordination Conventions:
     - Hand-code LBF teammate policies that collect the fruits in a certain order. 
 - Explore other environments offered by Jumanji and JaxMARL.
 
-### Installation Guide
+## Installation Guide
 1. Install [Jumanji](https://github.com/instadeepai/jumanji/tree/main) from source, to get the Level Based Foraging (LBF) environment. 
 2. Install the fork of JaxMARL in our codebase via `pip install -e .[algs]` (run from the `jaxmarl_caroline` directory). 
 - Note that we have made only minor changes to our JaxMARL fork. It is primarily there to make referencing their baseline scripts easier. 
 3. Caroline's conda environment has been dumped to the `environment.yml`, found in the root of this codebase. After installing the above packages from source, please create a conda environment following the `environment.yml`. Don't forget to change the name of the environment and the prefix, within the `.yml` file!  
 4. Add the path to this codebase to your PYTHONPATH, either by adding a line to your `.bashrc`, or by setting it as a conda environment variable: `conda env config vars set PYTHONPATH=.:$PYTHONPATH`
 
-### Project Guide
-#### Tests
+## Project Guide
+### Tests
 The `tests/` directory stores various test scripts, primarily testing environments and environment wrappers. 
 
-#### Envs
+### Envs
+#### Jumanji (LBF)
+Currently, the only environment supported from the Jumanji suite is Level-Based Foraging (LBF).
+
 The wrapper for the Jumanji LBF environment is stored in the `envs/` directory, at `envs/jumanji_jaxmarl_wrapper.py`. A corresponding test script is stored at `tests/test_jumanji_jaxmarl_wrapper.py`.
+
+#### Overcooked-v2
+We made some modifications to the JaxMARL Overcooked environment to improve the functionality and ensure environments are solvable.
+
+- Initialization randomization: Previously, setting `random_reset` would lead to random initial agent positions, and randomized initial object states (e.g. pot might be initialized with onions already in it, agents might be initialized holding plates, etc.). We separate the functionality of the argument `random_reset` into two arguments: `random_reset` and `random_obj_state`, where `random_reset` only controls the initial positions of the two agents. 
+- Agent initial positions: previously, in a map with disconnected components, it was possible for two agents to be spawned in the same component, making it impossible to solve the task. The Overcooked-v2 environment initializes agents such that one is always spawned on each side of the map.
 
 #### Fictitious Co-Play (FCP)
 The `fcp/` directory stores our Fictitious Co-Play implementation. This implementation was based on JaxMARL's IPPO implementation on Overcooked. Note that all FCP scripts train on LBF (using our wrapper) by default. 

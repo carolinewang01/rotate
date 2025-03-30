@@ -86,7 +86,7 @@ def main(num_episodes,
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = OnionAgent("agent_0", layout=layout) # red
+    agent0 = StaticAgent("agent_0", layout=layout) # red
     agent1 = StaticAgent("agent_1", layout=layout) # blue
     print("Agents initialized")
     
@@ -135,7 +135,7 @@ def main(num_episodes,
         print(f"\nSaving mp4 with {len(state_seq_all)} frames...")
         viz = OvercookedVisualizerV2()
         viz.animate_mp4(state_seq_all, env.agent_view_size, 
-            filename=f'results/overcooked/mp4/{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
+            filename=f'results/overcooked/mp4/{layout_name}_{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
             pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 
@@ -144,11 +144,16 @@ if __name__ == "__main__":
     VISUALIZE = False
     SAVE_GIF = not VISUALIZE    
     NUM_EPISODES = 10
-    with jax.disable_jit(DEBUG):
-        main(num_episodes=NUM_EPISODES, 
-             layout_name="cramped_room",
-             random_reset=True,
-             random_obj_state=False,
-             max_steps=10,
-             visualize=VISUALIZE, 
-             save_gif=SAVE_GIF) 
+    
+    # TODO: modify asymm_advantages and forced coord (maps with two disconnected components) 
+    # such that agents are always initialized on one side or another
+
+    for layout_name in ["coord_ring"]:
+        with jax.disable_jit(DEBUG):
+            main(num_episodes=NUM_EPISODES, 
+                layout_name=layout_name,
+                random_reset=True,
+                random_obj_state=False,
+                max_steps=10,
+                visualize=VISUALIZE, 
+                save_gif=SAVE_GIF) 
