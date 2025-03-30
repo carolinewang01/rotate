@@ -8,7 +8,7 @@ from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
 from agents.overcooked import OnionAgent, StaticAgent, RandomAgent
 import time
 
-def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, float], int]:
+def run_episode(env, agent0, agent1, key) -> Tuple[Dict[str, float], int]:
     """Run a single episode with two heuristic agents.
     
     Returns:
@@ -33,13 +33,10 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
     agent1_state = agent1.initial_state
     
     # Initialize state sequence
-    state_seq = []
-    print(f"Starting state collection. Will collect {max_steps} states.")
-    
-    # Always collect exactly max_steps states
-    for ts in range(max_steps):
+    state_seq = []    
+    while not done['__all__']:
         # Get actions from both agents with their states
-        print(f"Step {ts}")
+        print(f"Step {num_steps}")
         action0, agent0_state = agent0.get_action(obs["agent_0"], state, agent0_state)
         action1, agent1_state = agent1.get_action(obs["agent_1"], state, agent1_state)
         
@@ -51,7 +48,6 @@ def run_episode(env, agent0, agent1, key, max_steps=400) -> Tuple[Dict[str, floa
         
         # Add state to sequence and print debug info
         state_seq.append(state)
-        print(f"State added to sequence. Total states: {len(state_seq)}")
         
         # Update rewards
         for agent in env.agents:
@@ -79,14 +75,14 @@ def main():
     env = OvercookedWrapper(
         layout=layout,
         random_reset=True,
-        max_steps=50,
+        max_steps=400,
     )
     print("Environment initialized")
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = OnionAgent("agent_0", layout=layout) # red
-    agent1 = StaticAgent("agent_1", layout=layout) # blue
+    agent0 = RandomAgent("agent_0", layout=layout) # red
+    agent1 = RandomAgent("agent_1", layout=layout) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())
@@ -138,7 +134,7 @@ def main():
         viz = OvercookedVisualizerV2()
         viz.animate_mp4(state_seq_all, env.agent_view_size, 
             filename=f'results/overcooked/mp4/{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
-            pixels_per_tile=32, fps=5)
+            pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 
 if __name__ == "__main__":
