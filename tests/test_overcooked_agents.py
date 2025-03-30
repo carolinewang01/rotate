@@ -58,48 +58,50 @@ def run_episode(env, agent0, agent1, key) -> Tuple[Dict[str, float], int]:
         # Print progress every 10 steps
         if num_steps % 10 == 0:
             agent0_name = agent0.get_name()
-            agent1_name = agent1.get_name()
+            # agent1_name = agent1.get_name()
             print(f"Agent 0 {(agent0_name)} state: {agent0_state}")
-            print(f"Agent 1 {(agent1_name)} state: {agent1_state}")
+            # print(f"Agent 1 {(agent1_name)} state: {agent1_state}")
             print("Actions:", actions)
-            print(f"Agent 0 {(agent0_name)} reward: {total_rewards['agent_0']:.2f}")
-            print(f"Agent 1 {(agent1_name)} reward: {total_rewards['agent_1']:.2f}")
     
     print(f"Episode finished. Total states collected: {len(state_seq)}")
     return total_rewards, num_steps, state_seq
 
-def main():
+def main(num_episodes, 
+         layout_name="cramped_room",
+         random_reset=True,
+         random_obj_state=True,
+         max_steps=100,
+         visualize=False, 
+         save_gif=False):
     # Initialize environment
     print("Initializing environment...")
-    layout = overcooked_layouts["cramped_room"]
+    layout = overcooked_layouts[layout_name]
     env = OvercookedWrapper(
         layout=layout,
-        random_reset=True,
-        max_steps=400,
+        random_reset=random_reset,
+        random_obj_state=random_obj_state,
+        max_steps=max_steps,
     )
     print("Environment initialized")
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = RandomAgent("agent_0", layout=layout) # red
-    agent1 = RandomAgent("agent_1", layout=layout) # blue
+    agent0 = OnionAgent("agent_0", layout=layout) # red
+    agent1 = StaticAgent("agent_1", layout=layout) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())
     print("Agent 1:", agent1.get_name())
     
     # Run multiple episodes
-    NUM_EPISODES = 1
-    VISUALIZE = False
-    SAVE_GIF = not VISUALIZE
     key = jax.random.PRNGKey(0)
     
     # Initialize returns list
     returns = []
     
     state_seq_all = []
-    for episode in range(NUM_EPISODES):
-        print(f"\nEpisode {episode + 1}/{NUM_EPISODES}")
+    for episode in range(num_episodes):
+        print(f"\nEpisode {episode + 1}/{num_episodes}")
         key, subkey = jax.random.split(key)
         total_rewards, num_steps, ep_states = run_episode(env, agent0, agent1, subkey)
         state_seq_all.extend(ep_states)  # Changed from += to extend for better list handling
@@ -119,17 +121,17 @@ def main():
     # Print statistics
     mean_return = np.mean(returns)
     std_return = np.std(returns)
-    print(f"\nStatistics across {NUM_EPISODES} episodes:")
+    print(f"\nStatistics across {num_episodes} episodes:")
     print(f"Mean return: {mean_return:.2f} ± {std_return:.2f}")
 
     # Visualize state sequences
-    if VISUALIZE:
+    if visualize:
         print("Visualizing state sequences...")
         viz = OvercookedVisualizerV2()
         for state in state_seq_all:
             viz.render(env.agent_view_size, state, highlight=False)
             time.sleep(.1)
-    if SAVE_GIF:
+    if save_gif:
         print(f"\nSaving mp4 with {len(state_seq_all)} frames...")
         viz = OvercookedVisualizerV2()
         viz.animate_mp4(state_seq_all, env.agent_view_size, 
@@ -138,4 +140,15 @@ def main():
         print("MP4 saved successfully!")
 
 if __name__ == "__main__":
-    main() 
+    DEBUG = False
+    VISUALIZE = False
+    SAVE_GIF = not VISUALIZE    
+    NUM_EPISODES = 10
+    with jax.disable_jit(DEBUG):
+        main(num_episodes=NUM_EPISODES, 
+             layout_name="cramped_room",
+             random_reset=True,
+             random_obj_state=False,
+             max_steps=10,
+             visualize=VISUALIZE, 
+             save_gif=SAVE_GIF) 

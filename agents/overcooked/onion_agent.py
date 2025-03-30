@@ -10,9 +10,6 @@ from .base_agent import BaseAgent, AgentState, Holding, Goal
 
 class OnionAgent(BaseAgent):
     """A heuristic agent for the Overcooked environment that gets onions and places them in the pot.
-    TODO: 
-    - verify that the state is being updated correctly
-    - figure out why the agent is not always navigating to the onion
     """
     
     def __init__(self, agent_name: str, layout: Dict[str, Any]):

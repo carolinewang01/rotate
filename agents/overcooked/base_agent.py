@@ -150,11 +150,16 @@ class BaseAgent:
         """
         raise NotImplementedError("Subclasses must implement this method")
 
-    def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
-        """Go to the nearest object of the given type."""
+    def _get_agent_pos(self, obs: jnp.ndarray) -> Tuple[int, int]:
+        """Get the position of the agent."""
         agent_pos_layer = obs[:, :, 0]
         agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
         agent_y, agent_x = agent_pos
+        return agent_y, agent_x
+
+    def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
+        """Go to the nearest object of the given type."""
+        agent_y, agent_x = self._get_agent_pos(obs)
         
         if obj_type == "pot":
             target_y, target_x = self._get_nearest_pot_pos(obs, agent_y, agent_x)
@@ -163,11 +168,14 @@ class BaseAgent:
         elif obj_type == "plate":
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
         
+        print(f"\t[_go_to_obj] Agent position: {agent_y}, {agent_x}")
+        print(f"\t[_go_to_obj] Target position: {target_y}, {target_x}")
         # Move towards target
         nearest_free_y, nearest_free_x = self._get_nearest_free_space(target_y, target_x, obs)
-
+        print(f"\t[_go_to_obj] Nearest free space: {nearest_free_y}, {nearest_free_x}")
         action, rng_key = self._move_towards(agent_y, agent_x, 
                 nearest_free_y, nearest_free_x, obs, rng_key)
+        print(f"\t[_go_to_obj] Action: {action}")
         return action, rng_key
 
     def _get_nearest_pot_pos(self, obs: jnp.ndarray, agent_y: int, agent_x: int) -> Tuple[int, int]:
@@ -299,14 +307,13 @@ class BaseAgent:
             None)
         return free_space
 
-    @partial(jax.jit, static_argnums=(0,))
     def _move_towards(self, start_y: int, start_x: int, 
                       target_y: int, target_x: int, 
                       obs: jnp.ndarray, key: jax.random.PRNGKey) -> int:
         """Move towards target position while avoiding collisions."""
         # Calculate differences
-        x_diff = target_x - start_x
-        y_diff = target_y - start_y
+        x_diff = start_x - target_x
+        y_diff = start_y - target_y
         
         # Get occupied spaces (walls, other agent, and counters)
         wall_mask = obs[:, :, 11] > 0       # Channel 11: counter/wall locations
@@ -345,7 +352,7 @@ class BaseAgent:
         )
 
         scores = jnp.array([up_score, down_score, right_score, left_score, stay_score])
-        
+        # print(f"\t\t[_move_towards] Mmt scores: {scores}")
         # Set scores to large negative number for invalid moves
         scores = jnp.where(
             jnp.array([up_valid, down_valid, right_valid, left_valid, stay_valid]),
@@ -373,10 +380,12 @@ class BaseAgent:
                 lambda: Actions.stay
             ]
         )
+        # print(f"\t\t[_move_towards] Mmt action: {action}")
         return action, key
 
     def _go_to_obj_and_interact(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
-        """Go to the nearest object of the given type and interact with it when adjacent.
+        """Go to the nearest object of the given type. When adjacent to object, turn to face it
+        and interact with it.
         
         Args:
             obs: 3D observation array
@@ -387,9 +396,7 @@ class BaseAgent:
             Tuple of (action, new_rng_key)
         """
         # Get agent position
-        agent_pos_layer = obs[:, :, 0]
-        agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
-        agent_y, agent_x = agent_pos
+        agent_y, agent_x = self._get_agent_pos(obs)
         
         # Get target position based on object type
         if obj_type == "pot":
@@ -400,19 +407,64 @@ class BaseAgent:
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
-            
+        
+        # print(f"Agent position: {agent_y}, {agent_x}")
+        # print(f"Target {obj_type} position: {target_y}, {target_x}")
+
         # Check if agent is adjacent to target
         is_adjacent = jnp.logical_or(
             jnp.logical_and(jnp.abs(agent_y - target_y) == 1, agent_x == target_x),
             jnp.logical_and(jnp.abs(agent_x - target_x) == 1, agent_y == target_y)
         )
+
+        # Determine required direction to face the target
+        def _get_target_orientation_action(agent_y, agent_x, target_y, target_x):
+            '''Assumes agent is adjacent to target, computes the direction action to face the target.
+            '''
+            y_diff = agent_y - target_y
+            x_diff = agent_x - target_x
+            action = lax.cond(
+                jnp.abs(y_diff) > jnp.abs(x_diff),
+                # If vertical distance is greater, face up or down
+                lambda _: lax.cond(
+                    y_diff > 0,
+                    lambda _: Actions.up,
+                    lambda _: Actions.down,
+                    None
+                ),
+                # If horizontal distance is greater, face left or right
+                lambda _: lax.cond(
+                    x_diff > 0,
+                    lambda _: Actions.left,  # Face left
+                    lambda _: Actions.right,  # Face right
+                    None
+                ),
+                None)
+            return action
+
+        # Get agent's current direction from observation
+        agent_dir_layers = obs[:, :, 2:6]  # Layers 2-5 contain direction information for ego agent
+        agent_dir_idx = jnp.argmax(agent_dir_layers[agent_y, agent_x])
+
+        target_orientation_action = _get_target_orientation_action(agent_y, agent_x, target_y, target_x)
         
-        # If adjacent, return interact action, otherwise return movement action.
+        print(f"\t[_go_to_obj_and_interact] Target orientation action: {target_orientation_action}")
+        print(f"\t[_go_to_obj_and_interact] Agent direction index: {agent_dir_idx}")
+        print(f"\t[_go_to_obj_and_interact] Is adjacent: {is_adjacent}")
+
+        # If adjacent but not facing the right direction, turn to face it
+        # if adjacent and facing the right direction, interact
+        # If not adjacent, move towards the object
         action, rng_key = lax.cond(
             is_adjacent,
-            lambda _: (Actions.interact, rng_key),
+            lambda _: lax.cond(
+                agent_dir_idx == target_orientation_action,
+                lambda _: (Actions.interact, rng_key),
+                lambda _: (target_orientation_action, rng_key),
+                None
+            ),
             lambda _: self._go_to_obj(obs, obj_type, rng_key),
             None
         )
-        
+        print(f"\t[_go_to_obj_and_interact] Action: {action}")
         return action, rng_key
