@@ -4,6 +4,7 @@ defaults:
 
 algorithm:
   LR: 1.e-4
+  NUM_OPEN_ENDED_ITERS: 1
   NUM_ENVS: 16
   NUM_STEPS: 128 
   TOTAL_TIMESTEPS: 3e6 
@@ -42,4 +43,4 @@ name: LBF
 logger:
   load_dir: LBF
   project: open-ended-aht
-  entity: raharrasy
+  entity: aht-project

@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import jaxmarl
 import jumanji
 import optax
+import numpy as np
 from omegaconf import OmegaConf, open_dict
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
@@ -460,6 +461,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 )
                 checkpoint_array, ckpt_infos = checkpoint_array_and_infos
 
+                metric["per_iter_ep_infos"] = ep_infos["returned_episode_returns"]
                 return ((train_state, env_state, last_obs, last_dones, last_hstate_ego, rng, update_steps),
                         checkpoint_array, ckpt_idx, ckpt_infos), metric
 
@@ -491,7 +493,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
                 "checkpoints": checkpoint_array,
-                "all_ep_infos": all_ep_infos 
+                "all_ep_infos": metrics["per_iter_ep_infos"]
             }
             return out
 
@@ -903,8 +905,8 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
-                metric["actor_loss"] = all_losses[1][0]
-                metric["value_loss"] = all_losses[1][1]
+                metric["value_loss"] = all_losses[1][0]
+                metric["actor_loss"] = all_losses[1][1]
                 metric["entropy_loss"] = all_losses[1][2]
                 new_runner_state = (train_state, env_state, obs, init_done, init_hstate_0, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
@@ -1074,6 +1076,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                     to_store, store_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, init_eval_info)
                 )
 
+                metric["per_iter_ep_infos"] = ep_ret_infos["returned_episode_returns"]
                 return ((train_state, env_state, last_obs, last_done, hstate_0, partner_idx, rng, update_steps),
                         checkpoint_array, ckpt_idx, ep_ret_infos), metric
 
@@ -1114,12 +1117,11 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 length=config["NUM_UPDATES"]
             )
             (final_runner_state, checkpoint_array, final_ckpt_idx, eval_ep_return_infos) = state_with_ckpt
-
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
                 "checkpoints": checkpoint_array,
-                "eval_ep_return_infos": eval_ep_return_infos
+                "eval_ep_return_infos": metrics["per_iter_ep_infos"]
             }
             return out
 
@@ -1148,6 +1150,8 @@ def open_ended_training(init_fcp_params, others, config, teammate_train_env, fcp
     updated_fcp_parameters = jax.tree_util.tree_map(lambda x: x[-1], updated_fcp_parameters)
 
     return updated_fcp_parameters, (train_out, fcp_out)
+
+
 
 def initialize_agent(config, base_seed):
     rng = jax.random.PRNGKey(base_seed)
@@ -1204,6 +1208,32 @@ def initialize_agent(config, base_seed):
     
     return init_params
 
+def process_metrics(outs_train, outs_fcp):
+
+    all_xp_returns = np.asarray(outs_train["all_ep_infos"])
+    all_value_losses = np.asarray(outs_train["metrics"]["value_losses"])
+    all_actor_losses = np.asarray(outs_train["metrics"]["pg_losses"])
+    all_entropy_losses = np.asarray(outs_train["metrics"]["entropy_losses"])
+
+    all_ego_returns = np.asarray(outs_fcp["eval_ep_return_infos"])
+    all_ego_value_losses = np.asarray(outs_fcp["metrics"]["value_loss"])
+    all_ego_actor_losses = np.asarray(outs_fcp["metrics"]["actor_loss"])
+    all_ego_entropy_losses = np.asarray(outs_fcp["metrics"]["entropy_loss"])
+
+    average_xp_rets_per_iter = np.mean(np.mean(all_xp_returns[:, :, :, :, 0], axis=-1), axis=1)
+    average_ego_rets_per_iter = np.mean(np.mean(all_ego_returns[:, :, :, :, 0], axis=-1), axis=-1)
+
+    average_value_losses = np.mean(np.mean(np.mean(all_value_losses, axis=-1), axis=-1), axis=1)
+    average_actor_losses = np.mean(np.mean(np.mean(all_actor_losses, axis=-1), axis=-1), axis=1)
+    average_entropy_losses = np.mean(np.mean(np.mean(all_entropy_losses, axis=-1), axis=-1), axis=1)
+
+    average_ego_value_losses = np.mean(np.mean(all_ego_value_losses, axis=-1), axis=-1)
+    average_ego_actor_losses = np.mean(np.mean(all_ego_actor_losses, axis=-1), axis=-1)
+    average_ego_entropy_losses = np.mean(np.mean(all_ego_entropy_losses, axis=-1), axis=-1)
+
+    return average_xp_rets_per_iter, average_ego_rets_per_iter, average_value_losses, average_actor_losses, average_entropy_losses, average_ego_value_losses, average_ego_actor_losses, average_ego_entropy_losses
+
+
 def run(config):
     algorithm_config = dict(config["algorithm"])
     logger = Logger(config)
@@ -1227,22 +1257,25 @@ def run(config):
 
     final_params, outs = jax.lax.scan(partial_with_config, init_params, length=1)
     outs_train, outs_fcp = outs
+    all_metrics = process_metrics(outs_train, outs_fcp)
 
-    
-    #(jnp.shape(outs_train["all_ep_infos"]))
-    print(jnp.shape(outs_train["all_ep_infos"]["returned_episode_returns"]))
-    print(jnp.shape(outs_train["metrics"]["value_losses"]))
-    print(jnp.shape(outs_train["metrics"]["pg_losses"]))
-    print(jnp.shape(outs_train["metrics"]["entropy_losses"]))
-    print(jnp.shape(outs_fcp["metrics"]["returned_episode_lengths"]))
-    print(jnp.shape(outs_fcp["metrics"]["value_loss"]))
-    print(jnp.shape(outs_fcp["metrics"]["actor_loss"]))
-    print(jnp.shape(outs_fcp["metrics"]["entropy_loss"]))
-    print(jnp.shape(outs_fcp["eval_ep_return_infos"]["returned_episode_returns"]))
-    end_time = time.time()
-    # print("Config: ",config)
+    step_counter = 0
+    print(all_metrics[0].shape)
+    print(all_metrics[1].shape)
+    for num_iter in range(all_metrics[0].shape[0]):
+        for num_step in range(all_metrics[0].shape[1]):
+            logger.log_item("Returns/XP", all_metrics[0][num_iter][num_step], checkpoint=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Returns/EgoLearning", all_metrics[1][num_iter][num_step], checkpoint=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Losses/AverageConfValueLoss", all_metrics[2][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Losses/AverageConfActorLoss", all_metrics[3][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Losses/AverageConfEntropy", all_metrics[4][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Losses/AverageEgoValueLoss", all_metrics[5][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Losses/AverageEgoActorLoss", all_metrics[6][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Losses/AverageEgoEntropyLoss", all_metrics[7][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
 
-    print(f"Training took {end_time - start_time:.2f} seconds.")
+            logger.commit()
+
+    #print(f"Training took {end_time - start_time:.2f} seconds.")
     
     #################################
     # visualize results!
