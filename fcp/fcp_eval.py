@@ -6,8 +6,8 @@ import jax.numpy as jnp
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
-from fcp.utils import load_checkpoints, save_train_run
-from fcp.vis_utils import plot_eval_metrics
+from common.save_load_utils import load_checkpoints, save_train_run
+from common.plot_utils import plot_eval_metrics
 from envs import make_env
 
 log = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def eval_fcp_agent(config, fcp_checkpoints, eval_checkpoints, num_episodes: int)
     
     eval_params_flat = jax.tree.map(flatten_ckpt, eval_checkpoints["params"])
     sample_leaf_eval = jax.tree_util.tree_leaves(eval_params_flat)[0]
-    num_eval_total = sample_leaf_eval.shape[0]
+    num_eval_total = sample_leaf_evaluation.shape[0]
 
     # We'll use a fixed maximum step count per episode.
     max_episode_steps = config["NUM_STEPS"] 

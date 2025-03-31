@@ -10,7 +10,7 @@ from omegaconf import OmegaConf
 
 from common.mlp_actor_critic import ActorCritic
 from envs import make_env
-from fcp.vis_utils import get_stats, plot_train_metrics
+from common.plot_utils import get_stats, plot_train_metrics
 
 
 class Transition(NamedTuple):

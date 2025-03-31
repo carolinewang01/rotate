@@ -11,8 +11,8 @@ from omegaconf import OmegaConf
 
 from fcp.fcp_train import train_partners_in_parallel, train_fcp_agent
 from fcp.fcp_eval import main as eval_main
-from fcp.utils import save_train_run, load_checkpoints
-from fcp.vis_utils import get_stats, plot_train_metrics
+from common.save_load_utils import save_train_run, load_checkpoints
+from common.plot_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
 
