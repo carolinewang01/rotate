@@ -35,12 +35,23 @@ class OnionAgent(BaseAgent):
             obs_3d, rng_key = carry
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "onion", rng_key)
             return (action, new_rng_key)
+            
+        def put_onion(carry):
+            '''Go to the nearest pot and put the onion in it. '''
+            obs_3d, rng_key = carry
+            action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "pot", rng_key)
+            return (action, new_rng_key)
         
-        # Get action and update RNG key
+        # Get action and update RNG key based on current state
         action, rng_key = lax.cond(
             agent_state.holding == Holding.nothing,
             get_onion,
-            lambda _: (Actions.stay, agent_state.rng_key),
+            lambda carry: lax.cond(
+                agent_state.holding == Holding.onion,
+                put_onion,
+                lambda _: (Actions.stay, carry[1]),
+                carry
+            ),
             (obs_3d, agent_state.rng_key)
         )
         

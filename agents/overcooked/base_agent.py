@@ -96,7 +96,7 @@ class BaseAgent:
         pot_layer = obs_3d[:, :, 10]  # Channel 10: pot locations
         pot_status = obs_3d[:, :, 16]  # Channel 16: number of onions in pot
         # TODO: we should really track the number of onions in each pot
-        # and not just the total number of onions in pots...
+        # and not the total number of onions in pots...
         onions_in_pot = jnp.sum(pot_status * pot_layer)
         
         # Update soup_ready based on soup ready layer (channel 21)
