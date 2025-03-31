@@ -23,44 +23,6 @@ class Transition(NamedTuple):
     info: jnp.ndarray
     avail_actions: jnp.ndarray
 
-def get_rollout(train_state, config):
-    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
-    network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
-    key = jax.random.PRNGKey(0)
-    key, key_r, key_a = jax.random.split(key, 3)
-
-    init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
-    init_x = ( # init obs, avail_actions
-            jnp.zeros(env.observation_space(env.agents[0]).shape),
-            jnp.ones(env.action_space(env.agents[0]).n),
-        )
-    network.init(key_a, init_x)
-    network_params = train_state.params
-
-    done = False
-
-    obs, state = env.reset(key_r)
-    state_seq = [state]
-    while not done:
-        key, key_a, key_s = jax.random.split(key, 3)
-        obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
-        # Get actual available actions from environment state
-        avail_batch = env.get_avail_actions(state.env_state).astype(jnp.float32)  # Convert bool to float
-        
-        pi, value = network.apply(network_params, (obs_batch, avail_batch))
-        actions = pi.sample(seed=key_a)
-
-        env_act = unbatchify(actions, env.agents, config["NUM_ENVS"], env.num_agents)
-        env_act = {k: v.flatten() for k, v in env_act.items()}
-
-        # STEP ENV
-        obs, state, reward, done, info = env.step(key_s, state, actions)
-        done = done["__all__"]
-
-        state_seq.append(state)
-
-    return state_seq
-
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
     return x.reshape((num_actors, -1))

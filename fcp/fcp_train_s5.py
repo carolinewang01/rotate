@@ -14,7 +14,7 @@ from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
-from common.s5_actor_critic import ActorCriticS5, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
+from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from envs import make_env
 from fcp.ippo import make_train, unbatchify, Transition
 from common.save_load_utils import load_checkpoints, save_train_run
@@ -130,14 +130,7 @@ def train_fcp_agent(config, checkpoints):
                                  Lambda_re_init=Lambda.real,
                                  Lambda_im_init=Lambda.imag,
                                  V=V,
-                                 Vinv=Vinv,
-                                 C_init="lecun_normal",
-                                 discretization="zoh",
-                                 dt_min=0.001,
-                                 dt_max=0.1,
-                                 conj_sym=True,
-                                 clip_eigs=False,
-                                 bidirectional=False)
+                                 Vinv=Vinv)
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -147,7 +140,7 @@ def train_fcp_agent(config, checkpoints):
             # --------------------------
             # 3a) Init agent_0 network
             # --------------------------
-            agent0_net = ActorCriticS5(env.action_space(env.agents[0]).n, 
+            agent0_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -241,8 +234,7 @@ def train_fcp_agent(config, checkpoints):
                     # p: single-partner param dictionary
                     # input_x: single obs vector
                     # rng_: single environment's RNG
-                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
-                                        activation=config["ACTIVATION"]).apply({'params': p}, input_x)
+                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n).apply({'params': p}, input_x)
                     return pi.sample(seed=rng_)
 
                 rng_partner = jax.random.split(partner_rng, config["NUM_UNCONTROLLED_ACTORS"])
@@ -573,13 +565,12 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e6,
+        "TOTAL_TIMESTEPS": 3e5,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 400, # 100
+        "NUM_STEPS": 128,
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 8,
-        # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
@@ -587,7 +578,6 @@ if __name__ == "__main__":
         "ENT_COEF": 0.01,
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
-        "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
 
         "S5_ACTOR_CRITIC_HIDDEN_DIM": 64,
@@ -595,29 +585,21 @@ if __name__ == "__main__":
         "S5_SSM_SIZE": 16,
         "S5_N_LAYERS": 2,
         "S5_BLOCKS": 1,
-        "S5_ACTIVATION": "full_glu",
-        "S5_DO_NORM": True,
-        "S5_PRENORM": True,
-        "S5_DO_GTRXL_NORM": True,
 
-        "ENV_NAME": "overcooked", # "lbf",
-        "ENV_KWARGS": {
-            "layout": "cramped_room",
-            "random_reset": False,
-            "max_steps": 400,
-        },
+        "ENV_NAME": "lbf",
+        "ENV_KWARGS": {},
         "SEED": 38410, 
         "PARTNER_SEED": 112358,
         "NUM_SEEDS": 3,
-        "RESULTS_PATH": "results/overcooked/debug/"
+        "RESULTS_PATH": "results/lbf/fcp_s5/"
     }
     
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = ""
+    # train_partner_path = ""
     # train_partner_path = "results/overcooked/debug/2025-03-20_11-32-04/train_partners.pkl" # trained for 3M steps
-    # train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
+    train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:

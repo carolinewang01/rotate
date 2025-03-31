@@ -35,7 +35,7 @@ class ScannedRNN(nn.Module):
     return nn.GRUCell.initialize_carry(
         jax.random.PRNGKey(0), (batch_size,), hidden_size)
 
-class ActorCriticRNN(nn.Module):
+class RNNActorCritic(nn.Module):
     action_dim: Sequence[int]
     config: Dict
 
@@ -100,9 +100,9 @@ def make_train(config):
 
         # INIT NETWORK
         if config["CONTINUOUS"]:
-            network = ActorCriticRNN(env.action_space(env_params).shape[0], config=config)
+            network = RNNActorCritic(env.action_space(env_params).shape[0], config=config)
         else:
-            network = ActorCriticRNN(env.action_space(env_params).n, config=config)
+            network = RNNActorCritic(env.action_space(env_params).n, config=config)
         rng, _rng = jax.random.split(rng)
         init_x = (jnp.zeros((1, config["NUM_ENVS"], *env.observation_space(env_params).shape)), jnp.zeros((1, config["NUM_ENVS"])))
         # init_hstate = StackedEncoderModel.initialize_carry(config["NUM_ENVS"], ssm_size, n_layers)

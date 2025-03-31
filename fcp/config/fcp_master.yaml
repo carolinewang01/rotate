@@ -1,18 +1,19 @@
 defaults:
-  - ippo_defaults@PARTNER_TRAIN_ARGS   # import values from ippo_defaults.yaml to PARTNER_TRAIN_ARGS
-  - ippo_defaults@FCP_TRAIN_ARGS  # import values from ippo_defaults.yaml to FCP_TRAIN_ARGS
-  - ippo_defaults@FCP_EVAL_ARGS  # import values from ippo_defaults.yaml to FCP_TRAIN_ARGS
+  - ippo_defaults@PARTNER_TRAIN_ARGS   # import default values to PARTNER_TRAIN_ARGS
+  - fcp_s5_defaults@FCP_TRAIN_ARGS   # import default values to FCP_TRAIN_ARGS
   - _self_         # Ensures that values in this file override imported ones if needed
 
 # ENV_NAME: overcooked
 # ENV_KWARGS: {"layout": "cramped_room"}
 
 ENV_NAME: lbf
+EPISODE_LENGTH: 128
 ENV_KWARGS: {}
 
 PARTNER_TRAIN_ARGS: 
   TOTAL_TIMESTEPS: 1e6 # specify arg to override default value
   ENV_NAME: ${ENV_NAME}
+  NUM_STEPS: ${EPISODE_LENGTH}
   TRAIN_PATH: null # set to null to train from scratch
   TRAIN_SEED: 1285842
   EVAL_PATH: null # set to null to train from scratch
@@ -20,20 +21,22 @@ PARTNER_TRAIN_ARGS:
 
 FCP_TRAIN_ARGS: 
   ENV_NAME: ${ENV_NAME}
+  NUM_STEPS: ${EPISODE_LENGTH}
   SEED: 38410
 
 FCP_EVAL_ARGS: 
   ENV_NAME: ${ENV_NAME}
+  NUM_STEPS: ${EPISODE_LENGTH}
   SEED: 12345
 
 # WandB Params
 ENTITY: 
-PROJECT: continual-aht
+PROJECT: aht-project
 WANDB_MODE : disabled
 
 # Hydra params
 hydra:
   job:
-    name: fcp_ippo
+    name: fcp_s5
   run:
     dir: results/${ENV_NAME}/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}

@@ -12,7 +12,7 @@ from gymnax.environments import spaces
 from .s5 import init_S5SSM, make_DPLR_HiPPO, StackedEncoderModel
 import wandb
 
-class ActorCriticS5(nn.Module):
+class S5ActorCritic(nn.Module):
     action_dim: Sequence[int]
     config: Dict
     ssm_init_fn: Any
@@ -130,9 +130,9 @@ def make_train(config):
 
         # INIT NETWORK
         if config["CONTINUOUS"]:
-            network = ActorCriticS5(env.action_space(env_params).shape[0], config=config, ssm_init_fn=ssm_init_fn)
+            network = S5ActorCritic(env.action_space(env_params).shape[0], config=config, ssm_init_fn=ssm_init_fn)
         else:
-            network = ActorCriticS5(env.action_space(env_params).n, config=config, ssm_init_fn=ssm_init_fn)
+            network = S5ActorCritic(env.action_space(env_params).n, config=config, ssm_init_fn=ssm_init_fn)
         
         rng, _rng = jax.random.split(rng)
         init_x = (

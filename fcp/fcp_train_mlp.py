@@ -114,7 +114,7 @@ def train_fcp_agent(config, checkpoints):
             # --------------------------
             # 3a) Init agent_0 network
             # --------------------------
-            agent0_net = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
+            agent0_net = ActorCritic(env.action_space(env.agents[0]).n)
             rng, init_rng = jax.random.split(rng)
             dummy_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
             init_x = ( # init obs, avail_actions
@@ -191,8 +191,7 @@ def train_fcp_agent(config, checkpoints):
                     # p: single-partner param dictionary
                     # input_x: single input for partner network
                     # rng_: single environment's RNG
-                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
-                                        activation=config["ACTIVATION"]).apply({'params': p}, input_x)
+                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n).apply({'params': p}, input_x)
                     return pi.sample(seed=rng_)
 
                 rng_partner = jax.random.split(partner_rng, config["NUM_UNCONTROLLED_ACTORS"])
@@ -465,7 +464,6 @@ if __name__ == "__main__":
         "ENT_COEF": 0.01,
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
-        "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {
