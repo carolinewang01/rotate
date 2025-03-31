@@ -36,12 +36,11 @@ class AgentState:
 class BaseAgent:
     """A base heuristic agent for the Overcooked environment.
     
-    TODO: 
-    - extend go_to_obj to interact with obj once there
-    - create simple child agent that simply tries to stay out of way of other agent
-    - create simple child agent that gets onions and places them in pot
-    - create simple child agent that gets plate and attempts to deliver soup when ready.
-    - create more complex child agent that can do both of the above
+    Agent ideas: 
+    - Agent that simply tries to stay out of way of other agent
+    - Agent that gets onions and places them in pot
+    - Agent that gets plate and attempts to deliver soup when ready.
+    - Agent that create and deliver soups.
     """
     
     def __init__(self, agent_name: str, layout: Dict[str, Any]):
@@ -156,6 +155,21 @@ class BaseAgent:
         agent_pos = jnp.argwhere(agent_pos_layer > 0, size=1)[0]
         agent_y, agent_x = agent_pos
         return agent_y, agent_x
+    
+    def _get_occupied_mask(self, obs: jnp.ndarray) -> jnp.ndarray:
+        """Get mask showing all occupied spaces based on observation."""
+        pot_mask = obs[:, :, 10] > 0       # Channel 10: pot locations
+        wall_mask = obs[:, :, 11] > 0       # Channel 11: counter/wall locations
+        onion_pile_mask = obs[:, :, 12] > 0 # Channel 12: onion pile locations
+        plate_pile_mask = obs[:, :, 14] > 0 # Channel 14: plate pile locations
+        delivery_mask = obs[:, :, 15] > 0 # Channel 15: delivery locations
+        other_agent_mask = obs[:, :, 1] > 0  # Channel 1: other agent position
+
+        occupied_mask = jnp.logical_or(
+            jnp.logical_or(wall_mask, jnp.logical_or(other_agent_mask, delivery_mask)),
+            jnp.logical_or(pot_mask, jnp.logical_or(onion_pile_mask, plate_pile_mask))
+        )
+        return occupied_mask
 
     def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
         """Go to the nearest object of the given type."""
@@ -273,7 +287,7 @@ class BaseAgent:
             Tuple of (y, x) coordinates of nearest free space
         """
         # Get occupied spaces (walls and counters)
-        wall_mask = obs[:, :, 11] > 0       # Channel 11: counter/wall locations
+        occupied_mask = self._get_occupied_mask(obs)
         
         # Check bounds for all four directions
         up_valid = y > 0
@@ -282,11 +296,11 @@ class BaseAgent:
         left_valid = x > 0
         
         # Check if each adjacent position is free
-        up_free = up_valid & ~wall_mask[y - 1, x]
-        down_free = down_valid & ~wall_mask[y + 1, x]
-        right_free = right_valid & ~wall_mask[y, x + 1]
-        left_free = left_valid & ~wall_mask[y, x - 1]
-        
+        up_free = up_valid & ~occupied_mask[y - 1, x]
+        down_free = down_valid & ~occupied_mask[y + 1, x]
+        right_free = right_valid & ~occupied_mask[y, x + 1]
+        left_free = left_valid & ~occupied_mask[y, x - 1]
+
         # Return first free position found (prioritizing up, down, right, left)
         free_space = lax.cond(
             up_free,
@@ -315,10 +329,8 @@ class BaseAgent:
         x_diff = start_x - target_x
         y_diff = start_y - target_y
         
-        # Get occupied spaces (walls, other agent, and counters)
-        wall_mask = obs[:, :, 11] > 0       # Channel 11: counter/wall locations
-        other_agent_mask = obs[:, :, 1] > 0  # Channel 1: other agent position
-        occupied_mask = jnp.logical_or(wall_mask, other_agent_mask)
+        # Get occupied spaces (walls, other agent, counters, counter objects)
+        occupied_mask = self._get_occupied_mask(obs)
 
         # Check if moving in each direction would lead to an occupied space
         up_valid = (start_y > 0) & (~occupied_mask[start_y - 1, start_x])
@@ -330,17 +342,19 @@ class BaseAgent:
         # Base scores: prefer directions that reduce distance to target (or stay if at target)
         # score encoding: [up, down, right, left, stay]
         up_score, down_score, right_score, left_score, stay_score = 0, 0, 0, 0, 0
-        up_score = lax.cond(y_diff > 0, lambda _: 1, lambda _: 0, None)
-        down_score = lax.cond(y_diff < 0, lambda _: 1, lambda _: 0, None)        
+
+        up_score = lax.cond(y_diff > 0, lambda _: 1, lambda _: 0, None) # towards (0, 0)
+        down_score = lax.cond(y_diff < 0, lambda _: 1, lambda _: 0, None) # away from (0, 0)
+        
         right_score = lax.cond(
             y_diff == 0,
-            lambda _: lax.cond(x_diff > 0, lambda _: 1, lambda _: 0, None),
+            lambda _: lax.cond(x_diff < 0, lambda _: 1, lambda _: 0, None),
             lambda _: 0,
-            None)
+            None) # away from (0, 0)
         
         left_score = lax.cond(
             y_diff == 0,
-            lambda _: lax.cond(x_diff < 0, lambda _: 1, lambda _: 0, None),
+            lambda _: lax.cond(x_diff > 0, lambda _: 1, lambda _: 0, None),
             lambda _: 0,
             None)
         
@@ -352,7 +366,8 @@ class BaseAgent:
         )
 
         scores = jnp.array([up_score, down_score, right_score, left_score, stay_score])
-        # print(f"\t\t[_move_towards] Mmt scores: {scores}")
+        print(f"\t\t[_move_towards] Mmt scores: {scores}")
+
         # Set scores to large negative number for invalid moves
         scores = jnp.where(
             jnp.array([up_valid, down_valid, right_valid, left_valid, stay_valid]),
@@ -408,8 +423,8 @@ class BaseAgent:
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
         
-        # print(f"Agent position: {agent_y}, {agent_x}")
-        # print(f"Target {obj_type} position: {target_y}, {target_x}")
+        print(f"Agent position: {agent_y}, {agent_x}")
+        print(f"Target {obj_type} position: {target_y}, {target_x}")
 
         # Check if agent is adjacent to target
         is_adjacent = jnp.logical_or(

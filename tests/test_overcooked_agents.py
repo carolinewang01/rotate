@@ -67,7 +67,7 @@ def run_episode(env, agent0, agent1, key) -> Tuple[Dict[str, float], int]:
     return total_rewards, num_steps, state_seq
 
 def main(num_episodes, 
-         layout_name="cramped_room",
+         layout_name,
          random_reset=True,
          random_obj_state=True,
          max_steps=100,
@@ -86,7 +86,7 @@ def main(num_episodes,
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = StaticAgent("agent_0", layout=layout) # red
+    agent0 = OnionAgent("agent_0", layout=layout) # red
     agent1 = StaticAgent("agent_1", layout=layout) # blue
     print("Agents initialized")
     
@@ -145,10 +145,7 @@ if __name__ == "__main__":
     SAVE_GIF = not VISUALIZE    
     NUM_EPISODES = 10
     
-    # TODO: modify asymm_advantages and forced coord (maps with two disconnected components) 
-    # such that agents are always initialized on one side or another
-
-    for layout_name in ["forced_coord"]:
+    for layout_name in augmented_layouts.keys():
         with jax.disable_jit(DEBUG):
             main(num_episodes=NUM_EPISODES, 
                 layout_name=layout_name,
