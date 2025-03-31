@@ -250,42 +250,41 @@ def eval_ego_agent(base_config, ego_config, partner_config,
 
 def main(base_config, ego_config, partner_config, 
          eval_savedir, ego_ckpts, train_partner_ckpts, test_partner_ckpts=None, 
-         num_episodes=32, ego_net_type="s5"):
+         num_episodes=32, ego_net_type="s5", metric_names=("returned_episode_returns")):
     '''
     base_config: config dict specifying evaluation parameters
-    ego_config: config dict for ego agent
-    partner_config: config dict for partner agent
+    ego_config: config dict containing parameters to initialize ego agent
+    partner_config: config dict containing parameters to initialize partner agent
     eval_savedir: path to save eval metrics
     ego_ckpts: pytree of ego agent checkpoints
     train_partner_ckpts: pytree of train partner checkpoints
     test_partner_ckpts: pytree of test partner checkpoints
     ego_net_type: str, one of ["mlp", "rnn", "s5"] to specify which actor critic architecture to use for the ego agent.
+    metric_names: tuple of str, names of metrics to evaluate
     '''
     eval_res = {}
-    eval_res["train"] = eval_ego_agent(base_config, ego_config, partner_config, ego_ckpts, train_partner_ckpts, num_episodes=num_episodes, ego_net_type=ego_net_type)
+    eval_res["train"] = eval_ego_agent(base_config, ego_config, partner_config, ego_ckpts, train_partner_ckpts, 
+                                       num_episodes=num_episodes, ego_net_type=ego_net_type)
     if test_partner_ckpts is not None:
-        eval_res["test"] = eval_ego_agent(base_config, ego_config, partner_config, ego_ckpts, test_partner_ckpts, num_episodes=num_episodes, ego_net_type=ego_net_type)
+        eval_res["test"] = eval_ego_agent(base_config, ego_config, partner_config, ego_ckpts, test_partner_ckpts, 
+        num_episodes=num_episodes, ego_net_type=ego_net_type)
     
     for k, eval_metrics in eval_res.items():
-        # save metrics
+        # save metric data
         savepath = save_train_run(eval_metrics, eval_savedir, savename=f"{k}_eval_metrics")
         log.info(f"Saved {k} eval metrics to {savepath}")
         # each submetric shape is (num_ego_seeds, num_ego_ckpts, num_partner_ckpts, episodes, num_agents)
         # the ego agent is always agent 0, the partner is agent 1
-        plot_eval_metrics(eval_metrics, metric_name="percent_eaten", agent_idx=0)
-        plot_eval_metrics(eval_metrics, metric_name="returned_episode_lengths", 
-                        higher_is_better=False, agent_idx=0)
+        for metric_name in metric_names:
+            plot_eval_metrics(eval_metrics, metric_name=metric_name, agent_idx=0)
 
-        # print some stats
-        num_ego_ckpts = eval_metrics["returned_episode_lengths"].shape[1]
+        # print metrics
+        num_ego_ckpts = eval_metrics["returned_episode_returns"].shape[1]
         for ego_ckpt_idx in range(num_ego_ckpts):
-            ep_len_arr = eval_metrics["returned_episode_lengths"][:, ego_ckpt_idx, :, :, 0]
-            percent_eaten_arr = eval_metrics["percent_eaten"][:, ego_ckpt_idx, :, :, 0]
-
-            log.info(f"Ego agent ckpt {ego_ckpt_idx}. Ep length: {ep_len_arr.mean()}, std: {ep_len_arr.std()}")
-            log.info(f"Ego agent ckpt {ego_ckpt_idx}. Percent Eaten: {percent_eaten_arr.mean()}, std: {percent_eaten_arr.std()}")
-        
-        log.info("#####\n")
+            for metric_name in metric_names:
+                metric_arr = eval_metrics[metric_name][:, ego_ckpt_idx, :, :, 0]
+                log.info(f"Ego agent ckpt {ego_ckpt_idx}. {metric_name}: {metric_arr.mean()}, std: {metric_arr.std()}")
+            log.info("#####\n")
 
 
 if __name__ == "__main__":

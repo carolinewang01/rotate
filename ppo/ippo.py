@@ -4,17 +4,15 @@ fully cooperativemulti-agent environment.
 '''
 from typing import NamedTuple
 
-import hydra
 import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
-from omegaconf import OmegaConf
 
 from common.mlp_actor_critic import ActorCritic
-from envs import make_env
 from common.plot_utils import get_stats, plot_train_metrics
+from envs import make_env
 
 
 class Transition(NamedTuple):
