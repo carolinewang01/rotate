@@ -20,8 +20,9 @@ class Goal:
     get_onion = 0
     put_onion = 1
     get_plate = 2
-    get_soup = 3
-    deliver = 4
+    put_plate = 3
+    get_soup = 4
+    deliver = 5
 
 
 @struct.dataclass
@@ -473,21 +474,9 @@ class BaseAgent:
         return action, key
 
     def _go_to_obj_and_interact(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
-        """Go to the nearest object of the given type. When adjacent to object, turn to face it
-        and interact with it.
-        
-        Args:
-            obs: 3D observation array
-            obj_type: Type of object to go to ("pot", "onion", "plate")
-            rng_key: Random key for action selection
-            
-        Returns:
-            Tuple of (action, new_rng_key)
-        """
-        # Get agent position
+        """Go to the nearest object of the given type and interact with it."""
         agent_y, agent_x = self._get_agent_pos(obs)
         
-        # Get target position based on object type
         if obj_type == "pot":
             target_y, target_x = self._get_nearest_pot_pos(obs, agent_y, agent_x)
         elif obj_type == "onion":
@@ -496,6 +485,11 @@ class BaseAgent:
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
         elif obj_type == "counter":
             target_y, target_x = self._get_nearest_free_counter(obs, agent_y, agent_x)
+        elif obj_type == "delivery":
+            # Get delivery window position (channel 15)
+            delivery_layer = obs[:, :, 15]
+            delivery_pos = jnp.argwhere(delivery_layer > 0, size=1)[0]
+            target_y, target_x = delivery_pos
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
         
