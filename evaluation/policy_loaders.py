@@ -3,7 +3,7 @@ from common.mlp_actor_critic import ActorCritic
 from common.s5_actor_critic import S5ActorCritic
 from common.save_load_utils import load_checkpoints
 import jax.numpy as jnp
-from common.s5_ssm import make_DPLR_HiPPO, init_S5SSM
+from common.s5_ssm import make_DPLR_HiPPO, init_S5SSM, StackedEncoderModel
 
 
 def select_checkpoint_params(full_checkpoints, seed_idx, ckpt_idx):
@@ -51,29 +51,40 @@ class S5ActorCriticLoader():
         policy_checkpoints = load_checkpoints(train_run_path)
         self.model_params = select_checkpoint_params(policy_checkpoints, n, m)
         
-        # Initialize S5 config
+        # S5 default config
         # TODO: avoid hard-coding SSM configs in future
         self.config = {
+            "S5_ACTOR_CRITIC_HIDDEN_DIM": 64,
             "S5_D_MODEL": 16,
+            "S5_SSM_SIZE": 16,
             "S5_N_LAYERS": 2,
+            "S5_BLOCKS": 1,
             "S5_ACTIVATION": "full_glu",
             "S5_DO_NORM": True,
             "S5_PRENORM": True,
             "S5_DO_GTRXL_NORM": True,
-            "S5_BLOCKS": 1,
-            "S5_SSM_SIZE": 16,
-            "S5_ACTOR_CRITIC_HIDDEN_DIM": 64,
         }
         
-        # Initialize S5 SSM
-        Lambda, P, B, V, B_orig = make_DPLR_HiPPO(self.config["S5_SSM_SIZE"])
-        ssm_init_fn = init_S5SSM(
-            H=self.config["S5_D_MODEL"],
-            P=self.config["S5_SSM_SIZE"],
-            Lambda_re_init=Lambda.real,
-            Lambda_im_init=Lambda.imag,
-            V=V,
-            Vinv=V.conj().T)
+        # Initialize S5 specific parameters
+        d_model = self.config["S5_D_MODEL"]
+        ssm_size = self.config["S5_SSM_SIZE"]
+        n_layers = self.config["S5_N_LAYERS"]
+        blocks = self.config["S5_BLOCKS"]
+        block_size = int(ssm_size / blocks)
+
+        Lambda, _, _, V,  _ = make_DPLR_HiPPO(ssm_size)
+        block_size = block_size // 2
+        ssm_size = ssm_size // 2
+        Lambda = Lambda[:block_size]
+        V = V[:, :block_size]
+        Vinv = V.conj().T
+
+        ssm_init_fn = init_S5SSM(H=d_model,
+                                 P=ssm_size,
+                                 Lambda_re_init=Lambda.real,
+                                 Lambda_im_init=Lambda.imag,
+                                 V=V,
+                                 Vinv=Vinv)
         
         self.model = S5ActorCritic(
             action_dim=action_dim,
@@ -84,7 +95,8 @@ class S5ActorCriticLoader():
         )
         
         # Initialize hidden state
-        self.hidden = self.model.s5.initialize_carry(batch_size=1, hidden_size=self.config["S5_D_MODEL"], n_layers=self.config["S5_N_LAYERS"])
+        self.hidden = StackedEncoderModel.initialize_carry(1, ssm_size, n_layers)
+
 
     def act(self, obs_dict, rng, test_mode=True):
         '''Returns an action given an observation.
@@ -93,7 +105,8 @@ class S5ActorCriticLoader():
         rng, act_rng = jax.random.split(rng)
         
         # Update hidden state and get action distribution
-        self.hidden, pi, _ = self.model.apply(self.model_params, self.hidden, obs_dict)
+        model_input = (obs_dict['obs'], obs_dict['dones'], obs_dict['avail_actions'])
+        self.hidden, pi, _ = self.model.apply(self.model_params, self.hidden, model_input)
         
         if test_mode:
             action = pi.mode()

@@ -89,7 +89,7 @@ def plot_eval_metrics(eval_metrics, metric_name, higher_is_better=True, agent_id
     sns.heatmap(heatmap_data, cmap=colormap, annot=False)
     plt.gca().invert_yaxis()
     plt.xlabel("Eval Checkpoint")
-    plt.ylabel("FCP Checkpoint")
+    plt.ylabel("Ego Agent Checkpoint")
     title = f"Average {metric_name.replace('_', ' ').title()}"
     plt.title(title + arrow_str)
     plt.show()

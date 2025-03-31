@@ -282,8 +282,8 @@ def main(base_config, ego_config, partner_config,
             ep_len_arr = eval_metrics["returned_episode_lengths"][:, ego_ckpt_idx, :, :, 0]
             percent_eaten_arr = eval_metrics["percent_eaten"][:, ego_ckpt_idx, :, :, 0]
 
-            log.info(f"FCP ckpt {ego_ckpt_idx}. Ep length: ", ep_len_arr.mean(), "+/-", ep_len_arr.std())
-            log.info(f"FCP ckpt {ego_ckpt_idx}. Percent Eaten: ", percent_eaten_arr.mean(), "+/-", percent_eaten_arr.std())
+            log.info(f"Ego agent ckpt {ego_ckpt_idx}. Ep length: {ep_len_arr.mean()}, std: {ep_len_arr.std()}")
+            log.info(f"Ego agent ckpt {ego_ckpt_idx}. Percent Eaten: {percent_eaten_arr.mean()}, std: {percent_eaten_arr.std()}")
         
         log.info("#####\n")
 

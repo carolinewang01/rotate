@@ -1,3 +1,7 @@
+'''
+Based on the IPPO implementation from jaxmarl. Trains a parameter-shared IPPO agent on a
+fully cooperativemulti-agent environment.
+'''
 from typing import NamedTuple
 
 import hydra
@@ -54,7 +58,7 @@ def make_train(config):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
+        network = ActorCritic(env.action_space(env.agents[0]).n)
         rng, _rng = jax.random.split(rng)
         init_x = ( # init obs, avail_actions
             jnp.zeros(env.observation_space(env.agents[0]).shape),
@@ -341,7 +345,6 @@ if __name__ == "__main__":
         "ENT_COEF": 0.01,
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
-        "ACTIVATION": "tanh",
         "ENV_NAME": "overcooked", # "lbf",
         "ENV_KWARGS": {
             "layout": "cramped_room",

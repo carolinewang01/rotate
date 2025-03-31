@@ -9,8 +9,7 @@ import hydra
 import logging
 from omegaconf import OmegaConf
 
-from fcp.fcp_train_s5 import train_partners_in_parallel
-from fcp.fcp_train_s5 import train_fcp_agent
+from fcp.fcp_train_s5 import train_partners_in_parallel, train_fcp_agent
 from fcp.fcp_eval import main as eval_main
 from common.save_load_utils import save_train_run, load_checkpoints
 from common.plot_utils import get_stats, plot_train_metrics
@@ -73,7 +72,7 @@ def fcp_pipeline(config):
               eval_savedir=savedir, 
               ego_ckpts=fcp_out["checkpoints"], 
               train_partner_ckpts=train_partner_ckpts, 
-              eval_partner_ckpts=eval_partner_ckpts, 
+              test_partner_ckpts=eval_partner_ckpts, 
               num_episodes=32,
               ego_net_type="s5")
 

@@ -13,19 +13,24 @@ ENV_KWARGS: {}
 PARTNER_TRAIN_ARGS: 
   TOTAL_TIMESTEPS: 1e6 # specify arg to override default value
   ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
   NUM_STEPS: ${EPISODE_LENGTH}
-  TRAIN_PATH: null # set to null to train from scratch
+  # set to null to train from scratch
+  TRAIN_PATH: "results/lbf/fcp_s5/2025-03-31_16-29-57/train_partners.pkl"
   TRAIN_SEED: 1285842
-  EVAL_PATH: null # set to null to train from scratch
+  # set to null to train from scratch
+  EVAL_PATH: results/lbf/fcp_s5/2025-03-31_16-29-57/eval_partners.pkl 
   EVAL_SEED: 112358
 
 FCP_TRAIN_ARGS: 
   ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
   NUM_STEPS: ${EPISODE_LENGTH}
   SEED: 38410
 
 FCP_EVAL_ARGS: 
   ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
   NUM_STEPS: ${EPISODE_LENGTH}
   SEED: 12345
 
