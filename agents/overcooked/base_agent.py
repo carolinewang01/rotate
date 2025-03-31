@@ -158,18 +158,83 @@ class BaseAgent:
     
     def _get_occupied_mask(self, obs: jnp.ndarray) -> jnp.ndarray:
         """Get mask showing all occupied spaces based on observation."""
+        other_agent_mask = obs[:, :, 1] > 0  # Channel 1: other agent position
         pot_mask = obs[:, :, 10] > 0       # Channel 10: pot locations
         wall_mask = obs[:, :, 11] > 0       # Channel 11: counter/wall locations
         onion_pile_mask = obs[:, :, 12] > 0 # Channel 12: onion pile locations
         plate_pile_mask = obs[:, :, 14] > 0 # Channel 14: plate pile locations
         delivery_mask = obs[:, :, 15] > 0 # Channel 15: delivery locations
-        other_agent_mask = obs[:, :, 1] > 0  # Channel 1: other agent position
+        plate_mask = obs[:, :, 22] > 0 # Channel 22: plate locations
+        onion_mask = obs[:, :, 23] > 0 # Channel 23: onion locations
+        tomato_mask = obs[:, :, 24] > 0 # Channel 24: tomato locations
 
+        # OR all the masks together
         occupied_mask = jnp.logical_or(
-            jnp.logical_or(wall_mask, jnp.logical_or(other_agent_mask, delivery_mask)),
-            jnp.logical_or(pot_mask, jnp.logical_or(onion_pile_mask, plate_pile_mask))
+            jnp.logical_or(other_agent_mask, 
+                jnp.logical_or(pot_mask, wall_mask)),
+            jnp.logical_or(onion_pile_mask, 
+                jnp.logical_or(plate_pile_mask, 
+                    jnp.logical_or(delivery_mask, 
+                        jnp.logical_or(plate_mask, 
+                            jnp.logical_or(onion_mask, tomato_mask)))))
         )
         return occupied_mask
+
+    def _get_free_counter_mask(self, obs: jnp.ndarray) -> jnp.ndarray:
+        """Get mask showing all free counter spaces based on observation.
+        The only things that can be placed on counters are plates, onions, and tomatoes.
+        """
+        counter_layer = obs[:, :, 11]  # Channel 11: counter locations
+        plate_layer = obs[:, :, 22] # Channel 22: plate locations
+        onion_layer = obs[:, :, 23] # Channel 23: onion locations
+        tomato_layer = obs[:, :, 24] # Channel 24: tomato locations
+        
+        free_counter_mask = jnp.logical_and(
+            counter_layer > 0, # needs to be a counter
+            jnp.logical_and(plate_layer == 0, jnp.logical_and(onion_layer == 0, tomato_layer == 0))
+        )
+        return free_counter_mask
+
+    def _get_nearest_free_counter(self, obs: jnp.ndarray, agent_y: int, agent_x: int) -> Tuple[int, int]:
+        """Find the nearest free counter space.
+        
+        Args:
+            obs: Observation array
+            agent_y: Agent's y position
+            agent_x: Agent's x position
+            
+        Returns:
+            Tuple of (y, x) coordinates of nearest free counter
+        """
+        # Get counter locations (channel 11) and occupied spaces
+        counter_layer = obs[:, :, 11]  # Channel 11: counter locations
+        free_counter_mask = self._get_free_counter_mask(obs)
+        # Find all counter positions that are not occupied
+        free_counter_positions = jnp.argwhere(
+            jnp.logical_and(counter_layer > 0, free_counter_mask),
+            size=self.map_width * self.map_height  # Use max possible size
+        )
+
+        # default value returned by argwhere is (0, 0) if less than h*w counters are found
+        # replace default position with (1000, 1000) to avoid messing up distance calculation
+        dummy_pos = jnp.array([1000, 1000])
+        free_counter_positions = jnp.where(
+            free_counter_positions == 0,
+            dummy_pos,
+            free_counter_positions
+        )
+            
+        # Calculate Manhattan distances to each free counter
+        distances = jnp.sum(
+            jnp.abs(free_counter_positions - jnp.array([agent_y, agent_x])),
+            axis=1
+        )
+        
+        # Find the position of the nearest free counter
+        nearest_idx = jnp.argmin(distances)
+        nearest_pos = free_counter_positions[nearest_idx]
+
+        return nearest_pos
 
     def _go_to_obj(self, obs: jnp.ndarray, obj_type: str, rng_key: jax.random.PRNGKey) -> Tuple[int, jax.random.PRNGKey]:
         """Go to the nearest object of the given type."""
@@ -181,12 +246,21 @@ class BaseAgent:
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "onion")
         elif obj_type == "plate":
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
+        elif obj_type == "counter":
+            target_y, target_x = self._get_nearest_free_counter(obs, agent_y, agent_x)
+        else:
+            raise ValueError(f"Invalid object type: {obj_type}")
         
         print(f"\t[_go_to_obj] Agent position: {agent_y}, {agent_x}")
         print(f"\t[_go_to_obj] Target position: {target_y}, {target_x}")
         # Move towards target
         nearest_free_y, nearest_free_x = self._get_nearest_free_space(target_y, target_x, obs)
+    
         print(f"\t[_go_to_obj] Nearest free space: {nearest_free_y}, {nearest_free_x}")
+        
+        # if obj_type == "counter":
+        #     breakpoint()
+
         action, rng_key = self._move_towards(agent_y, agent_x, 
                 nearest_free_y, nearest_free_x, obs, rng_key)
         print(f"\t[_go_to_obj] Action: {action}")
@@ -300,7 +374,7 @@ class BaseAgent:
         down_free = down_valid & ~occupied_mask[y + 1, x]
         right_free = right_valid & ~occupied_mask[y, x + 1]
         left_free = left_valid & ~occupied_mask[y, x - 1]
-
+        
         # Return first free position found (prioritizing up, down, right, left)
         free_space = lax.cond(
             up_free,
@@ -420,6 +494,8 @@ class BaseAgent:
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "onion")
         elif obj_type == "plate":
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
+        elif obj_type == "counter":
+            target_y, target_x = self._get_nearest_free_counter(obs, agent_y, agent_x)
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
         

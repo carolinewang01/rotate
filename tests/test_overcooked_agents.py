@@ -143,14 +143,21 @@ if __name__ == "__main__":
     DEBUG = False
     VISUALIZE = False
     SAVE_GIF = not VISUALIZE    
-    NUM_EPISODES = 10
-    
-    for layout_name in augmented_layouts.keys():
+    NUM_EPISODES = 2
+
+    layout_names = [
+        # "asymm_advantages", "coord_ring", 
+        # "counter_circuit", "cramped_room", 
+        "forced_coord"
+                    ]
+
+    # TODO: remove debug print statements
+    for layout_name in layout_names:
         with jax.disable_jit(DEBUG):
             main(num_episodes=NUM_EPISODES, 
                 layout_name=layout_name,
                 random_reset=True,
                 random_obj_state=False,
-                max_steps=10,
+                max_steps=30,
                 visualize=VISUALIZE, 
                 save_gif=SAVE_GIF) 
