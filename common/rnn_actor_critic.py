@@ -41,7 +41,7 @@ class RNNActorCritic(nn.Module):
     action_dim: Sequence[int]
     fc_hidden_dim: int = 64
     gru_hidden_dim: int = 64
-    activation: str = "relu"
+    activation: str = "tanh"
 
     @nn.compact
     def __call__(self, hidden, x):

@@ -23,7 +23,7 @@ def eval_ego_agent(base_config, ego_config, partner_config,
                     (e.g. {"params": <pytree with leaves of shape (N, M, ...)>})
     partner_checkpoints: a pytree where each leaf contains N seeds, and M checkpoints of trained IPPO agents.
                     All eval checkpoints are treated as one pool of partners.
-    For each FCP agent (each seed, each checkpoint) we evaluate it against every eval checkpoint partner in the pool,
+    For each ego agent (each seed, each checkpoint) we evaluate it against every eval checkpoint partner in the pool,
     running num_episodes per pairing.
     
     ego_net_type: str, one of ["mlp", "rnn", "s5"] to specify which actor critic architecture to use for the ego agent.
@@ -39,7 +39,7 @@ def eval_ego_agent(base_config, ego_config, partner_config,
 
     # --- 2. Build the networks ---
     if ego_net_type == "mlp":
-        ego_net = ActorCritic(env.action_space(env.agents[0]).n, activation=ego_config["ACTIVATION"])
+        ego_net = ActorCritic(env.action_space(env.agents[0]).n)
     elif ego_net_type == "rnn":
         ego_net = RNNActorCritic(action_dim=env.action_space(env.agents[0]).n,
                                 fc_hidden_dim=ego_config["FC_HIDDEN_DIM"],
@@ -48,6 +48,7 @@ def eval_ego_agent(base_config, ego_config, partner_config,
         # Initialize S5 specific parameters
         d_model = ego_config["S5_D_MODEL"]
         ssm_size = ego_config["S5_SSM_SIZE"]
+        n_layers = ego_config["S5_N_LAYERS"]
         blocks = ego_config["S5_BLOCKS"]
         block_size = int(ssm_size / blocks)
 
@@ -101,7 +102,7 @@ def eval_ego_agent(base_config, ego_config, partner_config,
         rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
         
         # Get available actions for agent 0 from environment state
-        avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+        avail_actions = env.get_avail_actions(env_state.env_state)
         avail_actions = jax.lax.stop_gradient(avail_actions)
         avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
         avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
@@ -111,7 +112,7 @@ def eval_ego_agent(base_config, ego_config, partner_config,
             if ego_net_type == "rnn":
                 init_hstate_0 = ScannedRNN.initialize_carry(1, ego_config["GRU_HIDDEN_DIM"])
             else:  # s5
-                init_hstate_0 = StackedEncoderModel.initialize_carry(1, ego_config["S5_SSM_SIZE"], ego_config["S5_N_LAYERS"])
+                init_hstate_0 = StackedEncoderModel.initialize_carry(1, ssm_size, n_layers)
             
             # Prepare inputs for ego agent
             rnn_input_0 = (
@@ -120,34 +121,38 @@ def eval_ego_agent(base_config, ego_config, partner_config,
                 avail_actions_0
             )
             hstate_0, pi0, _ = ego_net.apply(ego_param, init_hstate_0, rnn_input_0)
+            act0 = pi0.sample(seed=act_rng).squeeze()
         else:  # mlp
             pi0, _ = ego_net.apply(ego_param, (obs["agent_0"], avail_actions_0))
+            act0 = pi0.sample(seed=act_rng)
         
-        # for LBF, IPPO policies do better when sampled than when taking the mode. 
-        act0 = pi0.sample(seed=act_rng)
+        # Get partner action
         pi1, _ = partner_net.apply({'params': partner_param}, (obs["agent_1"], avail_actions_1))
         act1 = pi1.sample(seed=part_rng)
+        
+        # Step environment
         both_actions = [act0, act1]
         env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
         _, _, _, _, dummy_info = env.step(step_rng, env_state, env_act)
 
         # We'll use a scan to iterate steps until the episode is done.
         ep_ts = 1
-        init_carry = (ep_ts, env_state, obs, rng, jnp.array(False), dummy_info)
         if ego_net_type in ["rnn", "s5"]:
-            init_carry = init_carry + (hstate_0,)
+            init_carry = (ep_ts, env_state, obs, rng, jnp.array(False), hstate_0, dummy_info)
+        else:
+            init_carry = (ep_ts, env_state, obs, rng, jnp.array(False), dummy_info)
 
         def scan_step(carry, _):
             def take_step(carry_step):
                 if ego_net_type in ["rnn", "s5"]:
-                    ep_ts, env_state, obs, rng, done_flag, last_info, hstate_0 = carry_step
+                    ep_ts, env_state, obs, rng, done_flag, hstate_0, last_info = carry_step
                 else:
                     ep_ts, env_state, obs, rng, done_flag, last_info = carry_step
                 
                 rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
                 
                 # Get available actions
-                avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_actions = env.get_avail_actions(env_state.env_state)
                 avail_actions = jax.lax.stop_gradient(avail_actions)
                 avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
@@ -160,10 +165,11 @@ def eval_ego_agent(base_config, ego_config, partner_config,
                         avail_actions_0
                     )
                     hstate_0, pi0, _ = ego_net.apply(ego_param, hstate_0, rnn_input_0)
+                    act0 = pi0.sample(seed=act_rng).squeeze()
                 else:  # mlp
                     pi0, _ = ego_net.apply(ego_param, (obs["agent_0"], avail_actions_0))
+                    act0 = pi0.sample(seed=act_rng)
                 
-                act0 = pi0.sample(seed=act_rng)
                 pi1, _ = partner_net.apply({'params': partner_param}, (obs["agent_1"], avail_actions_1))
                 act1 = pi1.sample(seed=part_rng)
                 both_actions = [act0, act1]
@@ -171,20 +177,20 @@ def eval_ego_agent(base_config, ego_config, partner_config,
                 obs_next, env_state_next, reward, done, info = env.step(step_rng, env_state, env_act)
 
                 if ego_net_type in ["rnn", "s5"]:
-                    return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], info, hstate_0)
+                    return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], hstate_0, info)
                 else:
                     return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], info)
             
             if ego_net_type in ["rnn", "s5"]:
-                ep_ts, env_state, obs, rng, done_flag, last_info, hstate_0 = carry
+                _, _, _, _, done_flag, _, _ = carry
             else:
-                ep_ts, env_state, obs, rng, done_flag, last_info = carry
+                _, _, _, _, done_flag, _ = carry
                 
             new_carry = jax.lax.cond(
                 done_flag,
-                # if done, execute true function(operand). else, execute false function(operand).
-                lambda curr_carry: curr_carry, # True fn
-                take_step, # False fn
+                # if done, return the carry. Else, take a step.
+                lambda curr_carry: curr_carry,
+                take_step,
                 operand=carry
             )
             return new_carry, None
@@ -192,7 +198,8 @@ def eval_ego_agent(base_config, ego_config, partner_config,
         final_carry, _ = jax.lax.scan(
             scan_step, init_carry, None, length=max_episode_steps)
         # Return the final info (which includes the episode return via LogWrapper).
-        return final_carry[-1]
+        final_info = final_carry[-1]
+        return final_info
 
     def run_episodes(rng, ego_param, partner_param, num_eps):
         def body_fn(carry, _):
@@ -206,17 +213,17 @@ def eval_ego_agent(base_config, ego_config, partner_config,
     def eval_pair_fn(rng, ego_param, partner_param):
         return run_episodes(rng, ego_param, partner_param, num_episodes)
 
-    # --- 5. Outer function to be jitted and vmapped over fcp seeds ---
+    # --- 5. Outer function to be jitted and vmapped over ego agent seeds ---
     @jax.jit
     def outer_eval(rngs):
         """
-        rngs: an array of shape (n_ego, key), one key per FCP seed.
+        rngs: an array of shape (n_ego, key), one key per ego agent seed.
         Returns a pytree with leaves of shape (n_ego, m_ego, num_partner_total, num_episodes, ...).
         """
         # For each seed, use its corresponding fcp parameters.
         # Here, ego_params has shape (n_ego, m_ego, ...).
         def eval_ego_seed(rng, ego_params_seed):
-            '''Evaluate all checkpoints (m_ego) for a single FCP seed against 
+            '''Evaluate all checkpoints (m_ego) for a single ego agent seed against 
             all eval partners (num_partner_total).'''
             # For each checkpoint (m_ego) we need a set of rng keys for evaluation against all eval partners.
             total_rngs = jax.random.split(rng, m_ego * num_partner_total)
@@ -264,7 +271,7 @@ def main(base_config, ego_config, partner_config,
         savepath = save_train_run(eval_metrics, eval_savedir, savename=f"{k}_eval_metrics")
         log.info(f"Saved {k} eval metrics to {savepath}")
         # each submetric shape is (num_ego_seeds, num_ego_ckpts, num_partner_ckpts, episodes, num_agents)
-        # the FCP agent is always agent 0, the partner is agent 1
+        # the ego agent is always agent 0, the partner is agent 1
         plot_eval_metrics(eval_metrics, metric_name="percent_eaten", agent_idx=0)
         plot_eval_metrics(eval_metrics, metric_name="returned_episode_lengths", 
                         higher_is_better=False, agent_idx=0)
@@ -297,6 +304,10 @@ if __name__ == "__main__":
         "S5_SSM_SIZE": 16,
         "S5_N_LAYERS": 2,
         "S5_BLOCKS": 1,
+        "S5_ACTIVATION": "full_glu",
+        "S5_DO_NORM": True,
+        "S5_PRENORM": True,
+        "S5_DO_GTRXL_NORM": True,
     }
 
     # load checkpoints
@@ -307,6 +318,11 @@ if __name__ == "__main__":
     # test_partner_ckpts = load_checkpoints(eval_partner_path)
 
     ego_path = "results/lbf/fcp_s5/2025-03-31_15-02-23/fcp_train.pkl"
+    ego_net_type = "s5"
+
+    # ego_path = "results/lbf/fcp_mlp/2025-03-31_16-08-42/fcp_train.pkl"
+    # ego_net_type = "mlp"
+    
     ego_ckpts = load_checkpoints(ego_path)
 
     # perform eval
@@ -316,4 +332,4 @@ if __name__ == "__main__":
          ego_ckpts, train_partner_ckpts, 
          test_partner_ckpts=None, 
          num_episodes=32,
-         ego_net_type="s5")
+         ego_net_type=ego_net_type)

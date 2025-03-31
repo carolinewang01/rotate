@@ -13,5 +13,3 @@ ENT_COEF: 0.01
 VF_COEF: 1.0
 MAX_GRAD_NORM: 1.0
 ANNEAL_LR: True
-# mlp actor critic defaults
-ACTIVATION: tanh

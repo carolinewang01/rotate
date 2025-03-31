@@ -585,6 +585,10 @@ if __name__ == "__main__":
         "S5_SSM_SIZE": 16,
         "S5_N_LAYERS": 2,
         "S5_BLOCKS": 1,
+        "S5_ACTIVATION": "full_glu",
+        "S5_DO_NORM": True,
+        "S5_PRENORM": True,
+        "S5_DO_GTRXL_NORM": True,
 
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {},

@@ -116,7 +116,6 @@ def train_fcp_agent(config, checkpoints):
             # --------------------------
             agent0_net = ActorCritic(env.action_space(env.agents[0]).n)
             rng, init_rng = jax.random.split(rng)
-            dummy_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
             init_x = ( # init obs, avail_actions
                 jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"], env.observation_space(env.agents[0]).shape[0])),
                 jnp.ones((1, config["NUM_CONTROLLED_ACTORS"], env.action_space(env.agents[0]).n)),
@@ -452,11 +451,10 @@ if __name__ == "__main__":
     config = {
         "TOTAL_TIMESTEPS": 3e5, 
         "LR": 1.e-4,
-        "NUM_ENVS": 16, # 64,
+        "NUM_ENVS": 16,
         "NUM_STEPS": 100,
         "UPDATE_EPOCHS": 15,
-        "NUM_MINIBATCHES": 8, #64,
-        # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
+        "NUM_MINIBATCHES": 8,
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
@@ -471,7 +469,7 @@ if __name__ == "__main__":
         "SEED": 38410, 
         "PARTNER_SEED": 112358,
         "NUM_SEEDS": 3,
-        "RESULTS_PATH": "results/lbf/debug"
+        "RESULTS_PATH": "results/lbf/fcp_mlp"
     }
     
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
