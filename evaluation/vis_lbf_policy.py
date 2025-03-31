@@ -1,3 +1,4 @@
+'''Script to rollout a policy for a given number of episodes on the LBF environment.'''
 import jax
 from envs import make_env
 from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
@@ -14,9 +15,9 @@ def rollout(ego_run_path, partner_run_path,
 
     policies = {}
     policies[0] = S5ActorCriticLoader(ego_run_path, env.action_spaces['agent_0'].n, 
-                                            n=ego_seed_idx, m=ego_checkpoint_idx)
+                                      n=ego_seed_idx, m=ego_checkpoint_idx)
     policies[1] = MLPActorCriticLoader(partner_run_path, env.action_spaces['agent_1'].n, 
-                                             n=partner_seed_idx, m=partner_checkpoint_idx) 
+                                      n=partner_seed_idx, m=partner_checkpoint_idx) 
 
     # Rollout
     states = []
@@ -32,7 +33,7 @@ def rollout(ego_run_path, partner_run_path,
         num_steps = 0
         while not done['__all__']:
             # Get available actions for each agent
-            avail_actions = env.get_avail_actions(state.env_state)
+            avail_actions = env.get_avail_actions(state)
             
             # Sample actions for each agent
             actions = {}
@@ -75,16 +76,16 @@ if __name__ == "__main__":
     RENDER = True
     SAVEVIDEO = False
     
-    ego_run_path = "results/lbf/2025-02-17_14-38-26/train_run.pkl" # FCP agent, trained for 3e6 steps
-    partner_run_path = "results/lbf/2025-02-13_21-21-35/train_run.pkl" # FCP training partner, trained for 3e6 steps
-    save_name = "fcp=2025-02-13_21-21-35_partner=2025-02-17_14-38-26"
+    ego_run_path = "results/lbf/fcp_s5/2025-03-31_16-48-39/fcp_train.pkl" # FCP agent, trained for 3e6 steps
+    partner_run_path = "results/lbf/fcp_s5/2025-03-31_16-29-57/train_partners.pkl" # FCP training partner, trained for 3e6 steps
+    save_name = "fcp=2025-03-31_16-48-39_partner=2025-03-31_16-29-57"
     
     rollout(ego_run_path=ego_run_path, 
             partner_run_path=partner_run_path,
             ego_seed_idx=0,
             partner_seed_idx=0,
-            ego_checkpoint_idx=-1,
-            partner_checkpoint_idx=-1,
+            ego_checkpoint_idx=-1, # use last checkpoint
+            partner_checkpoint_idx=-1, # use last checkpoint
             num_episodes=NUM_EPISODES, 
             render=RENDER, 
             savevideo=SAVEVIDEO,

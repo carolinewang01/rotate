@@ -1,9 +1,9 @@
 import jax
-from common.mlp_actor_critic import ActorCritic
-from common.s5_actor_critic import S5ActorCritic
-from common.save_load_utils import load_checkpoints
 import jax.numpy as jnp
-from common.s5_ssm import make_DPLR_HiPPO, init_S5SSM, StackedEncoderModel
+
+from common.mlp_actor_critic import ActorCritic
+from common.s5_actor_critic import S5ActorCritic, make_DPLR_HiPPO, init_S5SSM, StackedEncoderModel
+from common.save_load_utils import load_checkpoints
 
 
 def select_checkpoint_params(full_checkpoints, seed_idx, ckpt_idx):
@@ -94,7 +94,8 @@ class S5ActorCriticLoader():
             ssm_hidden_dim=self.config["S5_SSM_SIZE"]
         )
         
-        # Initialize hidden state
+        # Hidden state is maintained by in a class attribute, making this 
+        # class non-jittable.
         self.hidden = StackedEncoderModel.initialize_carry(1, ssm_size, n_layers)
 
 
@@ -105,13 +106,18 @@ class S5ActorCriticLoader():
         rng, act_rng = jax.random.split(rng)
         
         # Update hidden state and get action distribution
-        model_input = (obs_dict['obs'], obs_dict['dones'], obs_dict['avail_actions'])
+        model_input = (
+            obs_dict['obs'].reshape(1, 1, -1),
+            obs_dict['dones'].reshape(1, 1), 
+            obs_dict['avail_actions'].reshape(1, -1)
+        )
         self.hidden, pi, _ = self.model.apply(self.model_params, self.hidden, model_input)
         
         if test_mode:
             action = pi.mode()
         else:
             action = pi.sample(seed=act_rng)
+        action = action.squeeze()
         return action, rng
 
 class RandomActor():
