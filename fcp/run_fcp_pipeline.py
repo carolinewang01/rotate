@@ -2,21 +2,23 @@
 This script implements the full training and evaluation pipeline for Fictitious Co-Play (FCP). 
 The steps implemented are: 
 1. Generate training and testing teammates using IPPO. 
-2. Train FCP agent using training teammates. 
-3. Evaluate FCP agent against training and testig teammates.
+2. Train FCP agent using generated training teammates. 
+3. Evaluate FCP agent against training and testing teammates.
 '''
 import hydra
 import logging
 from omegaconf import OmegaConf
 
-from fcp.fcp_train import train_partners_in_parallel, train_fcp_agent
+from fcp.fcp_train_s5 import train_fcp_agent
 from fcp.fcp_eval import main as eval_main
-from fcp.utils import save_train_run, load_checkpoints
-from fcp.vis_utils import get_stats, plot_train_metrics
+from fcp.train_partners import train_partners_in_parallel
+from common.save_load_utils import save_train_run, load_checkpoints
+from common.plot_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-@hydra.main(version_base=None, config_path="config", config_name="fcp_master")
+@hydra.main(version_base=None, config_path="configs", config_name="fcp_master")
 def fcp_pipeline(config):
     '''Runs the full FCP training and evaluation pipeline.'''
     # initialize config
@@ -57,20 +59,27 @@ def fcp_pipeline(config):
     # Visualize training metrics
     metrics = fcp_out["metrics"]
     if config["ENV_NAME"] == "lbf":
-        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), train_cfg["NUM_ENVS"])
+        metric_names = ("percent_eaten", "returned_episode_returns")
     elif config["ENV_NAME"] == "overcooked":
-        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), train_cfg["NUM_ENVS"])
+        metric_names = ("shaped_reward", "returned_episode_returns")
     else: 
-        all_stats = get_stats(metrics, ("returned_episode_returns"), train_cfg["NUM_ENVS"])
-    plot_train_metrics(all_stats, train_cfg["NUM_SEEDS"], train_cfg["NUM_UPDATES"], train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
+        metric_names = ("returned_episode_returns")
+        
+    all_stats = get_stats(metrics, metric_names, train_cfg["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
 
     # Perform evaluation
     log.info("Evaluating FCP Agent...")
-    eval_main(config["FCP_EVAL_ARGS"], eval_savedir=savedir, 
-              fcp_ckpts=fcp_out["checkpoints"], 
+    eval_main(base_config=config["FCP_EVAL_ARGS"],
+              ego_config=config["FCP_TRAIN_ARGS"],
+              partner_config=config["PARTNER_TRAIN_ARGS"],
+              eval_savedir=savedir, 
+              ego_ckpts=fcp_out["checkpoints"], 
               train_partner_ckpts=train_partner_ckpts, 
-              eval_partner_ckpts=eval_partner_ckpts, 
-              num_episodes=32)
+              test_partner_ckpts=eval_partner_ckpts, 
+              num_episodes=32,
+              ego_net_type="s5",
+              metric_names=metric_names)
 
     return fcp_out
 
