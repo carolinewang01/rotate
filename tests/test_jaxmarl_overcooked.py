@@ -7,7 +7,7 @@ import jaxmarl
 import time
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 from jaxmarl.environments.overcooked import Overcooked, overcooked_layouts, layout_grid_to_dict
-from jaxmarl.wrappers.baselines import LogWrapper
+from envs.log_wrapper import LogWrapper
 
 # Parameters + random keys
 episodes = 2

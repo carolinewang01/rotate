@@ -3,9 +3,9 @@ import logging
 
 import jax
 import jax.numpy as jnp
-from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs import make_env
+from envs.log_wrapper import LogWrapper
 from common.mlp_actor_critic import ActorCritic
 from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from common.rnn_actor_critic import RNNActorCritic, ScannedRNN

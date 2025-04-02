@@ -11,13 +11,13 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
 from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from common.save_load_utils import load_checkpoints, save_train_run
 from common.plot_utils import get_stats, plot_train_metrics
 from envs import make_env
+from envs.log_wrapper import LogWrapper
 from fcp.utils import unbatchify, Transition
 from fcp.train_partners import train_partners_in_parallel
 

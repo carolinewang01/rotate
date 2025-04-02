@@ -1,7 +1,7 @@
 import jax
 import jumanji
 from jumanji.environments.routing.lbf.generator import RandomGenerator
-from jaxmarl.wrappers.baselines import LogWrapper
+from envs.log_wrapper import LogWrapper
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 

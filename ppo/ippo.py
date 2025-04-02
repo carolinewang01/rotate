@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
+from envs.log_wrapper import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
 from common.plot_utils import get_stats, plot_train_metrics

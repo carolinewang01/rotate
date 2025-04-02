@@ -1,5 +1,5 @@
 import jax
-from jaxmarl.wrappers.baselines import LogWrapper
+from envs.log_wrapper import LogWrapper
 from jaxmarl.environments.overcooked import overcooked_layouts
 
 from envs.overcooked_wrapper import OvercookedWrapper
