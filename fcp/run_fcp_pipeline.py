@@ -59,14 +59,13 @@ def fcp_pipeline(config):
     metrics = fcp_out["metrics"]
     if config["ENV_NAME"] == "lbf":
         metric_names = ("percent_eaten", "returned_episode_returns")
-        all_stats = get_stats(metrics, metric_names, train_cfg["NUM_ENVS"])
     elif config["ENV_NAME"] == "overcooked":
         metric_names = ("shaped_reward", "returned_episode_returns")
-        all_stats = get_stats(metrics, metric_names, train_cfg["NUM_ENVS"])
     else: 
         metric_names = ("returned_episode_returns")
-        all_stats = get_stats(metrics, metric_names, train_cfg["NUM_ENVS"])
-    plot_train_metrics(all_stats, train_cfg["NUM_SEEDS"], train_cfg["NUM_UPDATES"], train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
+        
+    all_stats = get_stats(metrics, metric_names, train_cfg["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
 
     # Perform evaluation
     log.info("Evaluating FCP Agent...")

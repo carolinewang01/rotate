@@ -607,4 +607,4 @@ if __name__ == "__main__":
         all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
     else: 
         all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
-    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])

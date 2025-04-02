@@ -1,12 +1,13 @@
+import os
 import wandb
 from omegaconf import OmegaConf
 
+
 class Logger:
     """
-        Class to initialize logger object for writing down experiment resulst to wandb.
+    Class to initialize logger object for writing experiment results to wandb.
     """
     def __init__(self, config):
-
         self.verbose = config["logger"].get("verbose", False)
         self.run = wandb.init(
             project=config["logger"]["project"],
@@ -48,3 +49,15 @@ class Logger:
         wandb.define_metric("checkpoint")
         wandb.define_metric("Train/*", step_metric="train_step")
         wandb.define_metric("Returns/*", step_metric="checkpoint")
+    
+    def log_artifact(self, name, path, type_name):
+        artifact = wandb.Artifact(name, type=type_name)
+        # check if path is a directory or a file
+        if os.path.isdir(path):
+            artifact.add_dir(path)
+        else:
+            artifact.add_file(path)
+        self.run.log_artifact(artifact)
+    
+    def close(self):
+        wandb.finish()

@@ -43,5 +43,6 @@ WANDB_MODE : disabled
 hydra:
   job:
     name: fcp_s5
+    chdir: true
   run:
     dir: results/${ENV_NAME}/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}

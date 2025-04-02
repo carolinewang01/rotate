@@ -479,4 +479,4 @@ if __name__ == "__main__":
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
     all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
-    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])
