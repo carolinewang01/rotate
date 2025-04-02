@@ -2,8 +2,8 @@
 This script implements the full training and evaluation pipeline for Fictitious Co-Play (FCP). 
 The steps implemented are: 
 1. Generate training and testing teammates using IPPO. 
-2. Train FCP agent using training teammates. 
-3. Evaluate FCP agent against training and testig teammates.
+2. Train FCP agent using generated training teammates. 
+3. Evaluate FCP agent against training and testing teammates.
 '''
 import hydra
 import logging
@@ -16,6 +16,7 @@ from common.save_load_utils import save_train_run, load_checkpoints
 from common.plot_utils import get_stats, plot_train_metrics
 
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 @hydra.main(version_base=None, config_path="configs", config_name="fcp_master")
 def fcp_pipeline(config):

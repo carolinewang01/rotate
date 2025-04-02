@@ -5,12 +5,12 @@ import jax
 import jax.numpy as jnp
 from jaxmarl.wrappers.baselines import LogWrapper
 
+from envs import make_env
 from common.mlp_actor_critic import ActorCritic
 from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from common.rnn_actor_critic import RNNActorCritic, ScannedRNN
 from common.save_load_utils import load_checkpoints, save_train_run
 from common.plot_utils import plot_eval_metrics
-from envs import make_env
 
 log = logging.getLogger(__name__)
 

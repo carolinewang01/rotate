@@ -18,7 +18,7 @@ from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SS
 from common.save_load_utils import load_checkpoints, save_train_run
 from common.plot_utils import get_stats, plot_train_metrics
 from envs import make_env
-from fcp.common import unbatchify, Transition
+from fcp.utils import unbatchify, Transition
 from fcp.train_partners import train_partners_in_parallel
 
 log = logging.getLogger(__name__)

@@ -5,7 +5,6 @@ from typing import Sequence
 import distrax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
-import jax
 import jax.numpy as jnp
 
 class ActorCritic(nn.Module):
