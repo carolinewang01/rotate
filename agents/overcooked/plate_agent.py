@@ -12,6 +12,8 @@ class PlateAgent(BaseAgent):
     """A heuristic agent for the Overcooked environment that plates dishes
     when ready and delivers. With probability p_plate_on_counter, it will
     place plates on counters instead of plating soup.
+
+    WARNING: This agent is not yet finished. 
     TODO: may need to check if the pot has 3 onions and interact with it to start cooking. 
     """
     
