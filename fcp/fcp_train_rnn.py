@@ -11,38 +11,19 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
-from common.rnn_actor_critic import ActorCriticRNN, ScannedRNN
+from common.rnn_actor_critic import RNNActorCritic, ScannedRNN
+from common.save_load_utils import load_checkpoints, save_train_run
+from common.plot_utils import get_stats, plot_train_metrics
 from envs import make_env
-from fcp.ippo_checkpoints import make_train, unbatchify, Transition
-from fcp.utils import load_checkpoints, save_train_run
-from fcp.vis_utils import get_stats, plot_train_metrics
+from envs.log_wrapper import LogWrapper
+from fcp.utils import unbatchify, Transition
+from fcp.train_partners import train_partners_in_parallel
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
-def train_partners_in_parallel(config, base_seed):
-    '''
-    Train a pool of partners for FCP. Return checkpoints for all partners.
-    Returns out, a dictionary of the final train_state, metrics, and checkpoints.
-    '''
-    start_time = time.time()
-    rng = jax.random.PRNGKey(base_seed)
-    rngs = jax.random.split(rng, config["NUM_SEEDS"])
-
-    debug_mode = False
-    with jax.disable_jit(debug_mode):
-        if debug_mode: 
-            out = make_train(config)(rngs)
-        else:
-            train_jit = jax.jit(jax.vmap(make_train(config)))
-            out = train_jit(rngs)
-    end_time = time.time()
-    log.info(f"Training partners took {end_time - start_time:.2f} seconds.")
-    return out
 
 def train_fcp_agent(config, checkpoints):
     '''
@@ -119,10 +100,9 @@ def train_fcp_agent(config, checkpoints):
             # --------------------------
             # 3a) Init agent_0 network
             # --------------------------
-            agent0_net = ActorCriticRNN(action_dim=env.action_space(env.agents[0]).n,
+            agent0_net = RNNActorCritic(action_dim=env.action_space(env.agents[0]).n,
                                         fc_hidden_dim=config["FC_HIDDEN_DIM"],
-                                        gru_hidden_dim=config["GRU_HIDDEN_DIM"],
-                                        activation=config["ACTIVATION"]
+                                        gru_hidden_dim=config["GRU_HIDDEN_DIM"]
                                         )
 
             rng, init_rng = jax.random.split(rng)
@@ -211,8 +191,7 @@ def train_fcp_agent(config, checkpoints):
                     # p: single-partner param dictionary
                     # input_x: single obs vector
                     # rng_: single environment's RNG
-                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n,
-                                        activation=config["ACTIVATION"]).apply({'params': p}, input_x)
+                    pi, _ = ActorCritic(env.action_space(env.agents[1]).n).apply({'params': p}, input_x)
                     return pi.sample(seed=rng_)
 
                 rng_partner = jax.random.split(partner_rng, config["NUM_UNCONTROLLED_ACTORS"])
@@ -554,10 +533,9 @@ if __name__ == "__main__":
         "TOTAL_TIMESTEPS": 3e5, #  3e6
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 100, 
+        "NUM_STEPS": 128, 
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 8,
-        # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
@@ -567,7 +545,6 @@ if __name__ == "__main__":
         "MAX_GRAD_NORM": 1.0,
         "FC_HIDDEN_DIM": 64,
         "GRU_HIDDEN_DIM": 64,
-        "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {
@@ -598,5 +575,5 @@ if __name__ == "__main__":
     # visualize results!
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
-    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
-    plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
+    all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_ENVS"])

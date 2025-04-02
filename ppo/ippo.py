@@ -1,16 +1,18 @@
+'''
+Based on the IPPO implementation from jaxmarl. Trains a parameter-shared IPPO agent on a
+fully cooperativemulti-agent environment.
+'''
 from typing import NamedTuple
 
-import hydra
 import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
-from omegaconf import OmegaConf
+from envs.log_wrapper import LogWrapper
 
 from common.mlp_actor_critic import ActorCritic
+from common.plot_utils import get_stats, plot_train_metrics
 from envs import make_env
-from fcp.vis_utils import get_stats, plot_train_metrics
 
 
 class Transition(NamedTuple):
@@ -22,44 +24,6 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
     avail_actions: jnp.ndarray
-
-def get_rollout(train_state, config):
-    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
-    network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
-    key = jax.random.PRNGKey(0)
-    key, key_r, key_a = jax.random.split(key, 3)
-
-    init_x = jnp.zeros(env.observation_space(env.agents[0]).shape)
-    init_x = ( # init obs, avail_actions
-            jnp.zeros(env.observation_space(env.agents[0]).shape),
-            jnp.ones(env.action_space(env.agents[0]).n),
-        )
-    network.init(key_a, init_x)
-    network_params = train_state.params
-
-    done = False
-
-    obs, state = env.reset(key_r)
-    state_seq = [state]
-    while not done:
-        key, key_a, key_s = jax.random.split(key, 3)
-        obs_batch = batchify(obs, env.agents, config["NUM_ACTORS"])
-        # Get actual available actions from environment state
-        avail_batch = env.get_avail_actions(state.env_state).astype(jnp.float32)  # Convert bool to float
-        
-        pi, value = network.apply(network_params, (obs_batch, avail_batch))
-        actions = pi.sample(seed=key_a)
-
-        env_act = unbatchify(actions, env.agents, config["NUM_ENVS"], env.num_agents)
-        env_act = {k: v.flatten() for k, v in env_act.items()}
-
-        # STEP ENV
-        obs, state, reward, done, info = env.step(key_s, state, actions)
-        done = done["__all__"]
-
-        state_seq.append(state)
-
-    return state_seq
 
 def batchify(x: dict, agent_list, num_actors):
     x = jnp.stack([x[a] for a in agent_list])
@@ -92,7 +56,7 @@ def make_train(config):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
+        network = ActorCritic(env.action_space(env.agents[0]).n)
         rng, _rng = jax.random.split(rng)
         init_x = ( # init obs, avail_actions
             jnp.zeros(env.observation_space(env.agents[0]).shape),
@@ -379,7 +343,6 @@ if __name__ == "__main__":
         "ENT_COEF": 0.01,
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
-        "ACTIVATION": "tanh",
         "ENV_NAME": "overcooked", # "lbf",
         "ENV_KWARGS": {
             "layout": "cramped_room",
@@ -401,10 +364,9 @@ if __name__ == "__main__":
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs*num_agents)
     metrics = out['metrics']
     if config["ENV_NAME"] == "lbf":
-        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
+        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
     elif config["ENV_NAME"] == "overcooked":
-        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_ENVS"])
+        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
     else: 
-        all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_ENVS"])
-    plot_train_metrics(all_stats, config["NUM_SEEDS"], 
-                 config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
+        all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_ENVS"])

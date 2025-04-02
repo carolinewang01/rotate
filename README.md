@@ -46,9 +46,9 @@ The `fcp/` directory stores our Fictitious Co-Play implementation. This implemen
 - Our implementation can be run via `python fcp/fcp_pipeline.py`. Perform X-forwarding to see plots.
 
 Note that the individual scripts referenced by `fcp/fcp_pipeline.py` can be ran individually, which is useful when debugging.
-- To train IPPO agents, run `python fcp/ippo_checkpoints.py`. 
+- To train IPPO agents, run `python fcp/ippo.py`. 
 - To train a FCP agent, run `python fcp/fcp_train.py`. 
-- To evaluate FCP agents against a pool of evaluation checkpoints, run `python fcp/fcp_eval.py`
+- To evaluate FCP agents against a pool of evaluation checkpoints, run `python fcp/fcp_evaluation.py`
 
 ### Coding Style Notes
 JaxMARL follows a single-script training paradigm, which enables jit-compiling the entire RL training loop. 
