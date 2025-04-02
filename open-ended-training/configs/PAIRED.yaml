@@ -1,0 +1,48 @@
+defaults:
+  - hydra: hydra_simple
+  - _self_
+
+name: LBF
+logger:
+  load_dir: LBF
+  project: open-ended-aht
+  entity: aht-project
+
+algorithm:
+  ALG: PAIRED
+  NUM_ITERS: 1
+  LR: 1.e-4
+  NUM_ENVS: 64
+  NUM_STEPS_EGO: 128
+  NUM_STEPS_BR: 128
+  NUM_STEPS_FCP: 128 
+  TOTAL_TIMESTEPS: 9.8e7
+  UPDATE_EPOCHS: 15
+  NUM_MINIBATCHES: 16
+  MAX_EVAL_EPISODES: 20
+  NUM_CHECKPOINTS: 5
+  GAMMA: 0.99
+  GAE_LAMBDA: 0.95
+  CLIP_EPS: 0.05
+  ENT_COEF: 0.01
+  VF_COEF: 1.0
+  MAX_GRAD_NORM: 1.0
+  ACTIVATION: relu
+  ENV_NAME: lbf
+  ENV_KWARGS: {}
+  ANNEAL_LR: true
+  TRAIN_PARTNER_SEED: 112358
+  EVAL_PARTNER_SEED: 1285842
+  TRAIN_SEED: 38410
+  EVAL_SEED: 12345
+  NUM_SEEDS: 3
+  S5_ACTOR_CRITIC_HIDDEN_DIM: 64
+  S5_D_MODEL: 16
+  S5_SSM_SIZE: 16
+  S5_N_LAYERS: 2
+  S5_BLOCKS: 1
+  S5_ACTIVATION: full_glu
+  S5_DO_NORM: true
+  S5_PRENORM: true
+  S5_DO_GTRXL_NORM: true
+  RESULTS_PATH: results/lbf

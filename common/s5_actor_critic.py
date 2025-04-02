@@ -80,6 +80,8 @@ class SequenceLayer(nn.Module):
             x = x * jax.nn.sigmoid(self.out2(x1))
         elif self.activation in ["gelu"]:
             x = nn.gelu(x)
+        elif self.activation in ["relu"]:
+            x = nn.relu(x)
         else:
             raise NotImplementedError(
                    "Activation: {} not implemented".format(self.activation))

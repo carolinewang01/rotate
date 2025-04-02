@@ -1151,8 +1151,6 @@ def open_ended_training(init_fcp_params, others, config, teammate_train_env, fcp
 
     return updated_fcp_parameters, (train_out, fcp_out)
 
-
-
 def initialize_agent(config, base_seed):
     rng = jax.random.PRNGKey(base_seed)
     if config["ENV_NAME"] == 'lbf':
@@ -1234,7 +1232,7 @@ def process_metrics(outs_train, outs_fcp):
     return average_xp_rets_per_iter, average_ego_rets_per_iter, average_value_losses, average_actor_losses, average_entropy_losses, average_ego_value_losses, average_ego_actor_losses, average_ego_entropy_losses
 
 
-def run(config):
+def run_minimax(config):
     algorithm_config = dict(config["algorithm"])
     logger = Logger(config)
 
@@ -1255,13 +1253,10 @@ def run(config):
     init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
-    final_params, outs = jax.lax.scan(partial_with_config, init_params, length=1)
+    final_params, outs = jax.lax.scan(partial_with_config, init_params, length=config.algorithm["NUM_ITERS"])
     outs_train, outs_fcp = outs
     all_metrics = process_metrics(outs_train, outs_fcp)
 
-    step_counter = 0
-    print(all_metrics[0].shape)
-    print(all_metrics[1].shape)
     for num_iter in range(all_metrics[0].shape[0]):
         for num_step in range(all_metrics[0].shape[1]):
             logger.log_item("Returns/XP", all_metrics[0][num_iter][num_step], checkpoint=num_iter*all_metrics[0].shape[1] + num_step)
@@ -1275,11 +1270,4 @@ def run(config):
 
             logger.commit()
 
-    #print(f"Training took {end_time - start_time:.2f} seconds.")
     
-    #################################
-    # visualize results!
-    # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
-    # metrics = fcp_out["metrics"]
-    # all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
-    # plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])

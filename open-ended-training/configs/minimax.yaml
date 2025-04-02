@@ -3,7 +3,9 @@ defaults:
   - _self_
 
 algorithm:
+  ALG: minimax
   LR: 1.e-4
+  NUM_ITERS: 20
   NUM_OPEN_ENDED_ITERS: 1
   NUM_ENVS: 16
   NUM_STEPS: 128 
