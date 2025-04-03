@@ -162,7 +162,6 @@ def train_fcp_agent(config, checkpoints):
             obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
 
             # Initialize hidden state for RNN
-            # init_hstate_0 = ScannedRNN.initialize_carry(config["NUM_CONTROLLED_ACTORS"], config["GRU_HIDDEN_DIM"])
             init_hstate_0 = StackedEncoderModel.initialize_carry(config["NUM_CONTROLLED_ACTORS"], ssm_size, n_layers)
 
             # Each environment picks a partner index in [0, n_seeds*m_ckpts)
@@ -262,6 +261,7 @@ def train_fcp_agent(config, checkpoints):
                         transition.value,
                         transition.reward,
                     )
+
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                         delta
@@ -582,9 +582,9 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    # train_partner_path = ""
+    train_partner_path = ""
     # train_partner_path = "results/overcooked/debug/2025-03-20_11-32-04/train_partners.pkl" # trained for 3M steps
-    train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
+    # train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:

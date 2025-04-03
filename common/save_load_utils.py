@@ -31,7 +31,7 @@ def load_checkpoints(path):
         lambda x: jnp.array(x) if isinstance(x, np.ndarray) else x,
         restored
     )
-    return restored
+    return restored['checkpoints']
 
 def save_train_run_as_pickle(out, savedir, savename):
     if not os.path.exists(savedir):
