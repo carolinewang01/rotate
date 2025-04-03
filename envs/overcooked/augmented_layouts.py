@@ -35,7 +35,6 @@ def get_augmented_layouts():
         aug_layout["num_components"] = num_components
 
         augmented_layouts[layout_name] = FrozenDict(aug_layout)
-
     return augmented_layouts
 
 augmented_layouts = get_augmented_layouts()

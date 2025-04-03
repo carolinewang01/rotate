@@ -3,8 +3,7 @@
 ## TODOs
 
 Experiment Infrastructure
-- Implement wandb logging.
-- Move away from pickling Jax pytrees (security + version control concerns.) See https://github.com/alvarobartt/safejax or https://docs.jax.dev/en/latest/_autosummary/jax.export.register_pytree_node_serialization.html
+- Implement wandb logging for FCP
 
 Metrics / Logging: 
 - Explore open-ended learning metrics 
@@ -19,19 +18,15 @@ Environments with Diverse Coordination Conventions:
 - Explore other environments offered by Jumanji and JaxMARL.
 
 ## Installation Guide
-1. Install [Jumanji](https://github.com/instadeepai/jumanji/tree/main) from source, to get the Level Based Foraging (LBF) environment. 
-2. Install the fork of JaxMARL in our codebase via `pip install -e .[algs]` (run from the `jaxmarl_caroline` directory). 
-- Note that we have made only minor changes to our JaxMARL fork. It is primarily there to make referencing their baseline scripts easier. 
-3. Caroline's conda environment has been dumped to the `environment.yml`, found in the root of this codebase. After installing the above packages from source, please create a conda environment following the `environment.yml`. Don't forget to change the name of the environment and the prefix, within the `.yml` file!  
-4. Add the path to this codebase to your PYTHONPATH, either by adding a line to your `.bashrc`, or by setting it as a conda environment variable: `conda env config vars set PYTHONPATH=.:$PYTHONPATH`
+Follow instructions at `install_instructions.md`
 
 ## Project Guide
 ### Tests
-The `tests/` directory stores various test scripts, primarily testing environments and environment wrappers. 
+The `tests/` directory stores various test scripts. 
 
 ### Envs
 #### Jumanji (LBF)
-Currently, the only environment supported from the Jumanji suite is Level-Based Foraging (LBF).
+Currently, the only environment supported frtom the Jumanji suite is Level-Based Foraging (LBF).
 
 The wrapper for the Jumanji LBF environment is stored in the `envs/` directory, at `envs/jumanji_jaxmarl_wrapper.py`. A corresponding test script is stored at `tests/test_jumanji_jaxmarl_wrapper.py`.
 

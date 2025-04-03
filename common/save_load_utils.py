@@ -6,9 +6,20 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+# suppress logging from orbax 
+import logging
+logger = logging.getLogger("absl")
+logger.setLevel(logging.ERROR)
+
+# compute path to repo root by using this file's path
+REPO_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def save_train_run(out, savedir, savename):
-    '''Save train run as orbax checkpoint'''
+    '''Save train run as orbax checkpoint. 
+    Orbax requires absolute paths, so we compute the absolute path to the repo root.'''
+    # determine whether savedir is relative or absolute
+    if not os.path.isabs(savedir):
+        savedir = os.path.join(REPO_PATH, savedir)
     if not os.path.exists(savedir):
         os.makedirs(savedir, exist_ok=True)
     savepath = os.path.join(savedir, savename)
@@ -21,8 +32,11 @@ def save_train_run(out, savedir, savename):
     return savepath
 
 def load_checkpoints(path):
-    '''Load checkpoints from orbax checkpoint
-    '''
+    '''Load checkpoints from orbax checkpoint. 
+    Orbax requires absolute paths, so we compute the absolute path to the repo root.'''
+    # determine whether path is relative or absolute
+    if not os.path.isabs(path):
+        path = os.path.join(REPO_PATH, path)
     # load the checkpoint
     checkpointer = orbax.checkpoint.PyTreeCheckpointer()
     restored = checkpointer.restore(path)
