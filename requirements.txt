@@ -11,6 +11,7 @@ orbax-export==0.0.6
 gymnax
 distrax
 safetensors
+moviepy
 
 matplotlib
 wandb
