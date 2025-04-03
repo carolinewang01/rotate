@@ -343,11 +343,11 @@ if __name__ == "__main__":
         "ENT_COEF": 0.01,
         "VF_COEF": 1.0,
         "MAX_GRAD_NORM": 1.0,
-        "ENV_NAME": "lbf", # "lbf",
+        "ENV_NAME": "overcooked-v2", # "lbf",
         "ENV_KWARGS": {
-            # "layout": "cramped_room",
-            # "random_reset": False,
-        #     "max_steps": 400,
+            "layout": "cramped_room",
+            "random_reset": False,
+            "max_steps": 400,
         },
         "ANNEAL_LR": True,
         "SEED": 0,
@@ -365,6 +365,8 @@ if __name__ == "__main__":
     metrics = out['metrics']
     if config["ENV_NAME"] == "lbf":
         all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
+    elif config["ENV_NAME"] == "overcooked-v2": 
+        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_ENVS"])
     else: 
         all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_ENVS"])
     plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_ENVS"])

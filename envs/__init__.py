@@ -7,6 +7,7 @@ from jumanji.environments.routing.lbf.generator import RandomGenerator
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from envs.overcooked.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked.augmented_layouts import augmented_layouts
+
 def make_env(env_name: str, env_kwargs: dict = {}):
     if env_name == 'lbf':
         generator_args = {"grid_size": 8, "fov": 8, 

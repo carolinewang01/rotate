@@ -30,7 +30,7 @@ def main(config):
 
     if config["ENV_NAME"] == "lbf":
         metric_names = ("percent_eaten", "returned_episode_returns")
-    elif config["ENV_NAME"] == "overcooked":
+    elif config["ENV_NAME"] == "overcooked-v2":
         metric_names = ("shaped_reward", "returned_episode_returns")
     else: 
         metric_names = ("returned_episode_returns")

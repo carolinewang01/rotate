@@ -26,7 +26,7 @@ The `tests/` directory stores various test scripts.
 
 ### Envs
 #### Jumanji (LBF)
-Currently, the only environment supported from the Jumanji suite is Level-Based Foraging (LBF).
+Currently, the only environment supported frtom the Jumanji suite is Level-Based Foraging (LBF).
 
 The wrapper for the Jumanji LBF environment is stored in the `envs/` directory, at `envs/jumanji_jaxmarl_wrapper.py`. A corresponding test script is stored at `tests/test_jumanji_jaxmarl_wrapper.py`.
 
