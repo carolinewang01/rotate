@@ -195,7 +195,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                     {'params': ego_policy["params"]}, last_partner_h, 
                     rnn_input_1
                 )
-                act_1 = pi_1.sample(seed=actor_rng).squeeze()
+                act_1 = pi_1.sample(seed=partner_rng).squeeze()
                 logp_1 = pi_1.log_prob(act_0).squeeze()
                 val_1 = val_1.squeeze()
 
@@ -217,7 +217,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=-reward["agent_1"],
+                    reward=jnp.zeros_like(-reward["agent_1"]),
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -226,70 +226,70 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                 new_runner_state = (train_state, env_state_next, obs_next, done["agent_1"], hstate_ego, rng)
                 return new_runner_state, transition
             
-            def _env_step_br(runner_state, unused):
+            def _env_step_br(runner_state_br, unused):
                 """
                 runner_state = (train_state, env_state, last_obs, rng)
                 Returns updated runner_state, and a Transition for agent_0 and agent_1.
                 """
-                train_state, train_state_br, env_state, last_obs, rng = runner_state
-                rng, actor_rng, partner_rng, step_rng = jax.random.split(rng, 4)
+                train_state, train_state_br, env_state_br, last_obs_br, rng_br = runner_state_br
+                rng_br, actor_rng_br, partner_rng_br, step_rng_br = jax.random.split(rng_br, 4)
 
-                obs_0 = last_obs["agent_0"]
-                obs_1 = last_obs["agent_1"]
+                obs_0_br = last_obs_br["agent_0"]
+                obs_1_br = last_obs_br["agent_1"]
 
                 # Get available actions for agent 0 from environment state
-                avail_actions = jax.vmap(env_ego.get_avail_actions)(env_state.env_state)
-                avail_actions = jax.lax.stop_gradient(avail_actions)
-                avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
-                avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
+                avail_actions_br = jax.vmap(env_br.get_avail_actions)(env_state_br.env_state)
+                avail_actions_br = jax.lax.stop_gradient(avail_actions_br)
+                avail_actions_0_br = avail_actions_br["agent_0"].astype(jnp.float32)
+                avail_actions_1_br = avail_actions_br["agent_1"].astype(jnp.float32)
 
                 # Agent_0 action
-                pi_0, _, val_0 = agent0_net.apply(train_state.params, (obs_0, avail_actions_0))
-                act_0 = pi_0.sample(seed=actor_rng)
-                logp_0 = pi_0.log_prob(act_0)
+                pi_0_br, _, val_0_br = agent0_net.apply(train_state.params, (obs_0_br, avail_actions_0_br))
+                act_0_br = pi_0_br.sample(seed=actor_rng_br)
+                logp_0_br = pi_0_br.log_prob(act_0_br)
 
                 # Agent 1 action
-                pi_1, val_1 = br_net.apply(train_state_br.params, (obs_1, avail_actions_1))
-                act_1 = pi_1.sample(seed=partner_rng)
-                logp_1 = pi_1.log_prob(act_1)
+                pi_1_br, val_1_br = br_net.apply(train_state_br.params, (obs_1_br, avail_actions_1_br))
+                act_1_br = pi_1_br.sample(seed=partner_rng_br)
+                logp_1_br = pi_1_br.log_prob(act_1_br)
 
                 # Combine actions into the env format
-                combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
-                env_act = unbatchify(combined_actions, env_ego.agents, config["NUM_ENVS"], num_agents)
-                env_act = {k: v.flatten() for k, v in env_act.items()}
+                combined_actions_br = jnp.concatenate([act_0_br, act_1_br], axis=0)  # shape (2*num_envs,)
+                env_act_br = unbatchify(combined_actions_br, env_br.agents, config["NUM_ENVS"], num_agents)
+                env_act_br = {k: v.flatten() for k, v in env_act_br.items()}
 
                 # Step env
-                step_rngs = jax.random.split(step_rng, config["NUM_ENVS"])
-                obs_next, env_state_next, reward, done, info = jax.vmap(env_ego.step, in_axes=(0,0,0))(
-                    step_rngs, env_state, env_act
+                step_rngs_br = jax.random.split(step_rng_br, config["NUM_ENVS"])
+                obs_next_br, env_state_next_br, reward_br, done_br, info_br = jax.vmap(env_br.step, in_axes=(0,0,0))(
+                    step_rngs_br, env_state_br, env_act_br
                 )
-                info_0 = jax.tree.map(lambda x: x[:, 0], info)
-                info_1 = jax.tree.map(lambda x: x[:, 1], info)
+                info_0_br = jax.tree.map(lambda x: x[:, 0], info_br)
+                info_1_br = jax.tree.map(lambda x: x[:, 1], info_br)
 
                 # Store agent_0 data in transition
-                transition_0 = Transition(
-                    done=done["agent_0"],
-                    action=act_0,
-                    value=val_0,
-                    reward=reward["agent_0"],
-                    log_prob=logp_0,
-                    obs=obs_0,
-                    info=info_0,
-                    avail_actions=avail_actions_0
+                transition_0_br = Transition(
+                    done=done_br["agent_0"],
+                    action=act_0_br,
+                    value=val_0_br,
+                    reward=reward_br["agent_0"],
+                    log_prob=logp_0_br,
+                    obs=obs_0_br,
+                    info=info_0_br,
+                    avail_actions=avail_actions_0_br
+                )
+                transition_1_br = Transition(
+                    done=done_br["agent_1"],
+                    action=act_1_br,
+                    value=val_1_br,
+                    reward=reward_br["agent_1"],
+                    log_prob=logp_1_br,
+                    obs=obs_1_br,
+                    info=info_1_br,
+                    avail_actions=avail_actions_1_br
                 )
 
-                transition_1 = Transition(
-                    done=done["agent_1"],
-                    action=act_1,
-                    value=val_1,
-                    reward=reward["agent_1"],
-                    log_prob=logp_1,
-                    obs=obs_1,
-                    info=info_1,
-                    avail_actions=avail_actions_1
-                )
-                new_runner_state = (train_state, train_state_br, env_state_next, obs_next, rng)
-                return new_runner_state, (transition_0, transition_1)
+                new_runner_state_br = (train_state, train_state_br, env_state_next_br, obs_next_br, rng)
+                return new_runner_state_br, (transition_0_br, transition_1_br)
 
             # --------------------------
             # 3d) GAE & update step
@@ -302,14 +302,10 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                         transition.value,
                         transition.reward,
                     )
-                    reward = reward.reshape(-1)
-                    value = value.reshape(-1)
-                    done = done.reshape(-1)
+                    reward = reward
+                    value = value
+                    done = done
 
-                    # jax.debug.print("r: {}", reward.shape)
-                    # jax.debug.print("n: {}", next_value.shape)
-                    # jax.debug.print("d: {}", done.shape)
-                    # jax.debug.print("v: {}", value.shape)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                         delta
@@ -326,6 +322,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                 )
                 return advantages, advantages + traj_batch.value
 
+            #  Until here
             def _update_epoch(update_state, unused):
                 def _update_minbatch_ego(train_state, batch_infos):
                     batch_info_ego, batch_info_br = batch_infos
@@ -348,7 +345,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                         value_loss_ego = (
                             0.5 * jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
                         )
-
+                        
                         value_pred_br_clipped = traj_batch_br.value + (
                             value_br - traj_batch_br.value
                             ).clip(
@@ -358,7 +355,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                         value_loss_br = (
                             0.5 * jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
                         )
-
+                        
                         # Policy gradient loss
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
                         gae_norm_ego = (gae_ego - gae_ego.mean()) / (gae_ego.std() + 1e-8)
@@ -368,7 +365,50 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                             1.0 - config["CLIP_EPS"], 
                             1.0 + config["CLIP_EPS"]) * gae_norm_ego
                         pg_loss_ego = -jnp.mean(jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
+                        
+                        ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
+                        gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
+                        pg_loss_1_br = ratio_br * gae_norm_br
+                        pg_loss_2_br = jnp.clip(
+                            ratio_br, 
+                            1.0 - config["CLIP_EPS"], 
+                            1.0 + config["CLIP_EPS"]) * gae_norm_br
+                        pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
+                        
+                        # Entropy
+                        entropy_ego = jnp.mean(pi_ego.entropy())
+                        entropy_br = jnp.mean(pi_br.entropy())
+                        
+                        #total_loss = (pg_loss_ego+pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
+                        total_loss = pg_loss_br + config["VF_COEF"] * (value_loss_br) - config["ENT_COEF"] * (entropy_br)
+                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
 
+                    grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
+                    (loss_val, aux_vals), ego_grads = grad_fn(
+                        train_state.params, traj_batch_ego, advantages_ego, returns_ego, traj_batch_br, advantages_br, returns_br)
+                    
+                    train_state = train_state.apply_gradients(grads=ego_grads)
+                    return train_state, (loss_val, aux_vals)
+                
+                def _update_minbatch_br(train_state_br, batch_info_br):
+                    traj_batch_br, advantages_br, returns_br = batch_info_br
+
+                    def _loss_fn_br(params_br, traj_batch_br, gae_br, target_v_br):
+                        pi_br, value_br = br_net.apply(params_br, (traj_batch_br.obs, traj_batch_br.avail_actions))
+                        log_prob_br = pi_br.log_prob(traj_batch_br.action)
+
+                        # Value loss
+                        value_pred_clipped_br = traj_batch_br.value + (
+                            value_br - traj_batch_br.value
+                            ).clip(
+                            -config["CLIP_EPS"], config["CLIP_EPS"])
+                        value_losses_br = jnp.square(value_br - target_v_br)
+                        value_losses_clipped_br = jnp.square(value_pred_clipped_br - target_v_br)
+                        value_loss_br = (
+                            0.5 * jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
+                        )
+
+                        # Policy gradient loss
                         ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
                         gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
                         pg_loss_1_br = ratio_br * gae_norm_br
@@ -379,58 +419,16 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                         pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
 
                         # Entropy
-                        entropy_ego = jnp.mean(pi_ego.entropy())
                         entropy_br = jnp.mean(pi_br.entropy())
+                        
+                        total_loss_br = pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br
+                        return total_loss_br, (value_loss_br, pg_loss_br, entropy_br)
 
-                        total_loss = (pg_loss_ego+pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
-                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
-
-                    grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
-                    (loss_val, aux_vals), grads = grad_fn(
-                        train_state.params, traj_batch_ego, advantages_ego, returns_ego, traj_batch_br, advantages_br, returns_br)
-                    train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, (loss_val, aux_vals)
-                
-                def _update_minbatch_br(train_state, batch_info):
-                    traj_batch, advantages, returns = batch_info
-
-                    def _loss_fn(params, traj_batch, gae, target_v):
-                        pi, value = br_net.apply(params, (traj_batch.obs, traj_batch.avail_actions))
-                        log_prob = pi.log_prob(traj_batch.action)
-
-                        # Value loss
-                        value_pred_clipped = traj_batch.value + (
-                            value - traj_batch.value
-                            ).clip(
-                            -config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses = jnp.square(value - target_v)
-                        value_losses_clipped = jnp.square(value_pred_clipped - target_v)
-                        value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
-                        )
-
-                        # Policy gradient loss
-                        ratio = jnp.exp(log_prob - traj_batch.log_prob)
-                        gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
-                        pg_loss_1 = ratio * gae_norm
-                        pg_loss_2 = jnp.clip(
-                            ratio, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm
-                        pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
-
-                        # Entropy
-                        entropy = jnp.mean(pi.entropy())
-
-                        total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
-                        return total_loss, (value_loss, pg_loss, entropy)
-
-                    grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
-                    (loss_val, aux_vals), grads = grad_fn(
-                        train_state.params, traj_batch, advantages, returns)
-                    train_state = train_state.apply_gradients(grads=grads)
-                    return train_state, (loss_val, aux_vals)
-
+                    grad_fn_br = jax.value_and_grad(_loss_fn_br, has_aux=True)
+                    (loss_val_br, aux_vals_br), grads_br = grad_fn_br(
+                        train_state_br.params, traj_batch_br, advantages_br, returns_br)
+                    train_state_br = train_state_br.apply_gradients(grads=grads_br)
+                    return train_state_br, (loss_val_br, aux_vals_br)
 
                 (
                     train_state, train_state_br, traj_batch_ego, 
@@ -575,6 +573,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                     targets_conf_ego, targets_conf_br, targets_agent1_br, 
                     rng_ego, rng_br
                 )
+                
                 update_state, all_losses = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state = update_state[0]
@@ -618,12 +617,12 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
             max_episode_steps_br = config["NUM_STEPS_BR"]
             max_episode_steps_ego = config["NUM_STEPS_EGO"]
 
-            def run_single_episode_br(rng, fcp_param, partner_param):
+            def run_single_episode_br(rng, br_param, conf_param):
                 # Reset the env.
                 rng, reset_rng = jax.random.split(rng)
-                obs, env_state = env_eval.reset(reset_rng)
+                obs_br, env_state_br = env_eval.reset(reset_rng)
                 # Get available actions for agent 0 from environment state
-                avail_actions = env_eval.get_avail_actions(env_state.env_state)
+                avail_actions = env_eval.get_avail_actions(env_state_br.env_state)
                 avail_actions = jax.lax.stop_gradient(avail_actions)
                 avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
@@ -631,45 +630,46 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                 
                 # Do one step to get a dummy info structure.
                 rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                pi0, _, _ = agent0_net.apply(partner_param, (obs["agent_0"], avail_actions_0))
+                pi0, _, _ = agent0_net.apply(conf_param, (obs_br["agent_0"], avail_actions_0))
                 # for LBF, IPPO policies do better when sampled than when taking the mode. 
                 act0 = pi0.sample(seed=act_rng)
                 ego_agent_net = ActorCritic(env_eval.action_space(env_eval.agents[1]).n,
                                 activation=config["ACTIVATION"])
-                pi1, _ = ego_agent_net.apply({'params': fcp_param}, (obs["agent_1"], avail_actions_1))
+                pi1, _ = ego_agent_net.apply({'params': br_param}, (obs_br["agent_1"], avail_actions_1))
                 act1 = pi1.sample(seed=part_rng)
                     
                 both_actions = [act0, act1]
-                env_act = {k: both_actions[i] for i, k in enumerate(env_eval.agents)}
-                _, _, reward, dones, dummy_info = env_eval.step(step_rng, env_state, env_act)
-                done_flag = dones["__all__"]
-                against_br_reward = against_br_reward + reward["agent_0"]
+                env_act_br = {k: both_actions[i] for i, k in enumerate(env_eval.agents)}
+                _, _, reward_br, dones_br, dummy_info_br = env_eval.step(step_rng, env_state_br, env_act_br)
+                done_flag_br = dones_br["__all__"]
+                against_br_reward = against_br_reward + reward_br["agent_0"]
 
                 # We'll use a scan to iterate steps until the episode is done.
                 ep_ts = 1
-                init_carry = (ep_ts, env_state, obs, rng, done_flag, dummy_info, against_br_reward)
+                init_carry = (ep_ts, env_state_br, obs_br, rng, done_flag_br, dummy_info_br, against_br_reward)
                 def scan_step(carry, _):
                     def take_step(carry_step):
-                        ep_ts, env_state, obs, rng, done_flag, last_info, against_br_reward = carry_step
+                        ep_ts, env_state_br, obs_br, rng, done_flag_br, last_info_br, against_br_reward = carry_step
                         rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
                         
                         # Get available actions for agent 0 from environment state
-                        avail_actions = env_eval.get_avail_actions(env_state.env_state)
-                        avail_actions = jax.lax.stop_gradient(avail_actions)
-                        avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
-                        avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
+                        avail_actions_br = env_eval.get_avail_actions(env_state_br.env_state)
+                        avail_actions_br = jax.lax.stop_gradient(avail_actions_br)
+                        avail_actions_0_br = avail_actions_br["agent_0"].astype(jnp.float32)
+                        avail_actions_1_br = avail_actions_br["agent_1"].astype(jnp.float32)
 
-                        pi0, _, _ = agent0_net.apply(partner_param, (obs["agent_0"], avail_actions_0))
-                        act0 = pi0.sample(seed=act_rng) # sample because mode does worse on LBF
-                        pi1, _ = ego_agent_net.apply({'params': fcp_param}, (obs["agent_1"], avail_actions_1))
-                        act1 = pi1.sample(seed=part_rng)
-                        both_actions = [act0, act1]
-                        env_act = {k: both_actions[i] for i, k in enumerate(env_eval.agents)}
-                        obs_next, env_state_next, reward, done, info = env_eval.step(step_rng, env_state, env_act)
-                        against_br_reward = against_br_reward + reward["agent_0"]
+                        pi0_br, _, _ = agent0_net.apply(conf_param, (obs_br["agent_0"], avail_actions_0_br))
+                        act0_br = pi0_br.sample(seed=act_rng) # sample because mode does worse on LBF
+                        pi1_br, _ = ego_agent_net.apply({'params': br_param}, (obs_br["agent_1"], avail_actions_1_br))
+                        act1_br = pi1_br.sample(seed=part_rng)
+                        both_actions_br = [act0_br, act1_br]
+                        env_act_br = {k: both_actions_br[i] for i, k in enumerate(env_eval.agents)}
+                        obs_next_br, env_state_next_br, reward_br, done_br, info_br = env_eval.step(step_rng, env_state_br, env_act_br)
+                        against_br_reward = against_br_reward + reward_br["agent_0"]
 
-                        return (ep_ts + 1, env_state_next, obs_next, rng, done["__all__"], info, against_br_reward)
+                        return (ep_ts + 1, env_state_next_br, obs_next_br, rng, done_br["__all__"], info_br, against_br_reward)
                             
+
                     ep_ts, env_state, obs, rng, done_flag, last_info, against_br_reward = carry
                     new_carry = jax.lax.cond(
                         done_flag,
@@ -685,7 +685,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                 # Return the final info (which includes the episode return via LogWrapper).
                 return (final_carry[-2], final_carry[-1])
             
-            def run_single_episode_ego(rng, fcp_param, partner_param):
+            def run_single_episode_ego(rng, ego_param, conf_param):
                 # Reset the env.
                 rng, reset_rng = jax.random.split(rng)
                 obs, env_state = env_eval.reset(reset_rng)
@@ -699,7 +699,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
 
                 # Do one step to get a dummy info structure.
                 rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                pi0, _, _ = agent0_net.apply(partner_param, (obs["agent_0"], avail_actions_0))
+                pi0, _, _ = agent0_net.apply(conf_param, (obs["agent_0"], avail_actions_0))
                 # for LBF, IPPO policies do better when sampled than when taking the mode. 
                 act0 = pi0.sample(seed=act_rng)
 
@@ -717,7 +717,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
                                        ssm_hidden_dim=config["S5_SSM_SIZE"],)
                 
-                hstate_ego, pi1, _ = ego_agent_net.apply({'params': fcp_param}, hstate_ego, rnn_input_1)
+                hstate_ego, pi1, _ = ego_agent_net.apply({'params': ego_param}, hstate_ego, rnn_input_1)
                 act1 = pi1.sample(seed=part_rng).squeeze()
                     
                 both_actions = [act0, act1]
@@ -739,7 +739,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                         avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
                         
                         rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                        pi0, _, _ = agent0_net.apply(partner_param, (obs["agent_0"], avail_actions_0))
+                        pi0, _, _ = agent0_net.apply(conf_param, (obs["agent_0"], avail_actions_0))
                         act0 = pi0.sample(seed=act_rng) # sample because mode does worse on LBF
 
                         rnn_input_1 = (
@@ -747,7 +747,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                             done_flag.reshape(1, 1), 
                             avail_actions_1.reshape(1, -1)
                         )
-                        hstate_ego, pi1, _ = ego_agent_net.apply({'params': fcp_param}, hstate_ego, rnn_input_1)
+                        hstate_ego, pi1, _ = ego_agent_net.apply({'params': ego_param}, hstate_ego, rnn_input_1)
                         act1 = pi1.sample(seed=part_rng).squeeze()
                         both_actions = [act0, act1]
                         env_act = {k: both_actions[i] for i, k in enumerate(env_eval.agents)}
@@ -771,20 +771,20 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                 # Return the final info (which includes the episode return via LogWrapper).
                 return (final_carry[-2], final_carry[-1])
 
-            def run_episodes_br(rng, fcp_param, partner_param, num_eps):
+            def run_episodes_br(rng, br_param, conf_param, num_eps):
                 def body_fn(carry, _):
                     rng = carry
                     rng, ep_rng = jax.random.split(rng)
-                    all_outs = run_single_episode_br(ep_rng, fcp_param, partner_param)
+                    all_outs = run_single_episode_br(ep_rng, br_param, conf_param)
                     return rng, all_outs
                 rng, all_outs = jax.lax.scan(body_fn, rng, None, length=num_eps)
                 return all_outs  # each leaf has shape (num_eps, ...)
             
-            def run_episodes_ego(rng, fcp_param, partner_param, num_eps):
+            def run_episodes_ego(rng, ego_param, conf_param, num_eps):
                 def body_fn(carry, _):
                     rng = carry
                     rng, ep_rng = jax.random.split(rng)
-                    all_outs = run_single_episode_ego(ep_rng, fcp_param, partner_param)
+                    all_outs = run_single_episode_ego(ep_rng, ego_param, conf_param)
                     return rng, all_outs
                 rng, all_outs = jax.lax.scan(body_fn, rng, None, length=num_eps)
                 return all_outs  # each leaf has shape (num_eps, ...)
@@ -1675,19 +1675,19 @@ def run_paired(config):
     print("ALL EQUAL: ", (average_xp_rets_per_iter==average_sp_rets_per_iter).all())
     for num_iter in range(average_xp_rets_per_iter.shape[0]):
         for num_step in range(average_xp_rets_per_iter.shape[1]):
-            logger.log_item("Returns/teammate_xp", average_xp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Returns/teammate_sp", average_sp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Returns/ego", average_ego_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfValueLoss-Ego", average_value_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfActorLoss-Ego", average_actor_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfEntropy-Ego", average_entropy_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfValueLoss-BR", average_value_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfActorLoss-BR", average_actor_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfEntropy-BR",  average_entropy_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageEgoValueLoss", average_ego_value_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageEgoActorLoss", average_ego_actor_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageEgoEntropyLoss", average_ego_entropy_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfEgoRewards", ego_rewards[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfBRRewards", br_rewards[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Returns/teammate_against_ego", average_xp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Returns/teammate_against_br", average_sp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Returns/ego_against_teammate", average_ego_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/ValueLoss-Confederate", average_value_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/ActorLoss-Confederate", average_actor_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/Entropy-Confederate", average_entropy_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/ValueLoss-BR", average_value_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/ActorLoss-BR", average_actor_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/Entropy-BR",  average_entropy_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/ValueLoss-Ego", average_ego_value_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/ActorLoss-Ego", average_ego_actor_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/EntropyLoss-Ego", average_ego_entropy_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageEgoRewards", ego_rewards[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageBRRewards", br_rewards[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
 
             logger.commit()
