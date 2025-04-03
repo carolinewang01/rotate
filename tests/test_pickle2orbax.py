@@ -6,7 +6,8 @@ import shutil
 
 
 #################### LOAD SAVED PICKLE PYTREE
-train_state_path = "results/lbf/debug/2025-03-17_23-12-43/fcp_train.pkl"
+basepath = "/scratch/cluster/clw4542/explore_marl/continual-aht/results"
+train_state_path = f"{basepath}/lbf/debug/2025-03-17_23-12-43/fcp_train.pkl"
 with open(train_state_path, "rb") as f:
     out = pickle.load(f) # out is a pytree
 print("Loaded pickle pytree.")
@@ -22,7 +23,7 @@ print("percent_eaten type:", type(out['metrics']['percent_eaten']))
 
 ############### SAVE PYTREE USING ORBAX
 # Use a simpler path for testing
-new_ckpt_dir = "results/pickle2orbax_test"
+new_ckpt_dir = f"{basepath}/pickle2orbax_test"
 print(f"Attempting to save to directory: {new_ckpt_dir}")
 
 # Remove existing directory if it exists
