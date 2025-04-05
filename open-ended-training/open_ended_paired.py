@@ -583,12 +583,12 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                 # Metrics
                 metric = traj_batch_ego.info
                 metric["update_steps"] = update_steps
-                metric["value_loss_conf_ego"] = all_losses[0][1][0]
-                metric["value_loss_conf_br"] = all_losses[0][1][1]
-                metric["pg_loss_conf_ego"] = all_losses[0][1][2]
-                metric["pg_loss_conf_br"] = all_losses[0][1][3]
-                metric["entropy_conf_ego"] = all_losses[0][1][4]
-                metric["entropy_conf_br"] = all_losses[0][1][5]
+                metric["value_loss_conf_against_ego"] = all_losses[0][1][0]
+                metric["value_loss_conf_against_br"] = all_losses[0][1][1]
+                metric["pg_loss_conf_against_ego"] = all_losses[0][1][2]
+                metric["pg_loss_conf_against_br"] = all_losses[0][1][3]
+                metric["entropy_conf_against_ego"] = all_losses[0][1][4]
+                metric["entropy_conf_against_br"] = all_losses[0][1][5]
                 metric["average_rewards_br"] = jnp.mean(traj_batch_br_0.reward)
                 metric["average_rewards_ego"] = jnp.mean(traj_batch_ego.reward)
 
@@ -1593,12 +1593,15 @@ def process_metrics(teammate_training_logs, ego_training_logs):
 
     all_teammate_sp_returns = np.asarray(teammate_training_logs["all_ep_infos_br"])
     all_teammate_xp_returns = np.asarray(teammate_training_logs["all_ep_infos_ego"])
-    all_value_losses_teammate_ego = np.asarray(teammate_training_logs["metrics"]["value_loss_conf_ego"])
-    all_value_losses_teammate_br = np.asarray(teammate_training_logs["metrics"]["value_loss_conf_br"])
-    all_actor_losses_teammate_ego = np.asarray(teammate_training_logs["metrics"]["pg_loss_conf_ego"])
-    all_actor_losses_teammate_br = np.asarray(teammate_training_logs["metrics"]["pg_loss_conf_br"])
-    all_entropy_losses_teammate_ego = np.asarray(teammate_training_logs["metrics"]["entropy_conf_ego"])
-    all_entropy_losses_teammate_br = np.asarray(teammate_training_logs["metrics"]["entropy_conf_br"])
+    all_value_losses_teammate_against_ego = np.asarray(teammate_training_logs["metrics"]["value_loss_conf_against_ego"])
+    all_value_losses_teammate_against_br = np.asarray(teammate_training_logs["metrics"]["value_loss_conf_against_br"])
+    all_value_losses_br = np.asarray(teammate_training_logs["metrics"]["value_loss_br"])
+    all_actor_losses_teammate_against_ego = np.asarray(teammate_training_logs["metrics"]["pg_loss_conf_against_ego"])
+    all_actor_losses_teammate_against_br = np.asarray(teammate_training_logs["metrics"]["pg_loss_conf_against_br"])
+    all_actor_losses_br = np.asarray(teammate_training_logs["metrics"]["pg_loss_br"])
+    all_entropy_losses_teammate_against_ego = np.asarray(teammate_training_logs["metrics"]["entropy_conf_against_ego"])
+    all_entropy_losses_teammate_against_br = np.asarray(teammate_training_logs["metrics"]["entropy_conf_against_br"])
+    all_entropy_losses_br = np.asarray(teammate_training_logs["metrics"]["entropy_loss_br"])
     br_metrics = np.asarray(teammate_training_logs["metrics"]["average_rewards_br"])
     ego_metrics = np.asarray(teammate_training_logs["metrics"]["average_rewards_ego"])
 
@@ -1611,12 +1614,15 @@ def process_metrics(teammate_training_logs, ego_training_logs):
     average_sp_rets_per_iter = np.mean(np.mean(all_teammate_sp_returns[:, :, :, :, 0], axis=-1), axis=1)
     average_ego_rets_per_iter = np.mean(np.mean(all_ego_returns[:, :, :, :], axis=-1), axis=-1)
 
-    average_value_losses_teammate_ego = np.mean(np.mean(np.mean(all_value_losses_teammate_ego, axis=-1), axis=-1), axis=1)
-    average_actor_losses_teammate_ego = np.mean(np.mean(np.mean(all_actor_losses_teammate_ego, axis=-1), axis=-1), axis=1)
-    average_entropy_losses_teammate_ego = np.mean(np.mean(np.mean(all_entropy_losses_teammate_ego, axis=-1), axis=-1), axis=1)
-    average_value_losses_teammate_br = np.mean(np.mean(np.mean(all_value_losses_teammate_br, axis=-1), axis=-1), axis=1)
-    average_actor_losses_teammate_br = np.mean(np.mean(np.mean(all_actor_losses_teammate_br, axis=-1), axis=-1), axis=1)
-    average_entropy_losses_teammate_br = np.mean(np.mean(np.mean(all_entropy_losses_teammate_br, axis=-1), axis=-1), axis=1)
+    average_value_losses_confederate_against_ego = np.mean(np.mean(np.mean(all_value_losses_teammate_against_ego, axis=-1), axis=-1), axis=1)
+    average_actor_losses_confederate_against_ego = np.mean(np.mean(np.mean(all_actor_losses_teammate_against_ego, axis=-1), axis=-1), axis=1)
+    average_entropy_losses_confederate_against_ego = np.mean(np.mean(np.mean(all_entropy_losses_teammate_against_ego, axis=-1), axis=-1), axis=1)
+    average_value_losses_confederate_against_br = np.mean(np.mean(np.mean(all_value_losses_teammate_against_br, axis=-1), axis=-1), axis=1)
+    average_actor_losses_confederate_against_br = np.mean(np.mean(np.mean(all_actor_losses_teammate_against_br, axis=-1), axis=-1), axis=1)
+    average_entropy_losses_confederate_against_br = np.mean(np.mean(np.mean(all_entropy_losses_teammate_against_br, axis=-1), axis=-1), axis=1)
+    average_value_losses_br = np.mean(np.mean(np.mean(all_value_losses_br, axis=-1), axis=-1), axis=1)
+    average_actor_losses_br = np.mean(np.mean(np.mean(all_actor_losses_br, axis=-1), axis=-1), axis=1)
+    average_entropy_losses_br = np.mean(np.mean(np.mean(all_entropy_losses_br, axis=-1), axis=-1), axis=1)
     ego_rewards = np.mean(ego_metrics, axis=1)
     br_rewards = np.mean(br_metrics, axis=1)
 
@@ -1625,10 +1631,11 @@ def process_metrics(teammate_training_logs, ego_training_logs):
     average_ego_entropy_losses = np.mean(np.mean(all_ego_entropy_losses, axis=-1), axis=-1)
 
     return average_xp_rets_per_iter, average_sp_rets_per_iter, average_ego_rets_per_iter,\
-          average_value_losses_teammate_ego, average_actor_losses_teammate_ego, average_entropy_losses_teammate_ego,\
-          average_value_losses_teammate_br, average_actor_losses_teammate_br, average_entropy_losses_teammate_br,\
+          average_value_losses_confederate_against_ego, average_actor_losses_confederate_against_ego, average_entropy_losses_confederate_against_ego,\
+          average_value_losses_confederate_against_br, average_actor_losses_confederate_against_br, average_entropy_losses_confederate_against_br,\
           average_ego_value_losses, average_ego_actor_losses, average_ego_entropy_losses,\
-          ego_rewards, br_rewards
+          ego_rewards, br_rewards, \
+          average_value_losses_br, average_actor_losses_br, average_entropy_losses_br
 
 def run_paired(config):
     algorithm_config = dict(config["algorithm"])
@@ -1671,20 +1678,23 @@ def run_paired(config):
     average_value_losses_teammate_ego, average_actor_losses_teammate_ego, average_entropy_losses_teammate_ego = postprocessed_outs[3], postprocessed_outs[4], postprocessed_outs[5]
     average_value_losses_teammate_br, average_actor_losses_teammate_br, average_entropy_losses_teammate_br = postprocessed_outs[6], postprocessed_outs[7], postprocessed_outs[8]
     average_ego_value_losses, average_ego_actor_losses, average_ego_entropy_losses = postprocessed_outs[9], postprocessed_outs[10], postprocessed_outs[11]
-    ego_rewards, br_rewards = postprocessed_outs[12], postprocessed_outs[13]
+    ego_rewards, br_rewards = postprocessed_outs[12], postprocessed_outs[13],
+    average_value_losses_br, average_actor_losses_br, average_entropy_losses_br = postprocessed_outs[14], postprocessed_outs[15], postprocessed_outs[16]
 
-    print("ALL EQUAL: ", (average_xp_rets_per_iter==average_sp_rets_per_iter).all())
     for num_iter in range(average_xp_rets_per_iter.shape[0]):
         for num_step in range(average_xp_rets_per_iter.shape[1]):
             logger.log_item("Returns/teammate_xp", average_xp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Returns/teammate_sp", average_sp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Returns/ego", average_ego_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfValueLoss-Ego", average_value_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfActorLoss-Ego", average_actor_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfEntropy-Ego", average_entropy_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfValueLoss-BR", average_value_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfActorLoss-BR", average_actor_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Losses/AverageConfEntropy-BR",  average_entropy_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageConfValLoss-Against-Ego", average_value_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageConfActorLoss-Against-Ego", average_actor_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageConfEntropy-Against-Ego", average_entropy_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageConfValLoss-Against-BR", average_value_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageConfActorLoss-Against-BR", average_actor_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/AverageConfEntropy-Against-BR",  average_entropy_losses_teammate_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/Average-BR-ValLoss", average_value_losses_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/Average-BR-ActorLoss", average_actor_losses_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Losses/Average-BR-EntropyLoss",  average_entropy_losses_br[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Losses/AverageEgoValueLoss", average_ego_value_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Losses/AverageEgoActorLoss", average_ego_actor_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Losses/AverageEgoEntropyLoss", average_ego_entropy_losses[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
