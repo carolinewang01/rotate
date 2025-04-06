@@ -12,9 +12,6 @@ class PlateAgent(BaseAgent):
     """A heuristic agent for the Overcooked environment that plates dishes
     when ready and delivers. With probability p_plate_on_counter, it will
     place plates on counters instead of plating soup.
-
-    WARNING: This agent is not yet finished. 
-    TODO: may need to check if the pot has 3 onions and interact with it to start cooking. 
     """
     
     def __init__(self, agent_name: str, layout: Dict[str, Any], p_plate_on_counter: float = 0.1):
@@ -50,7 +47,7 @@ class PlateAgent(BaseAgent):
         def plate_soup(carry):
             '''Go to the nearest pot with ready soup and plate it. '''
             obs_3d, rng_key = carry
-            action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "pot", rng_key)
+            action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "ready_pot", rng_key)
             return (action, Goal.get_soup, new_rng_key)
             
         def deliver_dish(carry):
@@ -101,7 +98,7 @@ class PlateAgent(BaseAgent):
         updated_agent_state = AgentState(
             holding=agent_state.holding,
             goal=new_goal,
-            onions_in_pot=agent_state.onions_in_pot,
+            nonfull_pots=agent_state.nonfull_pots,
             soup_ready=agent_state.soup_ready,
             rng_key=rng_key
         )
