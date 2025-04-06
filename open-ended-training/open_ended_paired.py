@@ -921,7 +921,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
         # We'll do jax-friendly approach:
         seed_idx = jnp.floor_divide(idx, m_ckpts)
         ckpt_idx = jnp.mod(idx, m_ckpts)
-        return seed_idx, ckpt_idx
+        return seed_idx, m_ckpts*jnp.ones_like(ckpt_idx) - 1
 
     def gather_partner_params(partner_params_pytree, idx_vec):
         """
@@ -1311,9 +1311,9 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                     lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), 
                     params_pytree)
 
-            max_episode_steps = config["MAX_EVAL_EPISODES"]
+            max_episode_steps = config["NUM_STEPS_FCP"]
             # TODO Gather single episode data
-            def run_single_episode(rng, partner_param):
+            def run_single_episode(rng, fcp_param, partner_param):
                 # Reset the env.
                 rng, reset_rng = jax.random.split(rng)
                 obs, env_state = env.reset(reset_rng)
@@ -1342,7 +1342,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                     avail_actions_0
                 )
 
-                hstate_0, pi_0, val_0 = agent0_net.apply(train_state.params, init_hstate_0, rnn_input_0)
+                hstate_0, pi_0, val_0 = agent0_net.apply(fcp_param, init_hstate_0, rnn_input_0)
                 act_0 = pi_0.sample(seed=act_rng).squeeze()
                 logp_0 = pi_0.log_prob(act_0).squeeze()
                 val_0 = val_0.squeeze()
@@ -1376,13 +1376,18 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                         avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
                         avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
 
+                        # Get agent obses
+                        obs_0 = obs["agent_0"]
+                        obs_1 = obs["agent_1"]
+                        prev_done_0 = done_flag
+
                         rnn_input_0 = (
                             obs_0.reshape(1, 1, -1),
-                            prev_done.reshape(1, 1), 
+                            prev_done_0.reshape(1, 1), 
                             avail_actions_0
                         )
                         rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                        hstate_0, pi_0, val_0 = agent0_net.apply(train_state.params, hstate_0, rnn_input_0)
+                        hstate_0, pi_0, val_0 = agent0_net.apply(fcp_param, hstate_0, rnn_input_0)
                         act_0 = pi_0.sample(seed=act_rng).squeeze()
                         logp_0 = pi_0.log_prob(act_0).squeeze()
                         val_0 = val_0.squeeze()
@@ -1419,11 +1424,11 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                 # Return the final info (which includes the episode return via LogWrapper).
                 return final_carry[-2], final_carry[-1]
             
-            def run_episodes(rng, partner_param, num_eps):
+            def run_episodes(rng, fcp_param, partner_param, num_eps):
                 def body_fn(carry, _):
                     rng = carry
                     rng, ep_rng = jax.random.split(rng)
-                    ep_info, final_returns = run_single_episode(ep_rng, partner_param)
+                    ep_info, final_returns = run_single_episode(ep_rng, fcp_param, partner_param)
                     return rng, (ep_info, final_returns)
                 rng, all_outs = jax.lax.scan(body_fn, rng, None, length=num_eps)
                 return all_outs  # each leaf has shape (num_eps, ...)
@@ -1452,7 +1457,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                     eval_partner_indices = jnp.arange(num_total_partners)
                     gathered_params = gather_partner_params(partner_params, eval_partner_indices)
                     eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
-                    eval_ep_return_infos = jax.vmap(lambda x: run_episodes(eval_rng, x, max_episode_steps))(gathered_params)
+                    eval_ep_return_infos = jax.vmap(lambda x: run_episodes(eval_rng, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
                     return (new_ckpt_arr, cidx + 1, eval_ep_return_infos)
                 
                 def skip_ckpt(args):
@@ -1474,7 +1479,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
             eval_partner_indices = jnp.arange(num_total_partners)
             gathered_params = gather_partner_params(partner_params, eval_partner_indices)
             eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
-            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(eval_rng, x, max_episode_steps))(gathered_params)
+            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(eval_rng, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
 
             # initial runner state for scanning
             update_steps = 0
@@ -1612,7 +1617,7 @@ def process_metrics(teammate_training_logs, ego_training_logs):
 
     average_xp_rets_per_iter = np.mean(np.mean(all_teammate_xp_returns[:, :, :, :, 0], axis=-1), axis=1)
     average_sp_rets_per_iter = np.mean(np.mean(all_teammate_sp_returns[:, :, :, :, 0], axis=-1), axis=1)
-    average_ego_rets_per_iter = np.mean(np.mean(all_ego_returns[:, :, :, :], axis=-1), axis=-1)
+    average_ego_rets_per_iter = np.mean(np.mean(all_ego_returns[:, :, :, :, 0], axis=-1), axis=-1)
 
     average_value_losses_confederate_against_ego = np.mean(np.mean(np.mean(all_value_losses_teammate_against_ego, axis=-1), axis=-1), axis=1)
     average_actor_losses_confederate_against_ego = np.mean(np.mean(np.mean(all_actor_losses_teammate_against_ego, axis=-1), axis=-1), axis=1)
