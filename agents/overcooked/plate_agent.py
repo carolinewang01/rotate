@@ -39,25 +39,25 @@ class PlateAgent(BaseAgent):
             '''Go to the nearest plate and pick it up. '''
             obs_3d, rng_key = carry
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "plate", rng_key)
-            return (action, new_rng_key)
+            return (action, Goal.get_plate, new_rng_key)
             
         def put_plate_on_counter(carry):
             '''Go to the nearest free counter and put the plate on it. '''
             obs_3d, rng_key = carry
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "counter", rng_key)
-            return (action, new_rng_key)
+            return (action, Goal.put_plate, new_rng_key)
             
         def plate_soup(carry):
             '''Go to the nearest pot with ready soup and plate it. '''
             obs_3d, rng_key = carry
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "pot", rng_key)
-            return (action, new_rng_key)
+            return (action, Goal.get_soup, new_rng_key)
             
         def deliver_dish(carry):
             '''Go to the delivery window and deliver the dish. '''
             obs_3d, rng_key = carry
             action, new_rng_key = self._go_to_obj_and_interact(obs_3d, "delivery", rng_key)
-            return (action, new_rng_key)
+            return (action, Goal.deliver, new_rng_key)
         
         # Get action and update RNG key based on current state
         def handle_holding_plate(carry):
@@ -66,28 +66,21 @@ class PlateAgent(BaseAgent):
             rng_key, subkey = jax.random.split(rng_key)
             should_put_on_counter = jax.random.uniform(subkey) < self.p_plate_on_counter
             
-            # Update goal based on the decision
-            new_goal = lax.cond(
-                should_put_on_counter,
-                lambda _: Goal.put_plate,
-                lambda _: Goal.get_soup,
-                None
-            )
-            
+            # If we should put on counter, do that, otherwise check if soup is ready
             return lax.cond(
                 should_put_on_counter,
                 put_plate_on_counter,
-                lambda _: lax.cond(
+                lambda carry: lax.cond(
                     agent_state.soup_ready,
                     plate_soup,
-                    lambda _: (Actions.stay, rng_key),
-                    (obs_3d, rng_key)
+                    lambda _: (Actions.stay, Goal.get_soup, carry[1]),
+                    carry
                 ),
                 (obs_3d, rng_key)
-            ), new_goal
+            )
         
-        # Get action and update RNG key based on current state
-        action_result, rng_key = lax.cond(
+        # Main action selection and goal update logic
+        action, new_goal, rng_key = lax.cond(
             agent_state.holding == Holding.nothing,
             get_plate,
             lambda carry: lax.cond(
@@ -96,16 +89,13 @@ class PlateAgent(BaseAgent):
                 lambda carry: lax.cond(
                     agent_state.holding == Holding.dish,
                     deliver_dish,
-                    lambda _: ((Actions.stay, agent_state.goal), carry[1]),
+                    lambda _: (Actions.stay, agent_state.goal, carry[1]),
                     carry
                 ),
                 carry
             ),
             (obs_3d, agent_state.rng_key)
         )
-        
-        # Unpack action and goal from result
-        action, new_goal = action_result
         
         # Create new state with updated key and goal, preserving other state values
         updated_agent_state = AgentState(

@@ -18,9 +18,9 @@ class Holding:
 @struct.dataclass
 class Goal:
     get_onion = 0
-    put_onion = 1
+    put_onion = 1 # put onion on counter or in pot
     get_plate = 2
-    put_plate = 3
+    put_plate = 3 # put plate on counter
     get_soup = 4
     deliver = 5
 
@@ -52,6 +52,7 @@ class BaseAgent:
         self.num_onion_piles = layout["onion_pile_idx"].shape[0]
         self.num_plate_piles = layout["plate_pile_idx"].shape[0]
         self.num_pots = layout["pot_idx"].shape[0]
+        self.num_delivery_locations = layout["goal_idx"].shape[0]
         
         self.obs_shape = (self.map_height, self.map_width, 26)  # Overcooked uses 26 channels
 
@@ -242,33 +243,36 @@ class BaseAgent:
         agent_y, agent_x = self._get_agent_pos(obs)
         
         if obj_type == "pot":
-            target_y, target_x = self._get_nearest_pot_pos(obs, agent_y, agent_x)
+            target_y, target_x = self._get_nearest_pot_or_delivery_pos(obs, agent_y, agent_x, "pot")
         elif obj_type == "onion":
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "onion")
         elif obj_type == "plate":
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "plate")
         elif obj_type == "counter":
             target_y, target_x = self._get_nearest_free_counter(obs, agent_y, agent_x)
+        elif obj_type == "delivery":
+            target_y, target_x = self._get_nearest_pot_or_delivery_pos(obs, agent_y, agent_x, "delivery")
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
         
-        print(f"\t[_go_to_obj] Agent position: {agent_y}, {agent_x}")
-        print(f"\t[_go_to_obj] Target position: {target_y}, {target_x}")
+        # print(f"\t[_go_to_obj] Agent position: {agent_y}, {agent_x}")
+        # print(f"\t[_go_to_obj] Target position: {target_y}, {target_x}")
         # Move towards target
         nearest_free_y, nearest_free_x = self._get_nearest_free_space(target_y, target_x, obs)
     
-        print(f"\t[_go_to_obj] Nearest free space: {nearest_free_y}, {nearest_free_x}")
+        # print(f"\t[_go_to_obj] Nearest free space: {nearest_free_y}, {nearest_free_x}")
         
         # if obj_type == "counter":
         #     breakpoint()
 
         action, rng_key = self._move_towards(agent_y, agent_x, 
                 nearest_free_y, nearest_free_x, obs, rng_key)
-        print(f"\t[_go_to_obj] Action: {action}")
+        # print(f"\t[_go_to_obj] Action: {action}")
         return action, rng_key
 
-    def _get_nearest_pot_pos(self, obs: jnp.ndarray, agent_y: int, agent_x: int) -> Tuple[int, int]:
-        '''Returns position of the nearest pot.
+    def _get_nearest_pot_or_delivery_pos(self, obs: jnp.ndarray, agent_y: int, agent_x: int,
+                             obj_type: str) -> Tuple[int, int]:
+        '''Returns position of the nearest pot or delivery location.
         
         Args:
             obs: Observation array
@@ -279,23 +283,31 @@ class BaseAgent:
             Tuple of (y, x) coordinates of nearest pot
         '''
         # Get all pot positions
-        pot_layer = obs[:, :, 10]
-        all_pot_positions = jnp.argwhere(
-            pot_layer > 0,
-            size=self.num_pots  # Use number of pots from layout
-        )
-
+        if obj_type == "pot":
+            pot_layer = obs[:, :, 10]
+            all_item_pos = jnp.argwhere(
+                pot_layer > 0,
+                size=self.num_pots  # Use number of pots from layout
+            )
+        elif obj_type == "delivery":
+            delivery_layer = obs[:, :, 15]
+            all_item_pos = jnp.argwhere(
+                delivery_layer > 0,
+                size=self.num_delivery_locations  # Use number of delivery locations from layout
+            )
+        else:
+            raise ValueError(f"Invalid object type: {obj_type}")
         # Calculate Manhattan distances to each pot
         distances = jnp.sum(
-            jnp.abs(all_pot_positions - jnp.array([agent_y, agent_x])),
+            jnp.abs(all_item_pos - jnp.array([agent_y, agent_x])),
             axis=1
         )
         
-        # Find the position of the nearest pot
+        # Find the position of the nearest pot or delivery location
         nearest_idx = jnp.argmin(distances)
-        nearest_pot_pos = all_pot_positions[nearest_idx]
+        nearest_item_pos = all_item_pos[nearest_idx]
         
-        return nearest_pot_pos
+        return nearest_item_pos
 
     def _get_nearest_onion_or_plate_pos(self, obs: jnp.ndarray, agent_y: int, agent_x: int,
                                         obj_type: str) -> Tuple[int, int]:
@@ -441,7 +453,7 @@ class BaseAgent:
         )
 
         scores = jnp.array([up_score, down_score, right_score, left_score, stay_score])
-        print(f"\t\t[_move_towards] Mmt scores: {scores}")
+        # print(f"\t\t[_move_towards] Mmt scores: {scores}")
 
         # Set scores to large negative number for invalid moves
         scores = jnp.where(
@@ -478,7 +490,7 @@ class BaseAgent:
         agent_y, agent_x = self._get_agent_pos(obs)
         
         if obj_type == "pot":
-            target_y, target_x = self._get_nearest_pot_pos(obs, agent_y, agent_x)
+            target_y, target_x = self._get_nearest_pot_or_delivery_pos(obs, agent_y, agent_x, "pot")
         elif obj_type == "onion":
             target_y, target_x = self._get_nearest_onion_or_plate_pos(obs, agent_y, agent_x, "onion")
         elif obj_type == "plate":
@@ -486,15 +498,12 @@ class BaseAgent:
         elif obj_type == "counter":
             target_y, target_x = self._get_nearest_free_counter(obs, agent_y, agent_x)
         elif obj_type == "delivery":
-            # Get delivery window position (channel 15)
-            delivery_layer = obs[:, :, 15]
-            delivery_pos = jnp.argwhere(delivery_layer > 0, size=1)[0]
-            target_y, target_x = delivery_pos
+            target_y, target_x = self._get_nearest_pot_or_delivery_pos(obs, agent_y, agent_x, "delivery")
         else:
             raise ValueError(f"Invalid object type: {obj_type}")
         
-        print(f"Agent position: {agent_y}, {agent_x}")
-        print(f"Target {obj_type} position: {target_y}, {target_x}")
+        # print(f"Agent position: {agent_y}, {agent_x}")
+        # print(f"Target {obj_type} position: {target_y}, {target_x}")
 
         # Check if agent is adjacent to target
         is_adjacent = jnp.logical_or(
@@ -533,9 +542,9 @@ class BaseAgent:
 
         target_orientation_action = _get_target_orientation_action(agent_y, agent_x, target_y, target_x)
         
-        print(f"\t[_go_to_obj_and_interact] Target orientation action: {target_orientation_action}")
-        print(f"\t[_go_to_obj_and_interact] Agent direction index: {agent_dir_idx}")
-        print(f"\t[_go_to_obj_and_interact] Is adjacent: {is_adjacent}")
+        # print(f"\t[_go_to_obj_and_interact] Target orientation action: {target_orientation_action}")
+        # print(f"\t[_go_to_obj_and_interact] Agent direction index: {agent_dir_idx}")
+        # print(f"\t[_go_to_obj_and_interact] Is adjacent: {is_adjacent}")
 
         # If adjacent but not facing the right direction, turn to face it
         # if adjacent and facing the right direction, interact
@@ -551,5 +560,5 @@ class BaseAgent:
             lambda _: self._go_to_obj(obs, obj_type, rng_key),
             None
         )
-        print(f"\t[_go_to_obj_and_interact] Action: {action}")
+        # print(f"\t[_go_to_obj_and_interact] Action: {action}")
         return action, rng_key

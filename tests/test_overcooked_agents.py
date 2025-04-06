@@ -5,7 +5,7 @@ import jax
 from envs.overcooked.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
 from envs.overcooked.augmented_layouts import augmented_layouts
-from agents.overcooked import OnionAgent, StaticAgent, RandomAgent
+from agents.overcooked import OnionAgent, StaticAgent, PlateAgent
 import time
 
 def run_episode(env, agent0, agent1, key) -> Tuple[Dict[str, float], int]:
@@ -87,7 +87,7 @@ def main(num_episodes,
     # Initialize agents
     print("Initializing agents...")
     agent0 = OnionAgent("agent_0", layout=layout) # red
-    agent1 = StaticAgent("agent_1", layout=layout) # blue
+    agent1 = PlateAgent("agent_1", layout=layout) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())
@@ -147,8 +147,9 @@ if __name__ == "__main__":
 
     layout_names = [
         # "asymm_advantages", "coord_ring", 
-        # "counter_circuit", "cramped_room", 
-        "forced_coord"
+        # "counter_circuit", 
+        "cramped_room", 
+        # "forced_coord"
                     ]
 
     # TODO: remove debug print statements
@@ -158,6 +159,6 @@ if __name__ == "__main__":
                 layout_name=layout_name,
                 random_reset=True,
                 random_obj_state=False,
-                max_steps=30,
+                max_steps=100,
                 visualize=VISUALIZE, 
                 save_gif=SAVE_GIF) 
