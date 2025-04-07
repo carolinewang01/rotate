@@ -1,7 +1,3 @@
-"""
-Based on PureJaxRL Implementation of PPO. 
-Script adapted from JaxMARL IPPO RNN Smax script.
-"""
 import time
 
 import jax
@@ -10,18 +6,13 @@ import jaxmarl
 import jumanji
 import optax
 import numpy as np
-from omegaconf import OmegaConf, open_dict
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
-from common.wandb_visualizations import Logger
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-from fcp.ippo_checkpoints import make_train, unbatchify, Transition
+from ppo.ippo import unbatchify, Transition
 from common.mlp_actor_critic import ActorCritic
-from common.s5_actor_critic import ActorCriticS5, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
-from fcp.utils import load_checkpoints, save_train_run
-from fcp.vis_utils import get_stats, plot_train_metrics
-from functools import partial
+from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from common.wandb_visualizations import Logger
 
 def train_adversarial_partners(config, ego_policy, minimax_env):
@@ -108,7 +99,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                                     clip_eigs=False,
                                     bidirectional=False)
             
-            partner_net = ActorCriticS5(env.action_space(env.agents[0]).n, 
+            partner_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -361,7 +352,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                     avail_actions_1.reshape(1, -1)
                 )
 
-                ego_agent_net = ActorCriticS5(env.action_space(env.agents[0]).n, 
+                ego_agent_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -614,7 +605,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
             # --------------------------
             # 3a) Init agent_0 network
             # --------------------------
-            agent0_net = ActorCriticS5(env.action_space(env.agents[0]).n, 
+            agent0_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -1188,7 +1179,7 @@ def initialize_agent(config, base_seed):
                             clip_eigs=False,
                             bidirectional=False)
     
-    agent0_net =  ActorCriticS5(env.action_space(env.agents[0]).n, 
+    agent0_net =  S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -1248,7 +1239,6 @@ def run_minimax(config):
     else:
         fcp_env = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
 
-    start_time = time.time()
     partial_with_config = lambda x, y : open_ended_training(x, y, algorithm_config, teammate_train_env, fcp_env)
     init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)

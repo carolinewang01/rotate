@@ -1,9 +1,3 @@
-"""
-Based on PureJaxRL Implementation of PPO. 
-Script adapted from JaxMARL IPPO RNN Smax script.
-"""
-import time
-
 import jax
 import jax.numpy as jnp
 import jaxmarl
@@ -13,12 +7,9 @@ from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-from fcp.ippo_checkpoints import make_train, unbatchify, Transition
-from fcp.networks import ActorCritic
-from fcp.utils import load_checkpoints, save_train_run
-from fcp.vis_utils import get_stats, plot_train_metrics
-from functools import partial
-
+from ppo.ippo import make_train, unbatchify, Transition
+from common.mlp_actor_critic import ActorCritic
+from common.wandb_visualizations import Logger
 
 def train_partners_in_parallel(config, base_seed, partner_training_env):
     '''

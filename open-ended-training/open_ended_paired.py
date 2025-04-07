@@ -1,9 +1,3 @@
-"""
-Based on PureJaxRL Implementation of PPO. 
-Script adapted from JaxMARL IPPO RNN Smax script.
-"""
-import time
-
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -15,12 +9,9 @@ from jaxmarl.wrappers.baselines import LogWrapper
 from common.wandb_visualizations import Logger
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-from fcp.ippo_checkpoints import make_train, unbatchify, Transition
+from ppo.ippo import unbatchify, Transition
 from common.mlp_actor_critic import ActorCritic, ActorWithDoubleCritic
-from common.s5_actor_critic import ActorCriticS5, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
-from fcp.utils import load_checkpoints, save_train_run
-from fcp.vis_utils import get_stats, plot_train_metrics
-from functools import partial
+from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 
 
 def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_env_ego, regret_env_eval):
@@ -142,7 +133,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                                     clip_eigs=False,
                                     bidirectional=False)
             
-            ego_agent_net = ActorCriticS5(env_ego.action_space(env_ego.agents[0]).n, 
+            ego_agent_net = S5ActorCritic(env_ego.action_space(env_ego.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -712,7 +703,7 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
                     avail_actions_1.reshape(1, -1)
                 )
 
-                ego_agent_net = ActorCriticS5(env_eval.action_space(env_eval.agents[0]).n, 
+                ego_agent_net = S5ActorCritic(env_eval.action_space(env_eval.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -1001,7 +992,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
             # --------------------------
             # 3a) Init agent_0 network
             # --------------------------
-            agent0_net = ActorCriticS5(env.action_space(env.agents[0]).n, 
+            agent0_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
@@ -1576,7 +1567,7 @@ def initialize_agent(config, base_seed):
                             clip_eigs=False,
                             bidirectional=False)
     
-    agent0_net =  ActorCriticS5(env.action_space(env.agents[0]).n, 
+    agent0_net =  S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
