@@ -2,12 +2,6 @@ defaults:
   - hydra: hydra_simple
   - _self_
 
-name: LBF
-logger:
-  load_dir: LBF
-  project: open-ended-aht
-  entity: aht-project
-
 algorithm:
   ALG: PAIRED
   NUM_ITERS: 1
@@ -44,3 +38,10 @@ algorithm:
   S5_PRENORM: true
   S5_DO_GTRXL_NORM: true
   RESULTS_PATH: results/lbf
+
+name: LBF
+# wandb settings
+logger:
+  load_dir: LBF
+  project: open-ended-aht
+  entity: aht-project

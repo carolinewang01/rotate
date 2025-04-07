@@ -42,6 +42,7 @@ algorithm:
 
 name: LBF
 
+# wandb settings
 logger:
   load_dir: LBF
   project: open-ended-aht

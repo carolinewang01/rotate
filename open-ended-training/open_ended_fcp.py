@@ -1,12 +1,10 @@
 import jax
 import jax.numpy as jnp
-import jaxmarl
-import jumanji
 import optax
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+from envs import make_env
 from ppo.ippo import make_train, unbatchify, Transition
 from common.mlp_actor_critic import ActorCritic
 from common.wandb_visualizations import Logger
@@ -424,13 +422,10 @@ def open_ended_training(init_fcp_params, others, config, teammate_train_env, fcp
 
 def initialize_agent(config, base_seed):
     rng = jax.random.PRNGKey(base_seed)
-    if config["ENV_NAME"] == 'lbf':
-        env = jumanji.make('LevelBasedForaging-v0')
-        env = JumanjiToJaxMARL(env)
-    else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
 
+    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
+
     agent0_net = ActorCritic(env.action_space(env.agents[0]).n, activation=config["ACTIVATION"])
     rng, init_rng = jax.random.split(rng)
     dummy_obs = jnp.zeros(env.observation_space(env.agents[0]).shape)
@@ -466,18 +461,11 @@ if __name__ == "__main__":
         "NUM_SEEDS": 3,
         "RESULTS_PATH": "results/lbf"
     }
-
-    if config["ENV_NAME"] == 'lbf':
-        teammate_train_env = jumanji.make('LevelBasedForaging-v0')
-        teammate_train_env = JumanjiToJaxMARL(teammate_train_env)
-    else: 
-        teammate_train_env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-
-    if config["ENV_NAME"] == 'lbf':
-        fcp_env = jumanji.make('LevelBasedForaging-v0')
-        fcp_env = JumanjiToJaxMARL(fcp_env)
-    else:
-        fcp_env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
+    
+    teammate_train_env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
+    teammate_train_env = LogWrapper(teammate_train_env)
+    fcp_env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
+    fcp_env = LogWrapper(fcp_env)
 
 
     partial_with_config = lambda x, y : open_ended_training(x, y, config, teammate_train_env, fcp_env)

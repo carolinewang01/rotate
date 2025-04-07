@@ -9,6 +9,7 @@ from jaxmarl.wrappers.baselines import LogWrapper
 from common.wandb_visualizations import Logger
 
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
+from envs import make_env
 from ppo.ippo import unbatchify, Transition
 from common.mlp_actor_critic import ActorCritic, ActorWithDoubleCritic
 from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
@@ -27,12 +28,8 @@ def train_regret_maximizing_partners(config, ego_policy, regret_env_br, regret_e
 
         # ------------------------------
         env_br = regret_env_br
-        env_br = LogWrapper(env_br)
         env_ego = regret_env_ego
-        env_ego = LogWrapper(env_ego)
-
         env_eval = regret_env_eval
-        env_eval = LogWrapper(env_eval)
 
         num_agents = env_br.num_agents
         assert num_agents == 2, "This FCP snippet assumes exactly 2 agents."
@@ -1518,12 +1515,7 @@ def open_ended_training(init_fcp_params, others, config, teammate_train_env_br, 
 
 def initialize_agent(config, base_seed):
     rng = jax.random.PRNGKey(base_seed)
-    if config["ENV_NAME"] == 'lbf':
-        env = jumanji.make('LevelBasedForaging-v0')
-        env = JumanjiToJaxMARL(env)
-    else:
-        env = jaxmarl.make(config["ENV_NAME"], **config["ENV_KWARGS"])
-
+    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
     # S5 specific parameters
     d_model = config["S5_D_MODEL"]
@@ -1615,31 +1607,16 @@ def process_metrics(teammate_training_logs, ego_training_logs):
 def run_paired(config):
     algorithm_config = dict(config["algorithm"])
     logger = Logger(config)
+
+    teammate_train_env_br = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    teammate_train_env_br = LogWrapper(teammate_train_env_br)
+    teammate_train_env_ego = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    teammate_train_env_ego = LogWrapper(teammate_train_env_ego)
+    fcp_env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    fcp_env = LogWrapper(fcp_env)
+    env_eval = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    env_eval = LogWrapper(env_eval)
     
-    if algorithm_config["ENV_NAME"] == 'lbf':
-        teammate_train_env_br = jumanji.make('LevelBasedForaging-v0')
-        teammate_train_env_br = JumanjiToJaxMARL(teammate_train_env_br)
-    else: 
-        teammate_train_env_br = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
-
-    if algorithm_config["ENV_NAME"] == 'lbf':
-        teammate_train_env_ego = jumanji.make('LevelBasedForaging-v0')
-        teammate_train_env_ego = JumanjiToJaxMARL(teammate_train_env_ego)
-    else: 
-        teammate_train_env_ego = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
-
-    if algorithm_config["ENV_NAME"] == 'lbf':
-        env_eval = jumanji.make('LevelBasedForaging-v0')
-        env_eval = JumanjiToJaxMARL(env_eval)
-    else: 
-        env_eval = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
-
-    if algorithm_config["ENV_NAME"] == 'lbf':
-        fcp_env = jumanji.make('LevelBasedForaging-v0')
-        fcp_env = JumanjiToJaxMARL(fcp_env)
-    else:
-        fcp_env = jaxmarl.make(algorithm_config["ENV_NAME"], **algorithm_config["ENV_KWARGS"])
-
     partial_with_config = lambda x, y : open_ended_training(x, y, algorithm_config, teammate_train_env_br, teammate_train_env_ego, fcp_env, env_eval)
     init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
