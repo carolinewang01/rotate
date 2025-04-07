@@ -1,21 +1,17 @@
-import os
-from datetime import datetime
-import pickle
+from typing import NamedTuple
+import jax.numpy as jnp
 
 
-def save_train_run(config, out):
-    curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_dir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-        
-    savepath = f"{save_dir}/train_run.pkl"
-    with open(savepath, "wb") as f:
-        pickle.dump(out, f)
-    return savepath
+class Transition(NamedTuple):
+    done: jnp.ndarray
+    action: jnp.ndarray
+    value: jnp.ndarray
+    reward: jnp.ndarray
+    log_prob: jnp.ndarray
+    obs: jnp.ndarray
+    info: jnp.ndarray
+    avail_actions: jnp.ndarray
 
-def load_checkpoints(path):
-    with open(path, "rb") as f:
-        out = pickle.load(f)
-        checkpoints = out["checkpoints"]
-    return checkpoints
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_agents):
+    x = x.reshape((num_agents, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}
