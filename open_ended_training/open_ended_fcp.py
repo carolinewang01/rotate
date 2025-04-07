@@ -474,5 +474,6 @@ def run_fcp(config):
             xs=None,
             length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
         )
+    
     end_time = time.time()
     log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
