@@ -90,14 +90,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
                                     Lambda_re_init=Lambda.real,
                                     Lambda_im_init=Lambda.imag,
                                     V=V,
-                                    Vinv=Vinv,
-                                    C_init="lecun_normal",
-                                    discretization="zoh",
-                                    dt_min=0.001,
-                                    dt_max=0.1,
-                                    conj_sym=True,
-                                    clip_eigs=False,
-                                    bidirectional=False)
+                                    Vinv=Vinv)
             
             partner_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 
@@ -588,14 +581,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                                  Lambda_re_init=Lambda.real,
                                  Lambda_im_init=Lambda.imag,
                                  V=V,
-                                 Vinv=Vinv,
-                                 C_init="lecun_normal",
-                                 discretization="zoh",
-                                 dt_min=0.001,
-                                 dt_max=0.1,
-                                 conj_sym=True,
-                                 clip_eigs=False,
-                                 bidirectional=False)
+                                 Vinv=Vinv)
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -1170,14 +1156,7 @@ def initialize_agent(config, base_seed):
                             Lambda_re_init=Lambda.real,
                             Lambda_im_init=Lambda.imag,
                             V=V,
-                            Vinv=Vinv,
-                            C_init="lecun_normal",
-                            discretization="zoh",
-                            dt_min=0.001,
-                            dt_max=0.1,
-                            conj_sym=True,
-                            clip_eigs=False,
-                            bidirectional=False)
+                            Vinv=Vinv)
     
     agent0_net =  S5ActorCritic(env.action_space(env.agents[0]).n, 
                                        config=config, 

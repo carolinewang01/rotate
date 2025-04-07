@@ -45,7 +45,6 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
         """Given a scalar in [0, n_seeds*m_ckpts), return (seed_idx, ckpt_idx)."""
         # seed_idx = idx // m_ckpts
         # ckpt_idx = idx % m_ckpts
-        # We'll do jax-friendly approach:
         seed_idx = jnp.floor_divide(idx, m_ckpts)
         ckpt_idx = jnp.mod(idx, m_ckpts)
         return seed_idx, ckpt_idx
@@ -78,7 +77,6 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
         # ------------------------------
         # 2) Prepare environment (same as IPPO).
         #    We'll assume exactly 2 agents: agent_0 = trainable, agent_1 = partner.
-
         # ------------------------------
         env = fcp_env
         env = LogWrapper(env)
@@ -403,13 +401,11 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
 
         return train
     # ------------------------------
-    # 4) Actually run the FCP training
+    # 4) Run the FCP training
     # ------------------------------
     # training is vmapped across multiple seeds
     rng = jax.random.PRNGKey(config["TRAIN_SEED"])
-    # rngs = jax.random.split(rng, 1)
     with jax.disable_jit(False):
-        #fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, partner_params)))
         fcp_train_fn = jax.jit(make_fcp_train(config, partner_params))
         out = fcp_train_fn(rng)
     return out
@@ -442,8 +438,6 @@ def initialize_agent(config, base_seed):
 
     return init_params
 
-
-
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
@@ -453,7 +447,6 @@ if __name__ == "__main__":
         "TOTAL_TIMESTEPS": 3e6, # 3e6 
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 16, # 4,
-        # TODO: change num checkpoints to checkpoint interval (measured in timesteps)
         "NUM_CHECKPOINTS": 5,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
