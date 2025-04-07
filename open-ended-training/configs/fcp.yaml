@@ -7,16 +7,16 @@ ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
 
 algorithm:
-  ALG: minimax
-  NUM_OPEN_ENDED_ITERS: 20
+  ALG: fcp
+  NUM_OPEN_ENDED_ITERS: 10
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
-  NUM_STEPS: ${ROLLOUT_LENGTH} 
+  NUM_STEPS: ${ROLLOUT_LENGTH} # rollout length
   TOTAL_TIMESTEPS: 3e6 
   LR: 1.e-4
   UPDATE_EPOCHS: 15
-  MAX_EVAL_EPISODES: 20
+  MAX_EVAL_EPISODES: 20 # TODO: CHECK THIS
   NUM_MINIBATCHES: 16
   NUM_CHECKPOINTS: 5
   GAMMA: 0.99
@@ -42,11 +42,11 @@ algorithm:
   S5_PRENORM: true
   S5_DO_GTRXL_NORM: true
 
-name: open_ended_minimax
+name: open_ended_fcp
 
 # wandb settings
 logger:
-  load_dir: open_ended_minimax
+  load_dir: open_ended_fcp
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled

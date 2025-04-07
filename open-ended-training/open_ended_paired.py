@@ -1,14 +1,11 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-import jaxmarl
-import jumanji
 import optax
 from flax.training.train_state import TrainState
 from jaxmarl.wrappers.baselines import LogWrapper
 from common.wandb_visualizations import Logger
 
-from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from envs import make_env
 from ppo.ippo import unbatchify, Transition
 from common.mlp_actor_critic import ActorCritic, ActorWithDoubleCritic
@@ -1621,7 +1618,7 @@ def run_paired(config):
     init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
-    final_fcp_params, outs = jax.lax.scan(partial_with_config, init_params, length=config.algorithm["NUM_ITERS"])
+    final_fcp_params, outs = jax.lax.scan(partial_with_config, init_params, length=algorithm_config["NUM_OPEN_ENDED_ITERS"])
     teammate_training_logs, ego_training_logs = outs
 
     postprocessed_outs = process_metrics(teammate_training_logs, ego_training_logs)

@@ -1206,7 +1206,7 @@ def run_minimax(config):
     init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
-    final_params, outs = jax.lax.scan(partial_with_config, init_params, length=config.algorithm["NUM_ITERS"])
+    final_params, outs = jax.lax.scan(partial_with_config, init_params, length=algorithm_config["NUM_OPEN_ENDED_ITERS"])
     outs_train, outs_fcp = outs
     all_metrics = process_metrics(outs_train, outs_fcp)
 

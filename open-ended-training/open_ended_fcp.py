@@ -77,7 +77,6 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
         #    We'll assume exactly 2 agents: agent_0 = trainable, agent_1 = partner.
         # ------------------------------
         env = fcp_env
-        env = LogWrapper(env)
 
         num_agents = env.num_agents
         assert num_agents == 2, "This FCP snippet assumes exactly 2 agents."
@@ -433,54 +432,23 @@ def initialize_agent(config, base_seed):
 
     return init_params
 
-if __name__ == "__main__":
-    # set hyperparameters:
-    config = {
-        "LR": 1.e-4,
-        "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
-        "TOTAL_TIMESTEPS": 3e6, # 3e6 
-        "UPDATE_EPOCHS": 15,
-        "NUM_MINIBATCHES": 16, # 4,
-        "NUM_CHECKPOINTS": 5,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.05,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 1.0,
-        "MAX_GRAD_NORM": 1.0,
-        "ACTIVATION": "tanh",
-        "ENV_NAME": "lbf",
-        "ENV_KWARGS": {
-        },
-        "ANNEAL_LR": True,
-        "TRAIN_PARTNER_SEED": 112358,
-        "EVAL_PARTNER_SEED": 1285842,
-        "TRAIN_SEED": 38410,
-        "EVAL_SEED": 12345,
-        "NUM_SEEDS": 3,
-        "RESULTS_PATH": "results/lbf"
-    }
-    
-    teammate_train_env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
+def run_fcp(config):
+    algorithm_config = dict(config["algorithm"])
+    # logger = Logger(config)
+
+    teammate_train_env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     teammate_train_env = LogWrapper(teammate_train_env)
-    fcp_env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
+    fcp_env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     fcp_env = LogWrapper(fcp_env)
 
-
-    partial_with_config = lambda x, y : open_ended_training(x, y, config, teammate_train_env, fcp_env)
-    init_params = initialize_agent(config, 1000)
+    partial_with_config = lambda x, y : open_ended_training(x, y, algorithm_config, teammate_train_env, fcp_env)
+    init_params = initialize_agent(algorithm_config, 1000)
     fcp_params, others = partial_with_config(init_params, None)
 
-    jax.lax.scan(partial_with_config, init_params, length=10)
+    final_params, outs = jax.lax.scan(partial_with_config, init_params, length=algorithm_config["NUM_OPEN_ENDED_ITERS"])
+    # outs_train, outs_fcp = outs
+    # all_metrics = process_metrics(outs_train, outs_fcp)
     # TODO: support modifying the savepath of the checkpoints to reflect method name
     # TODO: support saving configs, labelled by the seed 
     # TODO: move the main function out into a separate pipeline script
     # TODO: figure out if partner agents should be put in eval mode.
-    
-    #################################
-    # visualize results!
-    # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
-    # metrics = fcp_out["metrics"]
-    # all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_ENVS"])
-    # plot_train_metrics(all_stats, config["NUM_SEEDS"], config["NUM_UPDATES"], config["NUM_STEPS"], config["NUM_ENVS"])
