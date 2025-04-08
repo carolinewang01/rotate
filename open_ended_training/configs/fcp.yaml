@@ -9,6 +9,7 @@ ENV_KWARGS: {}
 algorithm:
   ALG: fcp
   NUM_OPEN_ENDED_ITERS: 10
+  PARTNER_POP_SIZE: 3
   NUM_ENVS: 32
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
@@ -27,7 +28,6 @@ algorithm:
   ACTIVATION: tanh
   ANNEAL_LR: true
   TRAIN_SEED: 38410
-  NUM_SEEDS: 3
 
 name: open_ended_fcp
 

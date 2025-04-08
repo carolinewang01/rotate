@@ -1490,11 +1490,10 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
     # ------------------------------
     # training is vmapped across multiple seeds
     rng = jax.random.PRNGKey(config["TRAIN_SEED"])
-    # rngs = jax.random.split(rng, 1)
-    with jax.disable_jit(False):
-        #fcp_train_fn = jax.jit(jax.vmap(make_fcp_train(config, partner_params)))
-        fcp_train_fn = jax.jit(make_fcp_train(config, partner_params))
-        out = fcp_train_fn(rng)
+    # with jax.disable_jit(False):
+    #     fcp_train_fn = jax.jit(make_fcp_train(config, partner_params))
+    #     out = fcp_train_fn(rng)
+    out = make_fcp_train(config, partner_params)(rng)
     return out
 
 def open_ended_training(init_fcp_params, others, config, teammate_train_env_br, teammate_train_env_ego, fcp_env, env_eval):

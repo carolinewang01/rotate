@@ -23,7 +23,7 @@ def train_partners_in_parallel(config, partner_rng, env):
     Train a pool of partners for FCP. Return checkpoints for all partners.
     Returns out, a dictionary of the model checkpoints, final parameters, and metrics.
     '''
-    rngs = jax.random.split(partner_rng, config["NUM_SEEDS"])
+    rngs = jax.random.split(partner_rng, config["PARTNER_POP_SIZE"])
     train_jit = jax.jit(jax.vmap(make_train(config, env)))
     out = train_jit(rngs)
     return out
