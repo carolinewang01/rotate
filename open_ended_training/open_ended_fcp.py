@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 
 def train_partners_in_parallel(config, partner_rng, env):
     '''
-    Train a pool of partners for FCP. Return checkpoints for all partners.
+    Train a pool of partners for FCP using IPPO w/parameter sharing. 
     Returns out, a dictionary of the model checkpoints, final parameters, and metrics.
     '''
     rngs = jax.random.split(partner_rng, config["PARTNER_POP_SIZE"])
@@ -33,18 +33,10 @@ def train_fcp_agent(config, checkpoints, init_fcp_params, fcp_rng, env):
     Train an FCP agent using the given partner checkpoints and IPPO.
     Return model checkpoints, final parameters, and metrics. 
     '''
-    # ------------------------------
-    # 1) Flatten partner checkpoints into shape (N, ...) if desired
-    #    but we can also keep them as (n_seeds, m_ckpts, ...).
-    #    We'll just do gather via dynamic indexing in a jittable way.
-    # ------------------------------
     partner_params = checkpoints["params"]  # This is the full PyTree
     n_seeds, m_ckpts = partner_params["Dense_0"]["kernel"].shape[:2]
     num_total_partners = n_seeds * m_ckpts
 
-    # We can define a small helper to gather the correct slice for each environment
-    # from shape (n_seeds, m_ckpts, ...) -> (num_envs, ...)
-    # We'll do an integer mapping from [0, num_total_partners) -> (seed_idx, ckpt_idx).
     def unravel_partner_idx(idx):
         """Given a scalar in [0, n_seeds*m_ckpts), return (seed_idx, ckpt_idx)."""
         # seed_idx = idx // m_ckpts
@@ -65,8 +57,6 @@ def train_fcp_agent(config, checkpoints, init_fcp_params, fcp_rng, env):
         # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
         # We'll vmap a slicing function.
         def gather_leaf(leaf):
-            # leaf shape: (n_seeds, m_ckpts, ...)
-            # We'll define a function that slices out a single index:
             def slice_one(idx):
                 seed_idx, ckpt_idx = unravel_partner_idx(idx)
                 return leaf[seed_idx, ckpt_idx]  # shape (...)
@@ -74,14 +64,8 @@ def train_fcp_agent(config, checkpoints, init_fcp_params, fcp_rng, env):
 
         return jax.tree.map(gather_leaf, partner_params_pytree)
 
-    # ------------------------------
-    # 3) Build the FCP training function, closely mirroring `make_train(...)`.
-    # ------------------------------
     def make_fcp_train(config, partner_params):
-        # ------------------------------
-        # 2) Prepare environment (same as IPPO).
-        #    We'll assume exactly 2 agents: agent_0 = trainable, agent_1 = partner.
-        # ------------------------------
+        # Assume exactly 2 agents: agent_0 = trainable ego, agent_1 = nontrainable partner
         num_agents = env.num_agents
         assert num_agents == 2, "This FCP snippet assumes exactly 2 agents."
 

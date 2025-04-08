@@ -1,6 +1,6 @@
 '''
 Based on the IPPO implementation from jaxmarl. Trains a parameter-shared IPPO agent on a
-fully cooperativemulti-agent environment.
+fully cooperative multi-agent environment.
 '''
 from typing import NamedTuple
 
