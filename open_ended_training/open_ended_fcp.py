@@ -70,8 +70,8 @@ def train_fcp_agent(config, checkpoints, init_fcp_params, fcp_rng, env):
         assert num_agents == 2, "This FCP snippet assumes exactly 2 agents."
 
         config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
-        config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["NUM_STEPS"]) // config["NUM_MINIBATCHES"]
+        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["ROLLOUT_LENGTH"] // config["NUM_ENVS"]
+        config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -257,7 +257,7 @@ def train_fcp_agent(config, checkpoints, init_fcp_params, fcp_rng, env):
                 # Divide batch size by TWO because we are only training on data of agent_0
                 batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"] // 2 
                 assert (
-                    batch_size == config["NUM_STEPS"] * config["NUM_ACTORS"] // 2
+                    batch_size == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"] // 2
                 ), "batch size must be equal to number of steps * number of actors"
                 permutation = jax.random.permutation(perm_rng, batch_size)
 
@@ -291,7 +291,7 @@ def train_fcp_agent(config, checkpoints, init_fcp_params, fcp_rng, env):
                 # 1) rollout
                 runner_state = (train_state, env_state, last_obs, partner_indices, rng)
                 runner_state, traj_batch = jax.lax.scan(
-                    _env_step, runner_state, None, config["NUM_STEPS"])
+                    _env_step, runner_state, None, config["ROLLOUT_LENGTH"])
                 (train_state, env_state, last_obs, partner_indices, rng) = runner_state
 
                 # 2) advantage
