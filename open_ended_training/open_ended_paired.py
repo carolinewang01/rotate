@@ -31,7 +31,7 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
         config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
 
         # Right now assume control of just 1 agent
-        config["NUM_CONTROLLED_AGENTS"] = config["NUM_ENVS"]
+        config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["NUM_STEPS_EGO"] + config["NUM_STEPS_BR"])// config["NUM_ENVS"]
@@ -165,7 +165,7 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
 
                 # Agent_1 action
                 hstate_ego, pi_1, _ = ego_agent_net.apply(ego_policy, last_ego_h, rnn_input_1)
-                act_1 = pi_1.sample(seed=actor_rng).squeeze()
+                act_1 = pi_1.sample(seed=partner_rng).squeeze()
 
                 # Combine actions into the env format
                 combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
@@ -343,10 +343,13 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
 
                         # Entropy for interaction with ego agent
                         entropy_ego = jnp.mean(pi_ego.entropy())
+                        
                         # Entropy for interaction with best response agent
                         entropy_br = jnp.mean(pi_br.entropy())
 
                         total_loss = (pg_loss_ego+pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
+                        # total_loss = pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
+
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
@@ -681,13 +684,6 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
                     prev_done.reshape(1, 1), 
                     avail_actions_1.reshape(1, -1)
                 )
-                # DEBUG FLAG: removed because it's created in the train() function
-                # ego_agent_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
-                #                        config=config, 
-                #                        ssm_init_fn=ssm_init_fn,
-                #                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
-                #                        ssm_hidden_dim=config["S5_SSM_SIZE"],)
-                
                 hstate_ego, pi1, _ = ego_agent_net.apply(ego_param, hstate_ego, rnn_input_1)
                 act1 = pi1.sample(seed=part_rng).squeeze()
                     
@@ -1479,18 +1475,12 @@ def open_ended_training_step(carry, config, env):
     TODO: Limit training against the last adversarial checkpoints instead.
     '''
     prev_ego_params, rng = carry
-    # orig_ego_params = copy.deepcopy(prev_ego_params)
-
     rng, partner_rng, train_fcp_rng = jax.random.split(rng, 3)
     
     # train partner agents
     train_out = train_regret_maximizing_partners(config, prev_ego_params, env, partner_rng)
     train_partner_ckpts = train_out["checkpoints_conf"]
     
-    # DEBUG FLAG
-    # leaves_equal = jax.tree.map(lambda x, y: jnp.array_equal(x, y), orig_ego_params, prev_ego_params)
-    # jax.debug.breakpoint()
-
     # train ego agent
     fcp_out = train_fcp_agent(config, train_partner_ckpts, env, prev_ego_params, train_fcp_rng)
     updated_ego_parameters = fcp_out["final_params"]
@@ -1528,14 +1518,14 @@ def initialize_agent(config, rng):
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
                                        ssm_hidden_dim=config["S5_SSM_SIZE"],)
     rng, init_rng = jax.random.split(rng)
-    config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"] # Assume only controlling 1 confederate
+    num_controlled_actors = config["NUM_ENVS"] # Assume only controlling 1 confederate
     init_x = (
         # init obs, dones, avail_actions
-        jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"], env.observation_space(env.agents[0]).shape[0])),
-        jnp.zeros((1, config["NUM_CONTROLLED_ACTORS"])),
-        jnp.ones((1, config["NUM_CONTROLLED_ACTORS"], env.action_space(env.agents[0]).n)),
+        jnp.zeros((1, num_controlled_actors, env.observation_space(env.agents[0]).shape[0])),
+        jnp.zeros((1, num_controlled_actors)),
+        jnp.ones((1, num_controlled_actors, env.action_space(env.agents[0]).n)),
     )
-    init_hstate_0 = StackedEncoderModel.initialize_carry(config["NUM_CONTROLLED_ACTORS"], ssm_size, n_layers)
+    init_hstate_0 = StackedEncoderModel.initialize_carry(num_controlled_actors, ssm_size, n_layers)
     init_params = agent0_net.init(init_rng, init_hstate_0, init_x)
 
     return init_params
