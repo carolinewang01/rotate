@@ -1,22 +1,21 @@
 defaults:
   - hydra: hydra_simple
-  - _self_
+  - _self_         # Ensures that values in this file override imported ones if needed
 
 ENV_NAME: lbf
-ROLLOUT_LENGTH: 128
+ROLLOUT_LENGTH: 128 # rollout length must be greater than episode length
 ENV_KWARGS: {}
 
 algorithm:
-  ALG: paired
-  NUM_OPEN_ENDED_ITERS: 300
-  PARTNER_POP_SIZE: 5
-  TRAIN_SEED: 38410
+  ALG: ppo_s5_ego
+  TOTAL_TIMESTEPS: 1e5
+  TRAIN_SEED: 12345
+  N_EGO_TRAIN_SEEDS: 1
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
-  TOTAL_TIMESTEPS: 3e4 # 1.6e7 # one step of open-ended training
-  LR: 1.e-4
+  LR: 1.e-4 
   UPDATE_EPOCHS: 15
   NUM_MINIBATCHES: 4
   MAX_EVAL_EPISODES: 20
@@ -39,11 +38,20 @@ algorithm:
   S5_PRENORM: true
   S5_DO_GTRXL_NORM: true
 
-name: open_ended_paired
-# wandb settings
-logger:
-  load_dir: open_ended_paired
+# WandB Params
+logger: 
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
   verbose: true
+
+local_logger:
+  save_figures: true
+  save_results: true
+
+hydra:
+  job:
+    name: ppo_ego_s5
+    chdir: true
+  run:
+    dir: results/${ENV_NAME}/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}

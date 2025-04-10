@@ -460,7 +460,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = "" # "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl"
+    train_partner_path = "results/lbf/fcp_mlp/2025-04-02_15-11-48/fcp_train"  # "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl"
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:

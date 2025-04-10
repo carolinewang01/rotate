@@ -870,8 +870,6 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
                 "checkpoints_conf": checkpoint_array_conf,
                 "checkpoints_br": checkpoint_array_br,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
-                "all_ep_infos_br": metrics["per_iter_ep_infos_br"],
-                "all_ep_infos_ego": metrics["per_iter_ep_infos_ego"]
             }
             return out
 
@@ -1452,7 +1450,6 @@ def train_fcp_agent(config, partner_params, init_ego_params, env, train_rng):
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
                 "checkpoints": checkpoint_array,
-                "eval_ep_return_infos": metrics["per_iter_ep_infos"]
             }
             return out
 
@@ -1485,9 +1482,7 @@ def open_ended_training_step(carry, config, env):
     carry = (updated_ego_parameters, rng)
     return carry, (train_out, fcp_out)
 
-def initialize_agent(config, rng):
-    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
-    env = LogWrapper(env)
+def initialize_agent(config, env, rng):
     # S5 specific parameters
     d_model = config["S5_D_MODEL"]
     ssm_size = config["S5_SSM_SIZE"]
@@ -1514,7 +1509,6 @@ def initialize_agent(config, rng):
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
                                        ssm_hidden_dim=config["S5_SSM_SIZE"],)
-    rng, init_rng = jax.random.split(rng)
     num_controlled_actors = config["NUM_ENVS"] # Assume only controlling 1 confederate
     init_x = (
         # init obs, dones, avail_actions
@@ -1523,14 +1517,15 @@ def initialize_agent(config, rng):
         jnp.ones((1, num_controlled_actors, env.action_space(env.agents[0]).n)),
     )
     init_hstate_0 = StackedEncoderModel.initialize_carry(num_controlled_actors, ssm_size, n_layers)
+    rng, init_rng = jax.random.split(rng)
     init_params = agent0_net.init(init_rng, init_hstate_0, init_x)
 
     return init_params
 
 def process_metrics(teammate_training_logs, ego_training_logs):
 
-    all_teammate_sp_returns = np.asarray(teammate_training_logs["all_ep_infos_br"])
-    all_teammate_xp_returns = np.asarray(teammate_training_logs["all_ep_infos_ego"])
+    all_teammate_sp_returns = np.asarray(teammate_training_logs["metrics"]["per_iter_ep_infos_br"])
+    all_teammate_xp_returns = np.asarray(teammate_training_logs["metrics"]["per_iter_ep_infos_ego"])
     all_value_losses_teammate_against_ego = np.asarray(teammate_training_logs["metrics"]["value_loss_conf_against_ego"])
     all_value_losses_teammate_against_br = np.asarray(teammate_training_logs["metrics"]["value_loss_conf_against_br"])
     all_value_losses_br = np.asarray(teammate_training_logs["metrics"]["value_loss_br"])
@@ -1543,7 +1538,7 @@ def process_metrics(teammate_training_logs, ego_training_logs):
     br_metrics = np.asarray(teammate_training_logs["metrics"]["average_rewards_br"])
     ego_metrics = np.asarray(teammate_training_logs["metrics"]["average_rewards_ego"])
 
-    all_ego_returns = np.asarray(ego_training_logs["eval_ep_return_infos"])
+    all_ego_returns = np.asarray(ego_training_logs["metrics"]["per_iter_ep_infos"])
     all_ego_value_losses = np.asarray(ego_training_logs["metrics"]["value_loss"])
     all_ego_actor_losses = np.asarray(ego_training_logs["metrics"]["actor_loss"])
     all_ego_entropy_losses = np.asarray(ego_training_logs["metrics"]["entropy_loss"])
@@ -1589,7 +1584,7 @@ def run_paired(config):
     
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
-    init_params = initialize_agent(algorithm_config, init_rng)
+    init_params = initialize_agent(algorithm_config, env, init_rng)
     init_carry = (init_params, train_rng)
     
     log.info("Starting open-ended PAIRED training...")
