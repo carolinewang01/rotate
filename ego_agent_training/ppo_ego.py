@@ -550,10 +550,6 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
         logger: Logger, instance to log metrics
         metric_names: tuple, names of metrics to extract from training logs
     """
-    # TODO: figure out why the returned_episode_lengths seems weird? Numbers increase with each step until 
-    # episode termination, which isn't really what we wanted
-    # TODO: note that eval_ep_last_info reflects only the LAST statistic of each episode. This is fine because 
-    # only the LAST TIMESTEP statistic is valid, when returend by the LogWrapper.
     train_metrics = train_out["metrics"]
 
     #### Extract train metrics ####
@@ -576,6 +572,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     average_ego_value_losses = np.mean(all_ego_value_losses, axis=(0, 2, 3))
     average_ego_actor_losses = np.mean(all_ego_actor_losses, axis=(0, 2, 3))
     average_ego_entropy_losses = np.mean(all_ego_entropy_losses, axis=(0, 2, 3))
+    
     # Log metrics for each update step
     num_updates = len(average_ego_value_losses)
     for step in range(num_updates):
