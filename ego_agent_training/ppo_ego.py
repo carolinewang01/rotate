@@ -120,14 +120,16 @@ def train_ppo_ego_agent(config, env, train_rng,
                 done_0_reshaped = prev_done.reshape(1, config["NUM_CONTROLLED_ACTORS"])
                 
                 # Agent_0 (ego) action, value, log_prob
-                act_0, val_0, logp_0, hstate_0 = ego_policy.get_action_value_logprob(
-                    train_state.params,
-                    obs_0_reshaped,
-                    done_0_reshaped,
-                    avail_actions_0,
-                    hstate_0,
-                    actor_rng
+                act_0, val_0, pi_0, hstate_0 = ego_policy.get_action_value_policy(
+                    params=train_state.params,
+                    obs=obs_0_reshaped,
+                    done=done_0_reshaped,
+                    avail_actions=avail_actions_0,
+                    hstate=hstate_0,
+                    rng=actor_rng
                 )
+                logp_0 = pi_0.log_prob(act_0)
+
                 act_0 = act_0.squeeze()
                 logp_0 = logp_0.squeeze()
                 val_0 = val_0.squeeze()
@@ -197,15 +199,13 @@ def train_ppo_ego_agent(config, env, train_rng,
             def _update_minbatch(train_state, batch_info):
                 init_hstate_0, traj_batch, advantages, returns = batch_info
                 def _loss_fn(params, init_hstate_0, traj_batch, gae, target_v):
-                    rnn_input_0 = (
-                        traj_batch.obs, # shape (rollout_len, num_actors/num_minibatches, feat_size) =  (128, 4, 15)
-                        traj_batch.done, # shape (rollout_len, num_actors/num_minibatches) = (128, 4)
-                        traj_batch.avail_actions # shape (rollout_len, num_agents, num_actions) = (128, 4, 6)
-                    )
-                    _, pi, value = ego_policy.network.apply(
-                        params, 
-                        init_hstate_0,
-                        rnn_input_0
+                    _, value, pi, _ = ego_policy.get_action_value_policy(
+                        params=params, 
+                        obs=traj_batch.obs,
+                        done=traj_batch.done,
+                        avail_actions=traj_batch.avail_actions,
+                        hstate=init_hstate_0,
+                        rng=jax.random.PRNGKey(0) # only used for action sampling, which is unused here
                     )
                     log_prob = pi.log_prob(traj_batch.action)
 
@@ -302,13 +302,13 @@ def train_ppo_ego_agent(config, env, train_rng,
                 last_done_reshaped = last_done.reshape(1, config["NUM_CONTROLLED_ACTORS"])
                 
                 # Get final value estimate for completed trajectory
-                _, last_val, _, last_hstate_0 = ego_policy.get_action_value_logprob(
-                    train_state.params, 
-                    last_obs_reshaped,
-                    last_done_reshaped,
-                    jax.lax.stop_gradient(avail_actions_0),
-                    last_hstate_0,
-                    jax.random.PRNGKey(0)  # Dummy key since we're just extracting the value
+                _, last_val, _, last_hstate_0 = ego_policy.get_action_value_policy(
+                    params=train_state.params, 
+                    obs=last_obs_reshaped,
+                    done=last_done_reshaped,
+                    avail_actions=jax.lax.stop_gradient(avail_actions_0),
+                    hstate=last_hstate_0,
+                    rng=jax.random.PRNGKey(0)  # Dummy key since we're just extracting the value
                 )
                 last_val = last_val.squeeze()
                 advantages, targets = _calculate_gae(traj_batch, last_val)
@@ -395,7 +395,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 done_0_reshaped = init_done.reshape(1, 1)
                 
                 # Get ego action
-                act_0, _, _, hstate_0 = ego_policy.get_action_value_logprob(
+                act_0, hstate_0 = ego_policy.get_action(
                     ego_param,
                     obs_0_reshaped,
                     done_0_reshaped,
@@ -444,7 +444,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                         
                         # Get ego action
                         rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                        act_0, _, _, hstate_0_next = ego_policy.get_action_value_logprob(
+                        act_0, hstate_0_next = ego_policy.get_action(
                             ego_param,
                             obs_0_reshaped,
                             done_0_reshaped,
@@ -623,6 +623,20 @@ def initialize_s5_agent(config, env, rng):
 
     return policy, init_params
 
+def initialize_mlp_agent(config, env, rng):
+    """
+    Initialize an MLP agent with the given config.
+    """
+    policy = MLPActorCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+        activation=config["ACTIVATION"]
+    ) 
+    rng, init_rng = jax.random.split(rng)
+    init_params = policy.init_params(init_rng)
+
+    return policy, init_params
+
 def log_metrics(train_out, logger, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
     
@@ -709,7 +723,8 @@ def run_ego_training(config, partner_params, pop_size: int):
     )
     
     # Initialize ego agent
-    ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    # ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
     
     log.info("Starting ego agent training...")
     start_time = time.time()

@@ -99,9 +99,9 @@ class AgentPolicy(abc.ABC):
         pass
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_logprob(self, params, obs, done, avail_actions, hstate, rng) -> Tuple[int, chex.Array, chex.Array, chex.Array]:
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng) -> Tuple[int, chex.Array, chex.Array, chex.Array]:
         """
-        Computes the action, value, and log probability given an observation, 
+        Computes the action, value, and policy given an observation, 
         done flag, available actions, hidden state, and random key.
 
         Args:
@@ -114,7 +114,7 @@ class AgentPolicy(abc.ABC):
 
         Returns:
             Tuple[int, chex.Array, chex.Array, chex.Array]: 
-                A tuple containing the action, value, log probability, and new hidden state.
+                A tuple containing the action, value, policy, and new hidden state.
         """
         pass
 
@@ -149,18 +149,18 @@ class MLPActorCriticPolicy(AgentPolicy):
         return action, None  # no hidden state
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_logprob(self, params, obs, done, avail_actions, hstate, rng):
-        """Get actions, values, and log probs for the MLP policy."""
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+        """Get actions, values, and policy for the MLP policy."""
         pi, val = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
-        log_prob = pi.log_prob(action)
-        return action, val, log_prob, None  # no hidden state
+        return action, val, pi, None  # no hidden state
     
     def init_params(self, rng):
         """Initialize parameters for the MLP policy."""
         dummy_obs = jnp.zeros((self.obs_dim,))
         dummy_avail = jnp.ones((self.action_dim,))
-        return self.network.init(rng, dummy_obs, dummy_avail)
+        init_x = (dummy_obs, dummy_avail)
+        return self.network.init(rng, init_x)
 
 
 class ActorWithDoubleCriticPolicy(AgentPolicy):
@@ -186,18 +186,18 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
         return action, None  # no hidden state
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_logprob(self, params, obs, done, avail_actions, hstate, rng):
-        """Get actions, values, and log probs for the policy with double critics."""
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+        """Get actions, values, and policy for the policy with double critics."""
         pi, val1, val2 = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
-        log_prob = pi.log_prob(action)
-        return action, (val1, val2), log_prob, None # no hidden state
+        return action, (val1, val2), pi, None # no hidden state
     
     def init_params(self, rng):
         """Initialize parameters for the policy with double critics."""
         dummy_obs = jnp.zeros((self.obs_dim,))
         dummy_avail = jnp.ones((self.action_dim,))
-        return self.network.init(rng, dummy_obs, dummy_avail)
+        init_x = (dummy_obs, dummy_avail)
+        return self.network.init(rng, init_x)
 
 
 class S5ActorCriticPolicy(AgentPolicy):
@@ -279,13 +279,11 @@ class S5ActorCriticPolicy(AgentPolicy):
         return action, new_hstate
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_logprob(self, params, obs, done, avail_actions, hstate, rng):
-        """Get actions, values, and log probs for the S5 policy."""
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+        """Get actions, values, and policy for the S5 policy."""
         new_hstate, pi, val = self.network.apply(params, hstate, (obs, done, avail_actions))
         action = pi.sample(seed=rng)
-        log_prob = pi.log_prob(action)
-        val = val
-        return action, val, log_prob, new_hstate
+        return action, val, pi, new_hstate
     
     def init_hstate(self, batch_size):
         """Initialize hidden state for the S5 policy."""
