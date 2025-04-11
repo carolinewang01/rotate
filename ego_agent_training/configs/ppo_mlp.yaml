@@ -7,7 +7,8 @@ ROLLOUT_LENGTH: 128 # rollout length must be greater than episode length
 ENV_KWARGS: {}
 
 algorithm:
-  TOTAL_TIMESTEPS: 1e5
+  ALG: ppo_mlp
+  TOTAL_TIMESTEPS: 1e6
   TRAIN_SEED: 12345
   N_EGO_TRAIN_SEEDS: 1
   MAX_EVAL_EPISODES: 20

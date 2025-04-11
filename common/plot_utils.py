@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 @partial(jax.jit, static_argnames=['stats', 'num_controlled_agents'])
-def get_stats(metrics, stats: tuple, num_controlled_agents: int):
+def get_stats(metrics, stats: tuple, num_controlled_agents):
     '''
     Computes mean and std of metrics of interest for each seed and update, 
     using only the final steps of episodes. Note that each rollout contains multiple episodes.

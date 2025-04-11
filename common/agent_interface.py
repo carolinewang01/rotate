@@ -27,7 +27,6 @@ class AgentPopulation:
         '''Sample n indices from the population, with replacement.'''
         return jax.random.randint(rng, (n,), 0, self.pop_size)
     
-    @partial(jax.jit, static_argnums=(0,))
     def gather_agent_params(self, agent_indices):
         '''Gather the parameters of the agents specified by agent_indices.'''
         def gather_leaf(leaf):
@@ -35,7 +34,6 @@ class AgentPopulation:
             return jax.vmap(lambda idx: leaf[idx])(agent_indices)
         return jax.tree.map(gather_leaf, self.pop_params)
     
-    @partial(jax.jit, static_argnums=(0,))
     def get_actions(self, agent_indices, obs, done, avail_actions, hstate, rng):
         '''
         Get the actions of the agents specified by agent_indices.
