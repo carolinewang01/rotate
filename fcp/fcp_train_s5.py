@@ -122,10 +122,16 @@ def train_fcp_agent(config, checkpoints):
             # 3a) Init agent_0 network
             # --------------------------
             agent0_net = S5ActorCritic(env.action_space(env.agents[0]).n, 
-                                       config=config, 
                                        ssm_init_fn=ssm_init_fn,
                                        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
-                                       ssm_hidden_dim=config["S5_SSM_SIZE"],)
+                                       ssm_hidden_dim=config["S5_SSM_SIZE"],
+                                       s5_d_model=config["S5_D_MODEL"],
+                                       s5_n_layers=config["S5_N_LAYERS"],
+                                       s5_activation=config["S5_ACTIVATION"],
+                                       s5_do_norm=config["S5_DO_NORM"],
+                                       s5_prenorm=config["S5_PRENORM"],
+                                       s5_do_gtrxl_norm=config["S5_DO_GTRXL_NORM"],
+                                       )
 
             rng, init_rng = jax.random.split(rng)
             init_x = (
@@ -546,7 +552,7 @@ def train_fcp_agent(config, checkpoints):
 if __name__ == "__main__":
     # set hyperparameters:
     config = {
-        "TOTAL_TIMESTEPS": 3e5,
+        "TOTAL_TIMESTEPS": 1e6,
         "LR": 1.e-4,
         "NUM_ENVS": 16,
         "NUM_STEPS": 128,
@@ -582,9 +588,7 @@ if __name__ == "__main__":
     curr_datetime = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     savedir = os.path.join(config["RESULTS_PATH"], curr_datetime) 
 
-    train_partner_path = ""
-    # train_partner_path = "results/overcooked/debug/2025-03-20_11-32-04/train_partners.pkl" # trained for 3M steps
-    # train_partner_path = "results/lbf/debug/2025-03-17_23-12-43/train_partners.pkl" # trained for 3M steps
+    train_partner_path = "results/lbf/ippo/2025-04-10_20-21-47/ippo_train_run"
     if train_partner_path != "":
         train_partner_ckpts = load_checkpoints(train_partner_path)
     else:
@@ -607,4 +611,8 @@ if __name__ == "__main__":
         all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
     else: 
         all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
-    plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_CONTROLLED_ACTORS"])
+    plot_train_metrics(all_stats, 
+                       config["TOTAL_TIMESTEPS"], 
+                       config["NUM_CONTROLLED_ACTORS"],
+                       savedir=config["RESULTS_PATH"] + f"/{curr_datetime}",
+                       savename="fcp_s5_train")

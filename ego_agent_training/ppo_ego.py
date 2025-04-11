@@ -15,7 +15,8 @@ from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs import make_env
 from ppo.ippo import unbatchify, Transition
-from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, MLPActorCriticPolicy, ActorWithDoubleCriticPolicy
+from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, \
+    MLPActorCriticPolicy, ActorWithDoubleCriticPolicy, RNNActorCriticPolicy
 from common.wandb_visualizations import Logger
 from common.plot_utils import get_stats
 
@@ -53,7 +54,7 @@ def train_ppo_ego_agent(config, env, train_rng,
         config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] + config["ROLLOUT_LENGTH"]) // config["NUM_ENVS"]
+        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] // config["NUM_ENVS"])
         config["NUM_ACTIONS"] = env.action_space(env.agents[0]).n
         
         def linear_schedule(count):
@@ -61,10 +62,6 @@ def train_ppo_ego_agent(config, env, train_rng,
             return config["LR"] * frac
 
         def train(rng):
-            # Initialize ego agent with policy
-            init_params = init_ego_params
-            
-
             if config["ANNEAL_LR"]:
                 tx = optax.chain(
                     optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -80,7 +77,7 @@ def train_ppo_ego_agent(config, env, train_rng,
             # have different signatures.
             train_state = TrainState.create(
                 apply_fn=ego_policy.network.apply,
-                params=init_params,
+                params=init_ego_params,
                 tx=tx,
             )
 
@@ -340,7 +337,8 @@ def train_ppo_ego_agent(config, env, train_rng,
                 obs, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
                 init_done = jnp.zeros((config["NUM_CONTROLLED_ACTORS"]), dtype=bool)
                 
-                # Initialize hidden state for partners after resetting
+                # Re-initialize hidden states for partners after resetting
+                # Note that we return the init_hstate_0 for the ego agent, which effectively resets it
                 init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
 
                 # Metrics
@@ -615,7 +613,34 @@ def initialize_s5_agent(config, env, rng):
         ssm_size=config["S5_SSM_SIZE"],
         n_layers=config["S5_N_LAYERS"],
         blocks=config["S5_BLOCKS"],
-        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"]
+        fc_hidden_dim=config["S5_ACTOR_CRITIC_HIDDEN_DIM"],
+        s5_activation=config["S5_ACTIVATION"],
+        s5_do_norm=config["S5_DO_NORM"],
+        s5_prenorm=config["S5_PRENORM"],
+        s5_do_gtrxl_norm=config["S5_DO_GTRXL_NORM"],
+    )
+    
+    rng, init_rng = jax.random.split(rng)
+    init_params = policy.init_params(init_rng)
+
+    return policy, init_params
+
+def initialize_rnn_agent(config, env, rng):
+    """Initialize an RNN agent with the given config.
+    
+    Args:
+        config: dict, config for the agent
+        env: gymnasium environment
+        rng: jax.random.PRNGKey, random key for initialization
+        
+    Returns:
+        policy: RNNActorCriticPolicy, the policy object
+        params: dict, initial parameters for the agent
+    """
+    # Create the RNN policy
+    policy = RNNActorCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
     )
     
     rng, init_rng = jax.random.split(rng)
@@ -630,7 +655,6 @@ def initialize_mlp_agent(config, env, rng):
     policy = MLPActorCriticPolicy(
         action_dim=env.action_space(env.agents[0]).n,
         obs_dim=env.observation_space(env.agents[0]).shape[0],
-        activation=config["ACTIVATION"]
     ) 
     rng, init_rng = jax.random.split(rng)
     init_params = policy.init_params(init_rng)
@@ -651,6 +675,7 @@ def log_metrics(train_out, logger, metric_names: tuple):
     train_stats = get_stats(train_out["metrics"], metric_names, 1)
     # each key in train_stats is a metric name, and the value is an array of shape (num_seeds, num_updates, 2)
     # where the last dimension contains the mean and std of the metric
+    
     train_stats = {k: np.mean(np.array(v), axis=0) for k, v in train_stats.items()}
     
     #### Extract train and eval metrics from training logs ####
@@ -667,7 +692,6 @@ def log_metrics(train_out, logger, metric_names: tuple):
     average_ego_value_losses = np.mean(all_ego_value_losses, axis=(0, 2, 3))
     average_ego_actor_losses = np.mean(all_ego_actor_losses, axis=(0, 2, 3))
     average_ego_entropy_losses = np.mean(all_ego_entropy_losses, axis=(0, 2, 3))
-
     # Log metrics for each update step
     num_updates = len(average_ego_value_losses)
     for step in range(num_updates):
@@ -723,8 +747,9 @@ def run_ego_training(config, partner_params, pop_size: int):
     )
     
     # Initialize ego agent
-    # ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
+    ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    # ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
+    # ego_policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)
     
     log.info("Starting ego agent training...")
     start_time = time.time()

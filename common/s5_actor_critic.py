@@ -619,10 +619,10 @@ class S5ActorCritic(nn.Module):
     action_dim: Sequence[int]
     ssm_init_fn: Any
     fc_hidden_dim: int = 64
-    ssm_hidden_dim: int = 16
+    ssm_hidden_dim: int = 16 # ssm_size
     s5_d_model: int = 16
     s5_n_layers: int = 2
-    s5_activation: str = "gelu"
+    s5_activation: str = "full_glu"
     s5_do_norm: bool = True
     s5_prenorm: bool = True
     s5_do_gtrxl_norm: bool = True

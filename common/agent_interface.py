@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from common.mlp_actor_critic import ActorCritic
 from common.mlp_actor_critic import ActorWithDoubleCritic
 from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
-
+from common.rnn_actor_critic import RNNActorCritic, ScannedRNN
 
 class AgentPopulation:
     '''Base class for a population of identical agents'''
@@ -27,6 +27,7 @@ class AgentPopulation:
         '''Sample n indices from the population, with replacement.'''
         return jax.random.randint(rng, (n,), 0, self.pop_size)
     
+    @partial(jax.jit, static_argnums=(0,))
     def gather_agent_params(self, agent_indices):
         '''Gather the parameters of the agents specified by agent_indices.'''
         def gather_leaf(leaf):
@@ -34,6 +35,7 @@ class AgentPopulation:
             return jax.vmap(lambda idx: leaf[idx])(agent_indices)
         return jax.tree.map(gather_leaf, self.pop_params)
     
+    @partial(jax.jit, static_argnums=(0,))
     def get_actions(self, agent_indices, obs, done, avail_actions, hstate, rng):
         '''
         Get the actions of the agents specified by agent_indices.
@@ -199,14 +201,74 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
         init_x = (dummy_obs, dummy_avail)
         return self.network.init(rng, init_x)
 
+class RNNActorCriticPolicy(AgentPolicy):
+    """Policy wrapper for RNN Actor-Critic"""
+    
+    def __init__(self, action_dim, obs_dim, 
+                 activation="tanh", fc_hidden_dim=64, gru_hidden_dim=64):
+        """
+        Args:
+            action_dim: int, dimension of the action space  
+            obs_dim: int, dimension of the observation space
+            activation: str, activation function to use
+            fc_hidden_dim: int, dimension of the feed-forward hidden layers
+            gru_hidden_dim: int, dimension of the GRU hidden state
+        """
+        super().__init__(action_dim, obs_dim)
+        self.activation = activation
+        self.fc_hidden_dim = fc_hidden_dim
+        self.gru_hidden_dim = gru_hidden_dim
+        self.network = RNNActorCritic(
+            action_dim, 
+            fc_hidden_dim=fc_hidden_dim,
+            gru_hidden_dim=gru_hidden_dim,
+            activation=activation
+        )
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def get_action(self, params, obs, done, avail_actions, hstate, rng):
+        """Get actions for the RNN policy. 
+        The first dim of obs and done should be the time dimension."""
+        new_hstate, pi, _ = self.network.apply(params, hstate, (obs, done, avail_actions))
+        action = pi.sample(seed=rng)
+        return action, new_hstate
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+        """Get actions, values, and policy for the RNN policy.
+        The first dim of obs and done should be the time dimension."""
+        new_hstate, pi, val = self.network.apply(params, hstate, (obs, done, avail_actions))
+        action = pi.sample(seed=rng)
+        return action, val, pi, new_hstate
+    
+    def init_hstate(self, batch_size):
+        """Initialize hidden state for the RNN policy."""
+        return ScannedRNN.initialize_carry(batch_size, self.gru_hidden_dim)
+    
+    def init_params(self, rng):
+        """Initialize parameters for the RNN policy."""
+        batch_size = 1
+        # Initialize hidden state
+        init_hstate = self.init_hstate(batch_size)
+        
+        # Create dummy inputs - add time dimension
+        dummy_obs = jnp.zeros((1, batch_size, self.obs_dim))
+        dummy_done = jnp.zeros((1, batch_size))
+        dummy_avail = jnp.ones((1, batch_size, self.action_dim))
+        dummy_x = (dummy_obs, dummy_done, dummy_avail)
+        
+        # Initialize model
+        return self.network.init(rng, init_hstate, dummy_x)
+
 
 class S5ActorCriticPolicy(AgentPolicy):
     """Policy wrapper for S5 Actor-Critic"""
     
     def __init__(self, action_dim, obs_dim, 
-                 d_model, ssm_size, n_layers, blocks,
+                 d_model=16, ssm_size=16, 
+                 n_layers=2, blocks=1,
                  fc_hidden_dim=64,
-                 s5_activation="gelu",
+                 s5_activation="full_glu",
                  s5_do_norm=True,
                  s5_prenorm=True,
                  s5_do_gtrxl_norm=True,

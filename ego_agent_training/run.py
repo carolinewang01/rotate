@@ -11,7 +11,7 @@ def run_training(cfg):
     print(OmegaConf.to_yaml(cfg, resolve=True))
 
     #  Load partner population
-    train_partner_path = "results/lbf/fcp_mlp/2025-04-02_15-11-48/fcp_train"
+    train_partner_path = "results/lbf/ippo/2025-04-10_20-21-47/ippo_train_run"
     train_partner_ckpts = load_checkpoints(train_partner_path)
     # ckpts shuld be a dictionary with the key "params"
     # flatten the partner parameters

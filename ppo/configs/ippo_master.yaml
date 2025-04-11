@@ -6,7 +6,7 @@ ENV_NAME: lbf
 NUM_STEPS: 128 # rollout length must be greater than episode length
 ENV_KWARGS: {}
 
-TOTAL_TIMESTEPS: 1e6
+TOTAL_TIMESTEPS: 3e6
 SEED: 12345
 
 # WandB Params
@@ -14,7 +14,7 @@ logger:
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
-  verbose: true
+  verbose: false
 
 local_logger:
   save_figures: true

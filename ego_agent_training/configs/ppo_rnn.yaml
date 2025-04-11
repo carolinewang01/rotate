@@ -40,7 +40,7 @@ local_logger:
 
 hydra:
   job:
-    name: ppo_ego_mlp
+    name: ppo_ego_rnn
     chdir: true
   run:
     dir: results/${ENV_NAME}/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
