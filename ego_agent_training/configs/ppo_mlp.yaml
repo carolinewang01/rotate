@@ -8,7 +8,7 @@ ENV_KWARGS: {}
 
 algorithm:
   ALG: ppo_mlp
-  TOTAL_TIMESTEPS: 1e6
+  TOTAL_TIMESTEPS: 3e5
   TRAIN_SEED: 12345
   N_EGO_TRAIN_SEEDS: 1
   MAX_EVAL_EPISODES: 20
@@ -33,11 +33,13 @@ logger:
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
-  verbose: false
+  verbose: true
+  log_train_out: false # whether to log the out dictionary
 
+# Local logger
 local_logger:
-  save_figures: true
-  save_results: true
+  save_figures: true # currently unused
+  save_train_out: true
 
 hydra:
   job:

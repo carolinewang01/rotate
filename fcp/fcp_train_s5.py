@@ -606,11 +606,11 @@ if __name__ == "__main__":
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
     if config["ENV_NAME"] == "lbf":
-        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+        all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"))
     elif config["ENV_NAME"] == "overcooked-v2":
-        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+        all_stats = get_stats(metrics, ("shaped_reward", "returned_episode_returns"))
     else: 
-        all_stats = get_stats(metrics, ("returned_episode_returns"), config["NUM_CONTROLLED_ACTORS"])
+        all_stats = get_stats(metrics, ("returned_episode_returns", "returned_episode_lengths"))
     plot_train_metrics(all_stats, 
                        config["TOTAL_TIMESTEPS"], 
                        config["NUM_CONTROLLED_ACTORS"],

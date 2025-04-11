@@ -3,6 +3,7 @@ Script for training an PPO ego agent against a fixed partner policy.
 This script uses AgentPolicy and AgentPopulation abstractions to 
 support training with any type of ego or partner policy.
 '''
+import os
 import time
 import logging
 
@@ -10,15 +11,18 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import hydra
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
 
 from envs import make_env
+from envs.log_wrapper import LogWrapper
 from ppo.ippo import unbatchify, Transition
+from ego_agent_training.run_episodes import run_episodes
 from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, \
     MLPActorCriticPolicy, ActorWithDoubleCriticPolicy, RNNActorCriticPolicy
 from common.wandb_visualizations import Logger
 from common.plot_utils import get_stats
+from common.save_load_utils import save_train_run
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -363,140 +367,9 @@ def train_ppo_ego_agent(config, env, train_rng,
 
             max_episode_steps = config["ROLLOUT_LENGTH"]
             
-            def run_single_episode(rng, ego_param, partner_param):
-                '''TODO: rewrite this eval code to vmap over multiple partner parameters'''
-                # Reset the env.
-                rng, reset_rng = jax.random.split(rng)
-                obs, env_state = env.reset(reset_rng)
-                init_done = jnp.zeros(1, dtype=bool)
-                init_returns = jnp.zeros(1, dtype=float)
-                
-                # Initialize ego hidden state
-                init_hstate_0 = ego_policy.init_hstate(1)
-                # Initialize partner hidden state for a single agent only
-                init_partner_hstate = partner_population.init_hstate(1)
-
-                # Get agent obses
-                obs_0 = obs["agent_0"]
-                obs_1 = obs["agent_1"]
-
-                # Get available actions for agent 0 from environment state
-                avail_actions = env.get_avail_actions(env_state.env_state)
-                avail_actions = jax.lax.stop_gradient(avail_actions)
-                avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
-                avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
-
-                # Do one step to get a dummy info structure
-                rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                
-                # Reshape inputs for S5
-                obs_0_reshaped = obs_0.reshape(1, 1, -1)
-                done_0_reshaped = init_done.reshape(1, 1)
-                
-                # Get ego action
-                act_0, hstate_0 = ego_policy.get_action(
-                    ego_param,
-                    obs_0_reshaped,
-                    done_0_reshaped,
-                    avail_actions_0,
-                    init_hstate_0,
-                    act_rng
-                )
-                act_0 = act_0.squeeze()
-
-                # Get partner action using the underlying policy class's get_action method directly
-                act1, partner_hstate = partner_population.policy_cls.get_action(
-                    partner_param, 
-                    obs_1, 
-                    init_done,
-                    avail_actions_1,
-                    init_partner_hstate,  # Pass the proper hidden state
-                    part_rng
-                )
-                
-                both_actions = [act_0, act1]
-                env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
-                _, _, eval_rewards, done, dummy_info = env.step(step_rng, env_state, env_act)
-
-                init_returns = init_returns + eval_rewards["agent_0"]
-
-                # We'll use a scan to iterate steps until the episode is done.
-                ep_ts = 1
-                init_carry = (ep_ts, env_state, obs, rng, done, hstate_0, partner_hstate, dummy_info, init_returns)
-                def scan_step(carry, _):
-                    def take_step(carry_step):
-                        ep_ts, env_state, obs, rng, done, hstate_0, partner_hstate, last_info, last_total_returns = carry_step
-                        # Get available actions for agent 0 from environment state
-                        avail_actions = env.get_avail_actions(env_state.env_state)
-                        avail_actions = jax.lax.stop_gradient(avail_actions)
-                        avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
-                        avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
-
-                        # Get agent obses
-                        obs_0 = obs["agent_0"]
-                        obs_1 = obs["agent_1"]
-                        prev_done_0 = done["agent_0"]
-                        
-                        # Reshape inputs for S5
-                        obs_0_reshaped = obs_0.reshape(1, 1, -1)
-                        done_0_reshaped = prev_done_0.reshape(1, 1)
-                        
-                        # Get ego action
-                        rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-                        act_0, hstate_0_next = ego_policy.get_action(
-                            ego_param,
-                            obs_0_reshaped,
-                            done_0_reshaped,
-                            avail_actions_0,
-                            hstate_0,
-                            act_rng
-                        )
-                        act_0 = act_0.squeeze()
-
-                        # Get partner action with proper hidden state tracking
-                        act1, partner_hstate_next = partner_population.policy_cls.get_action(
-                            partner_param, 
-                            obs_1, 
-                            prev_done_0,
-                            avail_actions_1,
-                            partner_hstate,
-                            part_rng
-                        )
-                        
-                        both_actions = [act_0, act1]
-                        env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
-                        obs_next, env_state_next, reward, done_next, info_next = env.step(step_rng, env_state, env_act)
-                        last_total_returns = last_total_returns + reward["agent_0"]
-
-                        return (ep_ts + 1, env_state_next, obs_next, rng, done_next, hstate_0_next, partner_hstate_next, info_next, last_total_returns)
-                            
-                    ep_ts, env_state, obs, rng, done, hstate_0, partner_hstate, last_info, last_returns = carry
-                    new_carry = jax.lax.cond(
-                        done["__all__"],
-                        # if done, execute true function(operand). else, execute false function(operand).
-                        lambda curr_carry: curr_carry, # True fn
-                        take_step, # False fn
-                        operand=carry
-                    )
-                    return new_carry, None
-
-                final_carry, _ = jax.lax.scan(
-                    scan_step, init_carry, None, length=max_episode_steps)
-                # Return the final info (which includes the episode return via LogWrapper).
-                return final_carry[-2], final_carry[-1]
-            
-            def run_episodes(rng, ego_param, partner_param, num_eps):
-                def body_fn(carry, _):
-                    rng = carry
-                    rng, ep_rng = jax.random.split(rng)
-                    ep_info, final_returns = run_single_episode(ep_rng, ego_param, partner_param)
-                    return rng, (ep_info, final_returns)
-                rng, all_outs = jax.lax.scan(body_fn, rng, None, length=num_eps)
-                return all_outs  # each leaf has shape (num_eps, ...)
-            
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
-                 checkpoint_array, ckpt_idx, init_eval_info) = state_with_ckpt
+                 checkpoint_array, ckpt_idx, init_eval_last_info) = state_with_ckpt
 
                 # Single PPO update
                 (new_runner_state, metric) = _update_step(
@@ -521,21 +394,23 @@ def train_ppo_ego_agent(config, env, train_rng,
                     gathered_params = partner_population.gather_agent_params(eval_partner_indices)
                     
                     rng, eval_rng = jax.random.split(rng)
-                    eval_ep_return_infos = jax.vmap(lambda x: run_episodes(
-                        eval_rng, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
-                    return (new_ckpt_arr, cidx + 1, rng, eval_ep_return_infos)
+                    eval_eps_last_infos = jax.vmap(lambda x: run_episodes(
+                        eval_rng, env, ego_param=train_state.params, ego_policy=ego_policy, 
+                        partner_param=x, partner_population=partner_population, 
+                        max_episode_steps=max_episode_steps, 
+                        num_eps=config["MAX_EVAL_EPISODES"]))(gathered_params)
+                    return (new_ckpt_arr, cidx + 1, rng, eval_eps_last_infos)
                 
                 def skip_ckpt(args):
                     return args
 
-                (checkpoint_array, ckpt_idx, rng, eval_infos) = jax.lax.cond(
-                    to_store, store_and_eval_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, rng, init_eval_info)
+                (checkpoint_array, ckpt_idx, rng, eval_last_infos) = jax.lax.cond(
+                    to_store, store_and_eval_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, rng, init_eval_last_info)
                 )
 
-                metric["eval_ep_infos"] = eval_infos[0]
-                metric["eval_ep_returns"] = eval_infos[1]
+                metric["eval_ep_last_info"] = eval_last_infos
                 return ((train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
-                        checkpoint_array, ckpt_idx, eval_infos), metric
+                        checkpoint_array, ckpt_idx, eval_last_infos), metric
 
             # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
@@ -546,7 +421,12 @@ def train_ppo_ego_agent(config, env, train_rng,
             # Init eval return infos
             eval_partner_indices = jnp.arange(num_total_partners)
             gathered_params = partner_population.gather_agent_params(eval_partner_indices)
-            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(rng_eval, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
+            eval_eps_last_infos = jax.vmap(lambda x: run_episodes(
+                        rng_eval, env, 
+                        ego_param=train_state.params, ego_policy=ego_policy, 
+                        partner_param=x, partner_population=partner_population, 
+                        max_episode_steps=max_episode_steps, 
+                        num_eps=config["MAX_EVAL_EPISODES"]))(gathered_params)
 
             # initial runner state for scanning
             update_steps = 0
@@ -568,7 +448,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 rng_train,
                 update_steps
             )
-            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_ep_return_infos)
+            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_eps_last_infos)
             
             # run training
             state_with_ckpt, metrics = jax.lax.scan(
@@ -577,7 +457,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 xs=None,
                 length=config["NUM_UPDATES"]
             )
-            (final_runner_state, checkpoint_array, final_ckpt_idx, eval_ep_return_infos) = state_with_ckpt
+            (final_runner_state, checkpoint_array, final_ckpt_idx, eval_eps_last_infos) = state_with_ckpt
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
@@ -662,7 +542,7 @@ def initialize_mlp_agent(config, env, rng):
 
     return policy, init_params
 
-def log_metrics(train_out, logger, metric_names: tuple, num_controlled_agents: int):
+def log_metrics(config, train_out, logger, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
     
     Args:
@@ -670,22 +550,25 @@ def log_metrics(train_out, logger, metric_names: tuple, num_controlled_agents: i
         logger: Logger, instance to log metrics
         metric_names: tuple, names of metrics to extract from training logs
     """
+    # TODO: figure out why the returned_episode_lengths seems weird? Numbers increase with each step until 
+    # episode termination, which isn't really what we wanted
+    # TODO: note that eval_ep_last_info reflects only the LAST statistic of each episode. This is fine because 
+    # only the LAST TIMESTEP statistic is valid, when returend by the LogWrapper.
     train_metrics = train_out["metrics"]
 
-    #### Extract train returns and other metrics of interest based on final timestep only ####
-    train_stats = get_stats(train_metrics, metric_names, num_controlled_agents)
+    #### Extract train metrics ####
+    train_stats = get_stats(train_metrics, metric_names)
     # each key in train_stats is a metric name, and the value is an array of shape (num_seeds, num_updates, 2)
     # where the last dimension contains the mean and std of the metric
-    import pdb; pdb.set_trace()
     train_stats = {k: np.mean(np.array(v), axis=0) for k, v in train_stats.items()}
     
-    #### Extract train and eval metrics from training logs ####
-    all_ego_returns = np.asarray(train_metrics["eval_ep_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
     all_ego_value_losses = np.asarray(train_metrics["value_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
     all_ego_actor_losses = np.asarray(train_metrics["actor_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
     all_ego_entropy_losses = np.asarray(train_metrics["entropy_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
 
+    #### Extract eval return metrics ####
     # Process eval return metrics - average across ego seeds, eval episodes and training partners for each checkpoint
+    all_ego_returns = np.asarray(train_metrics["eval_ep_last_info"]["returned_episode_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
     average_ego_rets_per_iter = np.mean(all_ego_returns[..., 0], axis=(0, 2, 3))
 
     # Process loss metrics - average across ego seeds, partners and minibatches dims
@@ -708,7 +591,20 @@ def log_metrics(train_out, logger, metric_names: tuple, num_controlled_agents: i
         
         logger.commit()
     
+    # Saving artifacts
+    savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    # TODO: in the future, add video logging feature
+    out_savepath = save_train_run(train_out, savedir, savename="saved_train_run")
+    if config["logger"]["log_train_out"]:
+        logger.log_artifact(name="saved_train_run", path=out_savepath, type_name="train_run")
+        # Cleanup locally logged out file
+    if not config["local_logger"]["save_train_out"]:
+        os.remove(out_savepath)
+   
+    # Cleanup
+    logger.close()
 
+    
 def run_ego_training(config, partner_params, pop_size: int):
     '''Run ego agent training against the population of partner agents.
     
@@ -778,5 +674,6 @@ def run_ego_training(config, partner_params, pop_size: int):
         metric_names = ("shaped_reward", "returned_episode_returns")
     else: 
         metric_names = ("returned_episode_returns", "returned_episode_lengths")
-    log_metrics(out, logger, metric_names, num_controlled_agents=algorithm_config["NUM_ENVS"])
+    log_metrics(config, out, logger, metric_names)
+    
     return out

@@ -65,7 +65,7 @@ def fcp_pipeline(config):
     else: 
         metric_names = ("returned_episode_returns")
         
-    all_stats = get_stats(metrics, metric_names, train_cfg["NUM_CONTROLLED_ACTORS"])
+    all_stats = get_stats(metrics, metric_names)
     plot_train_metrics(all_stats, train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
 
     # Perform evaluation

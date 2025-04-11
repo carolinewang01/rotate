@@ -7,7 +7,8 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
+from envs.log_wrapper import LogWrapper
+
 import time
 from envs import make_env
 from open_ended_training.train_ippo import make_train, unbatchify, Transition

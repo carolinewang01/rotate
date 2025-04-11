@@ -19,8 +19,8 @@ def run_training(cfg):
     train_partner_params = jax.tree.map(lambda x: x.reshape((n_seeds * m_ckpts,) + x.shape[2:]), 
                                         train_partner_ckpts)
 
-
     run_ego_training(cfg, train_partner_params, pop_size=n_seeds * m_ckpts)
+
 
 if __name__ == '__main__':
     run_training()

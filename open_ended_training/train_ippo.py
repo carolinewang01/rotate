@@ -1,3 +1,8 @@
+'''This script trains IPPO w/parameter sharing (MARL). 
+The onl difference from the implementation in ppo/ippo.py is that the make_train() function 
+here assumes that the env is provided. 
+TODO: in the future, we should unify these two implementations.
+'''
 import jax
 import jax.numpy as jnp
 import optax
