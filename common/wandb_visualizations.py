@@ -48,6 +48,7 @@ class Logger:
         wandb.define_metric("train_step")
         wandb.define_metric("checkpoint")
         wandb.define_metric("Train/*", step_metric="train_step")
+        wandb.define_metric("Eval/*", step_metric="checkpoint")
         wandb.define_metric("Returns/*", step_metric="checkpoint")
     
     def log_artifact(self, name, path, type_name):

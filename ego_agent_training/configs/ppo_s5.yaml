@@ -8,9 +8,11 @@ ENV_KWARGS: {}
 
 algorithm:
   ALG: ppo_s5_ego
-  TOTAL_TIMESTEPS: 1e5
+  TOTAL_TIMESTEPS: 1e6
   TRAIN_SEED: 12345
   N_EGO_TRAIN_SEEDS: 1
+  MAX_EVAL_EPISODES: 20
+  NUM_CHECKPOINTS: 5
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
@@ -18,8 +20,6 @@ algorithm:
   LR: 1.e-4 
   UPDATE_EPOCHS: 15
   NUM_MINIBATCHES: 4
-  MAX_EVAL_EPISODES: 20
-  NUM_CHECKPOINTS: 5
   GAMMA: 0.99
   GAE_LAMBDA: 0.95
   CLIP_EPS: 0.05
@@ -43,7 +43,7 @@ logger:
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
-  verbose: true
+  verbose: false
 
 local_logger:
   save_figures: true

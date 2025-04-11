@@ -2,7 +2,7 @@ import hydra
 from omegaconf import OmegaConf
 import jax
 
-from ppo_ego_s5 import run_ego_training
+from ppo_ego import run_ego_training
 from common.save_load_utils import load_checkpoints
 
 

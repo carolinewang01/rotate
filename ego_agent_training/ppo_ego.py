@@ -17,6 +17,7 @@ from envs import make_env
 from ppo.ippo import unbatchify, Transition
 from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, MLPActorCriticPolicy, ActorWithDoubleCriticPolicy
 from common.wandb_visualizations import Logger
+from common.plot_utils import get_stats
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -496,23 +497,21 @@ def train_ppo_ego_agent(config, env, train_rng,
             
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
-                 checkpoint_array, ckpt_idx) = state_with_ckpt
+                 checkpoint_array, ckpt_idx, init_eval_info) = state_with_ckpt
 
                 # Single PPO update
                 (new_runner_state, metric) = _update_step(
-                    (train_state, env_state, last_obs, last_done, hstate_0, 
-                    partner_hstate, partner_idx, rng, update_steps),
+                    (train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
                     None
                 )
-                (train_state, env_state, last_obs, last_done, hstate_0, 
-                partner_hstate, partner_idx, rng, update_steps) = new_runner_state
+                (train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps) = new_runner_state
 
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
                 
 
                 def store_and_eval_ckpt(args):
-                    ckpt_arr, cidx, rng = args
+                    ckpt_arr, cidx, rng, prev_eval_ret_info = args
                     new_ckpt_arr = jax.tree.map(
                         lambda c_arr, p: c_arr.at[cidx].set(p),
                         ckpt_arr, train_state.params
@@ -523,28 +522,32 @@ def train_ppo_ego_agent(config, env, train_rng,
                     gathered_params = partner_population.gather_agent_params(eval_partner_indices)
                     
                     rng, eval_rng = jax.random.split(rng)
-                    eval_metrics = jax.vmap(lambda x: run_episodes(
+                    eval_ep_return_infos = jax.vmap(lambda x: run_episodes(
                         eval_rng, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
-                    return (new_ckpt_arr, cidx + 1, rng, eval_metrics)
+                    return (new_ckpt_arr, cidx + 1, rng, eval_ep_return_infos)
                 
                 def skip_ckpt(args):
                     return args
 
-                (checkpoint_array, ckpt_idx, rng, eval_metrics) = jax.lax.cond(
-                    to_store, store_and_eval_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, rng)
+                (checkpoint_array, ckpt_idx, rng, eval_infos) = jax.lax.cond(
+                    to_store, store_and_eval_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, rng, init_eval_info)
                 )
 
-                metric["eval_ep_infos"] = eval_metrics[0]
-                metric["eval_ep_returns"] = eval_metrics[1]
+                metric["eval_ep_infos"] = eval_infos[0]
+                metric["eval_ep_returns"] = eval_infos[1]
                 return ((train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
-                        checkpoint_array, ckpt_idx), metric
+                        checkpoint_array, ckpt_idx, eval_infos), metric
 
             # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
 
             # init rngs
-            rng, rng_train = jax.random.split(rng)
+            rng, rng_eval, rng_train = jax.random.split(rng, 3)
+            # Init eval return infos
+            eval_partner_indices = jnp.arange(num_total_partners)
+            gathered_params = partner_population.gather_agent_params(eval_partner_indices)
+            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(rng_eval, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
 
             # initial runner state for scanning
             update_steps = 0
@@ -566,7 +569,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 rng_train,
                 update_steps
             )
-            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx)
+            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_ep_return_infos)
             
             # run training
             state_with_ckpt, metrics = jax.lax.scan(
@@ -575,7 +578,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 xs=None,
                 length=config["NUM_UPDATES"]
             )
-            (final_runner_state, checkpoint_array, final_ckpt_idx) = state_with_ckpt
+            (final_runner_state, checkpoint_array, final_ckpt_idx, eval_ep_return_infos) = state_with_ckpt
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)
@@ -620,18 +623,27 @@ def initialize_s5_agent(config, env, rng):
 
     return policy, init_params
 
-def process_metrics(training_logs, logger):
+def log_metrics(train_out, logger, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
     
     Args:
         training_logs: dict, the logs from training
         logger: Logger, instance to log metrics
+        metric_names: tuple, names of metrics to extract from training logs
     """
-    # Extract metrics from training logs
-    all_ego_returns = np.asarray(training_logs["metrics"]["eval_ep_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
-    all_ego_value_losses = np.asarray(training_logs["metrics"]["value_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-    all_ego_actor_losses = np.asarray(training_logs["metrics"]["actor_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-    all_ego_entropy_losses = np.asarray(training_logs["metrics"]["entropy_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
+    train_metrics = train_out["metrics"]
+
+    #### Extract train returns and other metrics of interest based on final timestep only ####
+    train_stats = get_stats(train_out["metrics"], metric_names, 1)
+    # each key in train_stats is a metric name, and the value is an array of shape (num_seeds, num_updates, 2)
+    # where the last dimension contains the mean and std of the metric
+    train_stats = {k: np.mean(np.array(v), axis=0) for k, v in train_stats.items()}
+    
+    #### Extract train and eval metrics from training logs ####
+    all_ego_returns = np.asarray(train_metrics["eval_ep_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
+    all_ego_value_losses = np.asarray(train_metrics["value_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
+    all_ego_actor_losses = np.asarray(train_metrics["actor_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
+    all_ego_entropy_losses = np.asarray(train_metrics["entropy_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
 
     # Process eval return metrics - average across ego seeds, eval episodes and training partners for each checkpoint
     average_ego_rets_per_iter = np.mean(all_ego_returns[..., 0], axis=(0, 2, 3))
@@ -642,23 +654,21 @@ def process_metrics(training_logs, logger):
     average_ego_actor_losses = np.mean(all_ego_actor_losses, axis=(0, 2, 3))
     average_ego_entropy_losses = np.mean(all_ego_entropy_losses, axis=(0, 2, 3))
 
-    import pdb; pdb.set_trace()
     # Log metrics for each update step
     num_updates = len(average_ego_value_losses)
     for step in range(num_updates):
-        logger.log_item("Returns/Ego", average_ego_rets_per_iter[step], train_step=step)
-        logger.log_item("Losses/EgoValueLoss", average_ego_value_losses[step], train_step=step)
-        logger.log_item("Losses/EgoActorLoss", average_ego_actor_losses[step], train_step=step)
-        logger.log_item("Losses/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=step)
+        for stat_name, stat_data in train_stats.items():
+            # second dimension contains the mean and std of the metric
+            stat_mean = stat_data[step, 0]
+            logger.log_item(f"Train/{stat_name}", stat_mean, train_step=step, commit=True)
+
+        logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], checkpoint=step, commit=True)
+        logger.log_item("Train/EgoValueLoss", average_ego_value_losses[step], train_step=step, commit=True)
+        logger.log_item("Train/EgoActorLoss", average_ego_actor_losses[step], train_step=step, commit=True)
+        logger.log_item("Train/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=step, commit=True)
         
         logger.commit()
     
-    return {
-        "average_ego_returns": average_ego_rets_per_iter,
-        "average_ego_value_losses": average_ego_value_losses,
-        "average_ego_actor_losses": average_ego_actor_losses,
-        "average_ego_entropy_losses": average_ego_entropy_losses
-    }
 
 def run_ego_training(config, partner_params, pop_size: int):
     '''Run ego agent training against the population of partner agents.
@@ -705,7 +715,7 @@ def run_ego_training(config, partner_params, pop_size: int):
     start_time = time.time()
     
     # Run the training
-    training_results = train_ppo_ego_agent(
+    out = train_ppo_ego_agent(
         config=algorithm_config,
         env=env,
         train_rng=train_rng,
@@ -718,5 +728,11 @@ def run_ego_training(config, partner_params, pop_size: int):
     log.info(f"Training completed in {time.time() - start_time:.2f} seconds")
     
     # process and log metrics
-    process_metrics(training_results, logger)
-    return training_results
+    if config["ENV_NAME"] == "lbf":
+        metric_names = ("percent_eaten", "returned_episode_returns")
+    elif config["ENV_NAME"] == "overcooked-v2":
+        metric_names = ("shaped_reward", "returned_episode_returns")
+    else: 
+        metric_names = ("returned_episode_returns", "returned_episode_lengths")
+    log_metrics(out, logger, metric_names)
+    return out
