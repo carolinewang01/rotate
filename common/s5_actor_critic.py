@@ -60,9 +60,6 @@ class SequenceLayer(nn.Module):
         if self.prenorm and self.do_norm:
             x = self.norm(x)
         # hidden, x = self.seq(hidden, x, d)
-        # print("Hidden : ", hidden)
-        # print("X : ", x)
-        # print("D : ", d)
         hidden, x = jax.vmap(self.seq, in_axes=1, out_axes=1)(hidden, x, d)
         # hidden = jnp.swapaxes(hidden, 1, 0)
         if self.do_gtrxl_norm:
@@ -475,13 +472,13 @@ def init_S5SSM(H,
                Lambda_im_init,
                V,
                Vinv,
-               C_init,
-               discretization,
-               dt_min,
-               dt_max,
-               conj_sym,
-               clip_eigs,
-               bidirectional
+               C_init="lecun_normal",
+               discretization="zoh",
+               dt_min=0.001,
+               dt_max=0.1,
+               conj_sym=True,
+               clip_eigs=False,
+               bidirectional=False
                ):
     """Convenience function that will be used to initialize the SSM.
        Same arguments as defined in S5SSM above."""
@@ -618,7 +615,7 @@ class StackedEncoderModel(nn.Module):
         # Use a dummy key since the default state init fn is just zeros.
         return [jnp.zeros((1, batch_size, hidden_size), dtype=jnp.complex64) for _ in range(n_layers)]
 
-class ActorCriticS5(nn.Module):
+class S5ActorCritic(nn.Module):
     action_dim: Sequence[int]
     config: Dict
     ssm_init_fn: Any

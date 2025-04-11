@@ -37,11 +37,11 @@ class ScannedRNN(nn.Module):
         return cell.initialize_carry(jax.random.PRNGKey(0), (batch_size, hidden_size))
 
 
-class ActorCriticRNN(nn.Module):
+class RNNActorCritic(nn.Module):
     action_dim: Sequence[int]
     fc_hidden_dim: int = 64
     gru_hidden_dim: int = 64
-    activation: str = "relu"
+    activation: str = "tanh"
 
     @nn.compact
     def __call__(self, hidden, x):
@@ -80,3 +80,4 @@ class ActorCriticRNN(nn.Module):
         )
 
         return hidden, pi, jnp.squeeze(critic, axis=-1)
+        

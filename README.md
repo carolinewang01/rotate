@@ -1,32 +1,80 @@
 # continual-aht
 
-### Project Installation Notes
-1. Install [Jumanji](https://github.com/instadeepai/jumanji/tree/main) from source, to get the Level Based Foraging (LBF) environment. 
-2. Install the fork of JaxMARL in our codebase via `pip install -e .[algs]` (run from the `jaxmarl_caroline` directory). 
-- Note that we have not made any changes to our JaxMARL fork, and it is primarily there to make referencing their baseline scripts easier. 
-3. Caroline's conda environment packages have been dumped to the `environment.yml`, found in the root of this codebase. After installing the above packages from source, please create a conda environment following the `environment.yml`. Don't forget to change the name of the environment and the prefix, within the `.yml` file!  
-4. Add the path to this codebase to your PYTHONPATH, either by adding a line to your `.bashrc`, or by setting it as a conda environment variable: `conda env config vars set PYTHONPATH=.:$PYTHONPATH`
+## TODOs
 
-### Project Guide
-The `tests/` directory stores various test scripts, primarily testing environments and environment wrappers. 
+### Metrics / Logging: 
+- Explore open-ended learning metrics 
+
+### Method Exploration: 
+- Implement (L)BR-Div
+
+### Environments with Diverse Coordination Conventions: 
+- Train various teammates for LBF, Overcooked-v1
+
+### Clean Up Code: 
+
+- Create general ego agent training scripts: 
+    - PPO S5 script: Figure out how to support a generic partner train function
+    - Once the above is done, update FCP, open-ended fcp, open-ended paired script use this function!
+    - Create generic ppo_ego_mlp and ppo_ego_rnn train scripts as well
+    - Once the above is done, update fcp scripts
+- Update open-ended minimax script following refactors and updates to PAIRED
+
+## Installation Guide
+Follow instructions at `install_instructions.md`
+
+### Project Structure
+- `agents/`: Contains heuristic agent implementations
+- `common/`: Shared utilities and common code
+- `envs/`: Environment implementations and wrappers
+- `evaluation/`: Evaluation and visualization scripts
+- `examples/`: Example usage scripts
+- `fcp/`: Fictitious Co-Play implementation
+- `ppo/`: IPPO algorithm implementation
+- `tests/`: Test scripts used during development.
+
+## Project Guide
+
+More details about some folders are provided below. 
+
+### Agents
+
+The `agents` directory contains heuristic for each supported environment. 
+Currently, only agents for Overcooked have been implemented.
+You can run the Overcooked heuristic agent by running, `python tests/test_overcooked_agents.py`.
+Later, we would want to add pretrained agents to this directory as well. 
+
+### Envs
+#### Jumanji (LBF)
+Currently, the only environment supported from the Jumanji suite is Level-Based Foraging (LBF).
 
 The wrapper for the Jumanji LBF environment is stored in the `envs/` directory, at `envs/jumanji_jaxmarl_wrapper.py`. A corresponding test script is stored at `tests/test_jumanji_jaxmarl_wrapper.py`.
+`
+#### Overcooked-v2
+We made some modifications to the JaxMARL Overcooked environment to improve the functionality and ensure environments are solvable.
 
-The `lbf_training/` directory stores various training scripts. Note that JaxMARL follows a single-script training paradigm. These training scripts were copied from JaxMARL's baseline examples. 
-- To train the JaxMARL IPPO on LBF (using our wrapper), run `python lbf_training/jaxmarl_ippo_rnn_lbf_smax.py`. This script was templated off the JaxMARL Smax example. 
-- To train the Jumanji A2C example on LBF (w/o our wrapper), run `python lbf_training/jumanji_a2c_lbf.py`. 
+- Initialization randomization: Previously, setting `random_reset` would lead to random initial agent positions, and randomized initial object states (e.g. pot might be initialized with onions already in it, agents might be initialized holding plates, etc.). We separate the functionality of the argument `random_reset` into two arguments: `random_reset` and `random_obj_state`, where `random_reset` only controls the initial positions of the two agents. 
+- Agent initial positions: previously, in a map with disconnected components, it was possible for two agents to be spawned in the same component, making it impossible to solve the task. The Overcooked-v2 environment initializes agents such that one is always spawned on each side of the map.
 
-### TODOs
-Finishing the wrapper: 
-- Add support for LBF environment parameters to the wrapper. 
 
-Creating LBF Sanity Check Experiments: 
-- Hand-code LBF teammate policies. 
-- Create LBF task where the objective is for the agent to collect the fruits in a certain order. 
+### Fictitious Co-Play (FCP)
+The `fcp/` directory stores our Fictitious Co-Play implementation. This implementation was based on JaxMARL's IPPO implementation. 
+Our full implementation can be run via `python fcp/run_fcp_pipeline.py`. Results are logged via wandb, but can also be viewed locally in the `results` directory.
 
-Developing better understanding of codebase:
-- Following the Overcooked example script, figure out how to vmap the LBF training process across multiple seeds. 
-- Figure out why returns logged by the LogWrapper don't seem correct. Do we need an environment specific log wrapper? 
+The FCP implementation includes several training variants:
+- `fcp_train_s5.py`: Training with S5 actor-critic architecture for the ego agent
+- `fcp_train_mlp.py`: Training with MLP actor-critic architecture for the ego agent
+- `fcp_train_rnn.py`: Training with RNN actor-critic architecture for the ego agent
+- `fcp_eval.py`: Evaluation script for FCP agents
+- `train_partners.py`: Script for training partner agents using IPPO.
 
-Method Exploration: 
-- Check Chris Lu's meta-learning works. Can we find meta-learning implementations in Jax? 
+### PPO
+The `ppo/` directory stores our IPPO implementation. 
+To run it with wandb logging and using the configs, run `python ppo/run_ppo.py`. 
+Results are logged via wandb, but can also be viewed locally in the `results` directory.
+
+The `ppo/ippo.py` script can also be ran on its own for debugging purposes.
+
+### Coding Style Notes
+JaxMARL follows a single-script training paradigm, which enables jit-compiling the entire RL training loop and makes it simple for researchers to modify algorithms. 
+We follow a similar paradigm, but importing a couple common utility functions to avoid code duplication. 
