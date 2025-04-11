@@ -8,14 +8,15 @@ ENV_KWARGS: {}
 
 algorithm:
   ALG: fcp
-  NUM_OPEN_ENDED_ITERS: 10
+  NUM_OPEN_ENDED_ITERS: 2 # 10
   PARTNER_POP_SIZE: 3
+  MAX_EVAL_EPISODES: 20
   TRAIN_SEED: 38410
-  NUM_ENVS: 32
+  NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
-  TOTAL_TIMESTEPS: 1e6 
+  TOTAL_TIMESTEPS: 3e5  # per iter of open-ended training
   LR: 1.e-4
   UPDATE_EPOCHS: 15
   NUM_MINIBATCHES: 16
@@ -26,15 +27,29 @@ algorithm:
   ENT_COEF: 0.01
   VF_COEF: 1.0
   MAX_GRAD_NORM: 1.0
-  ACTIVATION: tanh
   ANNEAL_LR: true
+  S5_ACTOR_CRITIC_HIDDEN_DIM: 64
+  S5_D_MODEL: 16
+  S5_SSM_SIZE: 16
+  S5_N_LAYERS: 2
+  S5_BLOCKS: 1
+  S5_ACTIVATION: full_glu
+  S5_DO_NORM: true
+  S5_PRENORM: true
+  S5_DO_GTRXL_NORM: true
 
 name: open_ended_fcp
 
 # wandb settings
-logger:
+logger: 
   load_dir: open_ended_fcp
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
   verbose: true
+  log_train_out: false # whether to log the out dictionary
+
+# Local logger
+local_logger:
+  save_figures: true # currently unused
+  save_train_out: true

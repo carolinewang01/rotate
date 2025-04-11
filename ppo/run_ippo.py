@@ -5,7 +5,7 @@ import jax
 
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger as WandBLogger
-from common.plot_utils import plot_train_metrics, get_stats
+from common.plot_utils import plot_train_metrics, get_stats, get_metric_names
 from ippo import make_train
 
 
@@ -35,17 +35,12 @@ def main(config):
         os.remove(out_savepath)
    
 
-    if config["ENV_NAME"] == "lbf":
-        metric_names = ("percent_eaten", "returned_episode_returns")
-    elif config["ENV_NAME"] == "overcooked-v2":
-        metric_names = ("shaped_reward", "returned_episode_returns")
-    else: 
-        metric_names = ("returned_episode_returns")
-    
+    metric_names = get_metric_names(config["ENV_NAME"])
+
     # Generate plots
     all_stats = get_stats(out["metrics"], metric_names)
     figures, _ = plot_train_metrics(all_stats, 
-                                    config_dict["NUM_STEPS"], 
+                                    config_dict["ROLLOUT_LENGTH"], 
                                     config_dict["NUM_ENVS"],
                                     savedir=savedir if config["local_logger"]["save_figures"] else None,
                                     savename="ippo_train_metrics",

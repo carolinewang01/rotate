@@ -13,7 +13,7 @@ from fcp.fcp_train_s5 import train_fcp_agent
 from fcp.fcp_eval import main as eval_main
 from fcp.train_partners import train_partners_in_parallel
 from common.save_load_utils import save_train_run, load_checkpoints
-from common.plot_utils import get_stats, plot_train_metrics
+from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -58,15 +58,10 @@ def fcp_pipeline(config):
 
     # Visualize training metrics
     metrics = fcp_out["metrics"]
-    if config["ENV_NAME"] == "lbf":
-        metric_names = ("percent_eaten", "returned_episode_returns")
-    elif config["ENV_NAME"] == "overcooked-v2":
-        metric_names = ("shaped_reward", "returned_episode_returns")
-    else: 
-        metric_names = ("returned_episode_returns")
+    metric_names = get_metric_names(config["ENV_NAME"])
         
     all_stats = get_stats(metrics, metric_names)
-    plot_train_metrics(all_stats, train_cfg["NUM_STEPS"], train_cfg["NUM_ENVS"])
+    plot_train_metrics(all_stats, train_cfg["ROLLOUT_LENGTH"], train_cfg["NUM_ENVS"])
 
     # Perform evaluation
     log.info("Evaluating FCP Agent...")

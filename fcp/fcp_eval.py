@@ -91,7 +91,7 @@ def eval_ego_agent(base_config, ego_config, partner_config,
     num_partner_total = sample_leaf_eval.shape[0]
 
     # We'll use a fixed maximum step count per episode.
-    max_episode_steps = base_config["NUM_STEPS"] 
+    max_episode_steps = base_config["ROLLOUT_LENGTH"] 
 
     # --- 4. Inner evaluation functions (without jit) ---
     def run_single_episode(rng, ego_param, partner_param):
@@ -293,7 +293,7 @@ if __name__ == "__main__":
         "ENV_NAME": "lbf",
         "ENV_KWARGS": {
         },
-        "NUM_STEPS": 128, # max episode steps
+        "ROLLOUT_LENGTH": 128, # max episode steps
         "SEED": 12345
     }
     partner_config = {}

@@ -89,7 +89,7 @@ def train_fcp_agent(config, checkpoints):
         config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"] # assumption: we control 1 agent
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
+        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["ROLLOUT_LENGTH"] // config["NUM_ENVS"]
         config["NUM_ACTIONS"] = env.action_space(env.agents[0]).n
 
         def linear_schedule(count):
@@ -374,7 +374,7 @@ def train_fcp_agent(config, checkpoints):
                     rng
                 )
                 runner_state, traj_batch = jax.lax.scan(
-                    _env_step, runner_state, None, config["NUM_STEPS"])
+                    _env_step, runner_state, None, config["ROLLOUT_LENGTH"])
                 (train_state, env_state, last_obs, last_done, last_hstate_0, partner_indices, rng) = runner_state
 
                 # 2) advantage
@@ -533,7 +533,7 @@ if __name__ == "__main__":
         "TOTAL_TIMESTEPS": 3e5, #  3e6
         "LR": 1.e-4,
         "NUM_ENVS": 16,
-        "NUM_STEPS": 128, 
+        "ROLLOUT_LENGTH": 128, 
         "UPDATE_EPOCHS": 15,
         "NUM_MINIBATCHES": 8,
         "NUM_CHECKPOINTS": 5,
@@ -576,4 +576,4 @@ if __name__ == "__main__":
     # metrics values shape is (num_seeds, num_updates, num_rollout_steps, num_envs, num_agents)
     metrics = fcp_out["metrics"]
     all_stats = get_stats(metrics, ("percent_eaten", "returned_episode_returns"))
-    plot_train_metrics(all_stats, config["NUM_STEPS"], config["NUM_ENVS"])
+    plot_train_metrics(all_stats, config["ROLLOUT_LENGTH"], config["NUM_ENVS"])

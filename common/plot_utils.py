@@ -5,6 +5,14 @@ import jax.numpy as jnp
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+def get_metric_names(env_name):
+    if env_name == "lbf":
+        return ("percent_eaten", "returned_episode_returns")
+    elif env_name == "overcooked-v2":
+        return ("shaped_reward", "returned_episode_returns")
+    else:
+        return ("returned_episode_returns", "returned_episode_lengths")
+
 @partial(jax.jit, static_argnames=['stats'])
 def get_stats(metrics, stats: tuple):
     '''

@@ -21,7 +21,7 @@ from ego_agent_training.run_episodes import run_episodes
 from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, \
     MLPActorCriticPolicy, ActorWithDoubleCriticPolicy, RNNActorCriticPolicy
 from common.wandb_visualizations import Logger
-from common.plot_utils import get_stats
+from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 
 log = logging.getLogger(__name__)
@@ -646,6 +646,8 @@ def run_ego_training(config, partner_params, pop_size: int):
     elif algorithm_config["ALG"] == "ppo_mlp":
         ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
     elif algorithm_config["ALG"] == "ppo_rnn":
+        # WARNING: currently the RNN policy is not working. 
+        # TODO: fix this!
         ego_policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)
     
     log.info("Starting ego agent training...")
@@ -665,12 +667,7 @@ def run_ego_training(config, partner_params, pop_size: int):
     log.info(f"Training completed in {time.time() - start_time:.2f} seconds")
     
     # process and log metrics
-    if config["ENV_NAME"] == "lbf":
-        metric_names = ("percent_eaten", "returned_episode_returns")
-    elif config["ENV_NAME"] == "overcooked-v2":
-        metric_names = ("shaped_reward", "returned_episode_returns")
-    else: 
-        metric_names = ("returned_episode_returns", "returned_episode_lengths")
+    metric_names = get_metric_names(config["ENV_NAME"])
     log_metrics(config, out, logger, metric_names)
     
     return out
