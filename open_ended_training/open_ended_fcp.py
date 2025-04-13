@@ -32,7 +32,7 @@ def train_partners_in_parallel(config, partner_rng, env):
     out = train_jit(rngs)
     return out
 
-def open_ended_training_step(carry, ego_policy, partner_policy, config, env):
+def open_ended_training_step(carry, ego_policy, partner_population, config, env):
     prev_ego_params, rng = carry
     rng, partner_rng, train_ego_rng = jax.random.split(rng, 3)
     
@@ -41,22 +41,12 @@ def open_ended_training_step(carry, ego_policy, partner_policy, config, env):
     
     # Extract partner parameters
     partner_params = train_partner_out["checkpoints"]
-    n_seeds, m_ckpts = partner_params["params"]["Dense_0"]["kernel"].shape[:2]
-    pop_size = n_seeds * m_ckpts
+    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
     
     # Flatten partner parameters for AgentPopulation
     flattened_partner_params = jax.tree.map(
         lambda x: x.reshape((pop_size,) + x.shape[2:]), 
         partner_params
-    )
-    
-    # Create partner population using the provided partner policy
-    # Because the AgentPopulation owns the population parameters, we need to 
-    # re-initialize the population object. 
-    partner_population = AgentPopulation(
-        pop_params=flattened_partner_params,
-        pop_size=pop_size,
-        policy_cls=partner_policy
     )
     
     # Train ego agent using train_ppo_ego_agent
@@ -67,7 +57,8 @@ def open_ended_training_step(carry, ego_policy, partner_policy, config, env):
         ego_policy=ego_policy,
         init_ego_params=prev_ego_params,
         n_ego_train_seeds=1,
-        partner_population=partner_population
+        partner_population=partner_population,
+        partner_params=flattened_partner_params
     )
     
     updated_ego_parameters = ego_out["final_params"]
@@ -148,9 +139,9 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
                     logger.log_item(f"Train/Ego_{stat_name}", stat_mean, train_step=global_step, commit=True)
             
             logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], train_step=global_step, commit=True)
-            logger.log_item("Train/EgoValueLoss", average_ego_value_losses[step], train_step=global_step, commit=True)
-            logger.log_item("Train/EgoActorLoss", average_ego_actor_losses[step], train_step=global_step, commit=True)
-            logger.log_item("Train/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=global_step, commit=True)
+            logger.log_item("Losses/EgoValueLoss", average_ego_value_losses[step], train_step=global_step, commit=True)
+            logger.log_item("Losses/EgoActorLoss", average_ego_actor_losses[step], train_step=global_step, commit=True)
+            logger.log_item("Losses/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=global_step, commit=True)
                 
     logger.commit()
     
@@ -187,10 +178,16 @@ def run_fcp(config):
         action_dim=env.action_space(env.agents[1]).n,
         obs_dim=env.observation_space(env.agents[1]).shape[0],
     )
-    
+
+    # Create partner population using the provided partner policy
+    partner_population = AgentPopulation(
+        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        policy_cls=partner_policy
+    )
+
     @jax.jit
     def open_ended_step_fn(carry, unused):
-        return open_ended_training_step(carry, ego_policy, partner_policy, algorithm_config, env)
+        return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
     # Define initial carry with policies included
     init_carry = (init_params, train_rng)

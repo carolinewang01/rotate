@@ -6,21 +6,24 @@ import jax
 import jax.numpy as jnp
 
 
-def run_single_episode(rng, env, ego_param, ego_policy, 
-                       partner_param, partner_population, 
+def run_single_episode(rng, env, agent_0_param, agent_0_policy, 
+                       agent_1_param, agent_1_policy, 
                        max_episode_steps
                        ):
-    '''TODO: rewrite this eval code parallelize the evaluation over max_episode_steps, following
-    the convention of _env_step().'''
+    '''
+    Agent 0 is the ego agent, agent 1 is the partner agent.
+    TODO: rewrite this eval code parallelize the evaluation over max_episode_steps, following
+    the convention of _env_step().
+    '''
     # Reset the env.
     rng, reset_rng = jax.random.split(rng)
     obs, env_state = env.reset(reset_rng)
-    init_done = jnp.zeros(1, dtype=bool)
+    init_done = {"agent_0": jnp.zeros(1, dtype=bool),
+                 "agent_1": jnp.zeros(1, dtype=bool)}
     
-    # Initialize ego hidden state
-    init_hstate_0 = ego_policy.init_hstate(1)
-    # Initialize partner hidden state for a single agent only
-    init_partner_hstate = partner_population.init_hstate(1)
+    # Initialize hidden states
+    init_hstate_0 = agent_0_policy.init_hstate(1)
+    init_hstate_1 = agent_1_policy.init_hstate(1)
 
     # Get agent obses
     obs_0 = obs["agent_0"]
@@ -35,13 +38,13 @@ def run_single_episode(rng, env, ego_param, ego_policy,
     # Do one step to get a dummy info structure
     rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
     
-    # Reshape inputs for S5
+    # Reshape inputs
     obs_0_reshaped = obs_0.reshape(1, 1, -1)
-    done_0_reshaped = init_done.reshape(1, 1)
+    done_0_reshaped = init_done["agent_0"].reshape(1, 1)
     
     # Get ego action
-    act_0, hstate_0 = ego_policy.get_action(
-        ego_param,
+    act_0, hstate_0 = agent_0_policy.get_action(
+        agent_0_param,
         obs_0_reshaped,
         done_0_reshaped,
         avail_actions_0,
@@ -51,26 +54,29 @@ def run_single_episode(rng, env, ego_param, ego_policy,
     act_0 = act_0.squeeze()
 
     # Get partner action using the underlying policy class's get_action method directly
-    act1, partner_hstate = partner_population.policy_cls.get_action(
-        partner_param, 
-        obs_1, 
-        init_done,
+    obs_1_reshaped = obs_1.reshape(1, 1, -1)
+    done_1_reshaped = init_done["agent_1"].reshape(1, 1)
+    act_1, hstate_1 = agent_1_policy.get_action(
+        agent_1_param, 
+        obs_1_reshaped, 
+        done_1_reshaped,
         avail_actions_1,
-        init_partner_hstate,  # Pass the proper hidden state
+        init_hstate_1,  # Pass the proper hidden state
         part_rng
     )
+    act_1 = act_1.squeeze()
     
-    both_actions = [act_0, act1]
+    both_actions = [act_0, act_1]
     env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
     _, _, _, done, dummy_info = env.step(step_rng, env_state, env_act)
 
 
     # We'll use a scan to iterate steps until the episode is done.
     ep_ts = 1
-    init_carry = (ep_ts, env_state, obs, rng, done, hstate_0, partner_hstate, dummy_info)
+    init_carry = (ep_ts, env_state, obs, rng, done, hstate_0, hstate_1, dummy_info)
     def scan_step(carry, _):
         def take_step(carry_step):
-            ep_ts, env_state, obs, rng, done, hstate_0, partner_hstate, last_info = carry_step
+            ep_ts, env_state, obs, rng, done, hstate_0, hstate_1, last_info = carry_step
             # Get available actions for agent 0 from environment state
             avail_actions = env.get_avail_actions(env_state.env_state)
             avail_actions = jax.lax.stop_gradient(avail_actions)
@@ -78,18 +84,19 @@ def run_single_episode(rng, env, ego_param, ego_policy,
             avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
 
             # Get agent obses
-            obs_0 = obs["agent_0"]
-            obs_1 = obs["agent_1"]
-            prev_done_0 = done["agent_0"]
+            obs_0, obs_1 = obs["agent_0"], obs["agent_1"]
+            prev_done_0, prev_done_1 = done["agent_0"], done["agent_1"]
             
             # Reshape inputs for S5
             obs_0_reshaped = obs_0.reshape(1, 1, -1)
             done_0_reshaped = prev_done_0.reshape(1, 1)
+            obs_1_reshaped = obs_1.reshape(1, 1, -1)
+            done_1_reshaped = prev_done_1.reshape(1, 1)
             
             # Get ego action
             rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
-            act_0, hstate_0_next = ego_policy.get_action(
-                ego_param,
+            act_0, hstate_0_next = agent_0_policy.get_action(
+                agent_0_param,
                 obs_0_reshaped,
                 done_0_reshaped,
                 avail_actions_0,
@@ -99,22 +106,23 @@ def run_single_episode(rng, env, ego_param, ego_policy,
             act_0 = act_0.squeeze()
 
             # Get partner action with proper hidden state tracking
-            act1, partner_hstate_next = partner_population.policy_cls.get_action(
-                partner_param, 
-                obs_1, 
-                prev_done_0,
+            act_1, hstate_1_next = agent_1_policy.get_action(
+                agent_1_param, 
+                obs_1_reshaped,
+                done_1_reshaped,
                 avail_actions_1,
-                partner_hstate,
+                hstate_1,
                 part_rng
             )
+            act_1 = act_1.squeeze()
             
-            both_actions = [act_0, act1]
+            both_actions = [act_0, act_1]
             env_act = {k: both_actions[i] for i, k in enumerate(env.agents)}
             obs_next, env_state_next, reward, done_next, info_next = env.step(step_rng, env_state, env_act)
 
-            return (ep_ts + 1, env_state_next, obs_next, rng, done_next, hstate_0_next, partner_hstate_next, info_next)
+            return (ep_ts + 1, env_state_next, obs_next, rng, done_next, hstate_0_next, hstate_1_next, info_next)
                 
-        ep_ts, env_state, obs, rng, done, hstate_0, partner_hstate, last_info = carry
+        ep_ts, env_state, obs, rng, done, hstate_0, hstate_1, last_info = carry
         new_carry = jax.lax.cond(
             done["__all__"],
             # if done, execute true function(operand). else, execute false function(operand).
@@ -129,11 +137,16 @@ def run_single_episode(rng, env, ego_param, ego_policy,
     # Return the final info (which includes the episode return via LogWrapper).
     return final_carry[-1]
 
-def run_episodes(rng, env, ego_param, ego_policy, partner_param, partner_population, max_episode_steps, num_eps):
+def run_episodes(rng, env, agent_0_param, agent_0_policy, 
+                 agent_1_param, agent_1_policy, 
+                 max_episode_steps, num_eps):
+    '''Given a single ego agent and a single partner agent, run num_eps episodes.'''
     def body_fn(carry, _):
         rng = carry
         rng, ep_rng = jax.random.split(rng)
-        ep_last_info = run_single_episode(ep_rng, env, ego_param, ego_policy, partner_param, partner_population, max_episode_steps)
+        ep_last_info = run_single_episode(ep_rng, env, agent_0_param, agent_0_policy, 
+                                          agent_1_param, agent_1_policy, 
+                                          max_episode_steps)
         return rng, ep_last_info
     rng, all_outs = jax.lax.scan(body_fn, rng, None, length=num_eps)
     return all_outs  # each leaf has shape (num_eps, ...)

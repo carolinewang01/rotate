@@ -32,7 +32,7 @@ algorithm:
 logger: 
   project: open-ended-aht
   entity: aht-project
-  mode: online # options: online, offline, disabled
+  mode: offline # options: online, offline, disabled
   verbose: true
   log_train_out: false # whether to log the out dictionary
 

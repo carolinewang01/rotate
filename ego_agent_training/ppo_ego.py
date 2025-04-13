@@ -30,7 +30,8 @@ logging.basicConfig(level=logging.INFO)
 
 def train_ppo_ego_agent(config, env, train_rng, 
                         ego_policy, init_ego_params, n_ego_train_seeds,
-                        partner_population: AgentPopulation
+                        partner_population: AgentPopulation,
+                        partner_params
                         ):
     '''
     Train PPO ego agent using the given partner checkpoints and initial ego parameters.
@@ -43,6 +44,7 @@ def train_ppo_ego_agent(config, env, train_rng,
         init_ego_params: dict, initial parameters for the ego agent
         n_ego_train_seeds: int, number of ego training seeds
         partner_population: AgentPopulation, population of partner agents
+        partner_params: pytree of parameters for the population of agents of shape (pop_size, ...).
     '''
     # Get partner parameters from the population
     num_total_partners = partner_population.pop_size
@@ -97,7 +99,7 @@ def train_ppo_ego_agent(config, env, train_rng,
             # Each environment picks a partner index in [0, n_seeds*m_ckpts)
             rng, partner_rng = jax.random.split(rng)
             partner_indices = partner_population.sample_agent_indices(config["NUM_CONTROLLED_ACTORS"], partner_rng)
-
+            
             def _env_step(runner_state, unused):
                 """
                 One step of the environment:
@@ -119,7 +121,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 
                 # Reshape inputs for S5 (sequence_length, batch_size, features)
                 obs_0_reshaped = obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1)
-                done_0_reshaped = prev_done.reshape(1, config["NUM_CONTROLLED_ACTORS"])
+                done_0_reshaped = prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"])
                 
                 # Agent_0 (ego) action, value, log_prob
                 act_0, val_0, pi_0, hstate_0 = ego_policy.get_action_value_policy(
@@ -137,14 +139,23 @@ def train_ppo_ego_agent(config, env, train_rng,
                 val_0 = val_0.squeeze()
 
                 # Agent_1 (partner) action using the AgentPopulation interface
+                
+                # reshape inputs and parameters so that the first dim corresponds to the number of controlled actors
+                # (the dim that vmapping will be applied over) and the second dim corresponds to the time dimension of (1,)
+                # required by recurrent partner policies
+                obs_1_reshaped = obs_1.reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
+                done_1_reshaped = prev_done["agent_1"].reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
+
                 act_1, new_partner_hstate = partner_population.get_actions(
+                    partner_params,
                     partner_indices,
-                    obs_1,
-                    prev_done,
+                    obs_1_reshaped,
+                    done_1_reshaped,
                     avail_actions_1,
                     partner_hstate,
                     partner_rng
                 )
+                act_1 = act_1.squeeze()
 
                 # Combine actions into the env format
                 combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
@@ -170,7 +181,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
-                new_runner_state = (train_state, env_state_next, obs_next, done["agent_0"], hstate_0, new_partner_hstate, partner_indices, rng)
+                new_runner_state = (train_state, env_state_next, obs_next, done, hstate_0, new_partner_hstate, partner_indices, rng)
                 return new_runner_state, transition
 
             # GAE & update step
@@ -300,14 +311,14 @@ def train_ppo_ego_agent(config, env, train_rng,
                 avail_actions_0 = jax.vmap(env.get_avail_actions)(env_state.env_state)["agent_0"].astype(jnp.float32)
                 
                 # Reshape inputs for S5
-                last_obs_reshaped = last_obs_batch_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1)
-                last_done_reshaped = last_done.reshape(1, config["NUM_CONTROLLED_ACTORS"])
+                obs_0_reshaped = last_obs_batch_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1)
+                done_0_reshaped = last_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"])
                 
                 # Get final value estimate for completed trajectory
                 _, last_val, _, last_hstate_0 = ego_policy.get_action_value_policy(
                     params=train_state.params, 
-                    obs=last_obs_reshaped,
-                    done=last_done_reshaped,
+                    obs=obs_0_reshaped,
+                    done=done_0_reshaped,
                     avail_actions=jax.lax.stop_gradient(avail_actions_0),
                     hstate=last_hstate_0,
                     rng=jax.random.PRNGKey(0)  # Dummy key since we're just extracting the value
@@ -340,7 +351,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 rng, reset_rng = jax.random.split(rng)
                 reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
                 obs, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
-                init_done = jnp.zeros((config["NUM_CONTROLLED_ACTORS"]), dtype=bool)
+                init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
                 
                 # Re-initialize hidden states for partners after resetting
                 # Note that we return the init_hstate_0 for the ego agent, which effectively resets it
@@ -391,12 +402,12 @@ def train_ppo_ego_agent(config, env, train_rng,
 
                     eval_partner_indices = jnp.arange(num_total_partners)
                     # Use the AgentPopulation's gather_agent_params method
-                    gathered_params = partner_population.gather_agent_params(eval_partner_indices)
+                    gathered_params = partner_population.gather_agent_params(partner_params, eval_partner_indices)
                     
                     rng, eval_rng = jax.random.split(rng)
                     eval_eps_last_infos = jax.vmap(lambda x: run_episodes(
-                        eval_rng, env, ego_param=train_state.params, ego_policy=ego_policy, 
-                        partner_param=x, partner_population=partner_population, 
+                        eval_rng, env, agent_0_param=train_state.params, agent_0_policy=ego_policy, 
+                        agent_1_param=x, agent_1_policy=partner_population.policy_cls, 
                         max_episode_steps=max_episode_steps, 
                         num_eps=config["MAX_EVAL_EPISODES"]))(gathered_params)
                     return (new_ckpt_arr, cidx + 1, rng, eval_eps_last_infos)
@@ -420,17 +431,17 @@ def train_ppo_ego_agent(config, env, train_rng,
             rng, rng_eval, rng_train = jax.random.split(rng, 3)
             # Init eval return infos
             eval_partner_indices = jnp.arange(num_total_partners)
-            gathered_params = partner_population.gather_agent_params(eval_partner_indices)
+            gathered_params = partner_population.gather_agent_params(partner_params, eval_partner_indices)
             eval_eps_last_infos = jax.vmap(lambda x: run_episodes(
                         rng_eval, env, 
-                        ego_param=train_state.params, ego_policy=ego_policy, 
-                        partner_param=x, partner_population=partner_population, 
+                        agent_0_param=train_state.params, agent_0_policy=ego_policy, 
+                        agent_1_param=x, agent_1_policy=partner_population.policy_cls, 
                         max_episode_steps=max_episode_steps, 
                         num_eps=config["MAX_EVAL_EPISODES"]))(gathered_params)
 
             # initial runner state for scanning
             update_steps = 0
-            init_done = jnp.zeros((config["NUM_CONTROLLED_ACTORS"]), dtype=bool)
+            init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
             # Initialize partner hidden state
             init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
             # Sample initial partner indices
@@ -635,7 +646,6 @@ def run_ego_training(config, partner_params, pop_size: int):
 
     # Create partner population
     partner_population = AgentPopulation(
-        pop_params=partner_params,
         pop_size=pop_size,
         policy_cls=partner_policy
     )
@@ -661,7 +671,8 @@ def run_ego_training(config, partner_params, pop_size: int):
         ego_policy=ego_policy,
         init_ego_params=init_params,
         n_ego_train_seeds=algorithm_config["N_EGO_TRAIN_SEEDS"],
-        partner_population=partner_population
+        partner_population=partner_population,
+        partner_params=partner_params
     )
     
     log.info(f"Training completed in {time.time() - start_time:.2f} seconds")

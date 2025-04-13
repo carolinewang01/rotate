@@ -12,33 +12,37 @@ from common.rnn_actor_critic import RNNActorCritic, ScannedRNN
 
 class AgentPopulation:
     '''Base class for a population of identical agents'''
-    def __init__(self, pop_params, pop_size, policy_cls):
+    def __init__(self, pop_size, policy_cls):
         '''
         Args:
-            pop_params: pytree of parameters for the population of agents of shape (pop_size, ...).
             pop_size: int, number of agents in the population
             policy_cls: an instance of the AgentPolicy class. The policy class for the population of agents
         '''
         self.pop_size = pop_size
-        self.pop_params = pop_params
         self.policy_cls = policy_cls # AgentPolicy class
 
     def sample_agent_indices(self, n, rng):
         '''Sample n indices from the population, with replacement.'''
         return jax.random.randint(rng, (n,), 0, self.pop_size)
     
-    def gather_agent_params(self, agent_indices):
-        '''Gather the parameters of the agents specified by agent_indices.'''
+    def gather_agent_params(self, pop_params, agent_indices):
+        '''Gather the parameters of the agents specified by agent_indices.
+
+        Args:
+            pop_params: pytree of parameters for the population of agents of shape (pop_size, ...).
+            agent_indices: indices with shape (num_envs,), each in [0, pop_size)
+        '''
         def gather_leaf(leaf):
             # leaf shape: (num_envs,  ...)
             return jax.vmap(lambda idx: leaf[idx])(agent_indices)
-        return jax.tree.map(gather_leaf, self.pop_params)
+        return jax.tree.map(gather_leaf, pop_params)
     
-    def get_actions(self, agent_indices, obs, done, avail_actions, hstate, rng):
+    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng):
         '''
         Get the actions of the agents specified by agent_indices.
         
         Args:
+            pop_params: pytree of parameters for the population of agents of shape (pop_size, ...).
             agent_indices: indices with shape (num_envs,), each in [0, pop_size)
             obs: observations with shape (num_envs, ...) 
             done: done flags with shape (num_envs,)
@@ -50,22 +54,17 @@ class AgentPopulation:
             actions: actions with shape (num_envs,)
             new_hstate: new hidden state with shape (num_envs, ...) or None
         '''
-        gathered_params = self.gather_agent_params(agent_indices)
-        num_envs = agent_indices.shape[0]
+        gathered_params = self.gather_agent_params(pop_params, agent_indices)
+        num_envs = agent_indices.squeeze().shape[0]
         rngs_batched = jax.random.split(rng, num_envs)
         actions, new_hstate = jax.vmap(self.policy_cls.get_action)(
             gathered_params, obs, done, avail_actions, hstate, 
             rngs_batched)
         return actions, new_hstate
     
-    def get_params(self):
-        '''Return the parameters of the population.'''
-        return self.pop_params
-
     def init_hstate(self, n: int):
         '''Initialize the hidden state for n members of the population.'''
         return self.policy_cls.init_hstate(n)
-
 
 class AgentPolicy(abc.ABC):
     '''Abstract base class for a policy.'''

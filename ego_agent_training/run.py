@@ -8,6 +8,8 @@ from common.save_load_utils import load_checkpoints
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def run_training(cfg):
+    '''Runs the ego agent training against a fixed partner population. This script is 
+    mostly just used for debugging.'''
     print(OmegaConf.to_yaml(cfg, resolve=True))
 
     #  Load partner population

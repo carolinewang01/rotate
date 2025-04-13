@@ -9,7 +9,7 @@ ENV_KWARGS: {}
 algorithm:
   ALG: fcp
   NUM_OPEN_ENDED_ITERS: 2 # 10
-  PARTNER_POP_SIZE: 3
+  PARTNER_POP_SIZE: 3 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
   MAX_EVAL_EPISODES: 20
   TRAIN_SEED: 38410
   NUM_ENVS: 16

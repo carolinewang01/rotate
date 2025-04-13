@@ -8,8 +8,8 @@ ENV_KWARGS: {}
 
 algorithm:
   ALG: paired
-  NUM_OPEN_ENDED_ITERS: 300
-  PARTNER_POP_SIZE: 5
+  NUM_OPEN_ENDED_ITERS: 2 # 300
+  PARTNER_POP_SIZE: 3 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
   TRAIN_SEED: 38410
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
@@ -27,7 +27,6 @@ algorithm:
   ENT_COEF: 0.001
   VF_COEF: 1.0
   MAX_GRAD_NORM: 1.0
-  ACTIVATION: relu
   ANNEAL_LR: false
   S5_ACTOR_CRITIC_HIDDEN_DIM: 64
   S5_D_MODEL: 16
@@ -40,10 +39,17 @@ algorithm:
   S5_DO_GTRXL_NORM: true
 
 name: open_ended_paired
+
 # wandb settings
-logger:
+logger: 
   load_dir: open_ended_paired
   project: open-ended-aht
   entity: aht-project
-  mode: online # options: online, offline, disabled
+  mode: disabled # options: online, offline, disabled
   verbose: true
+  log_train_out: false # whether to log the out dictionary
+
+# Local logger
+local_logger:
+  save_figures: true # currently unused
+  save_train_out: true
