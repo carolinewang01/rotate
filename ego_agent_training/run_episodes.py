@@ -18,8 +18,7 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
     # Reset the env.
     rng, reset_rng = jax.random.split(rng)
     obs, env_state = env.reset(reset_rng)
-    init_done = {"agent_0": jnp.zeros(1, dtype=bool),
-                 "agent_1": jnp.zeros(1, dtype=bool)}
+    init_done = {k: jnp.zeros((1), dtype=bool) for k in env.agents + ["__all__"]}
     
     # Initialize hidden states
     init_hstate_0 = agent_0_policy.init_hstate(1)

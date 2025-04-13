@@ -107,7 +107,7 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
                 stat_mean = stat_data[step, 0]
                 # Include iteration in the step calculation
                 global_step = iter_idx * num_partner_updates + step
-                logger.log_item(f"Train/Partner_{stat_name}", stat_mean, train_step=global_step, commit=True)
+                logger.log_item(f"Train/Partner_{stat_name}", stat_mean, train_step=global_step)
         
         ### ego metrics
         # Extract ego train stats
@@ -116,15 +116,11 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
         ego_stats = {k: np.mean(np.array(v), axis=0) for k, v in ego_stats.items()}
 
         # Process value, actor, and entropy losses
-        all_ego_value_losses = np.asarray(ego_metrics_iter["value_loss"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-        all_ego_actor_losses = np.asarray(ego_metrics_iter["actor_loss"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-        all_ego_entropy_losses = np.asarray(ego_metrics_iter["entropy_loss"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-        
-        # Average across ego seeds, partners and minibatches dims
-        average_ego_value_losses = np.mean(all_ego_value_losses, axis=(0, 2, 3))
-        average_ego_actor_losses = np.mean(all_ego_actor_losses, axis=(0, 2, 3))
-        average_ego_entropy_losses = np.mean(all_ego_entropy_losses, axis=(0, 2, 3))
-        
+        # initial shape is   # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
+        average_ego_value_losses = np.asarray(ego_metrics_iter["value_loss"]).mean(axis=(0, 2, 3))
+        average_ego_actor_losses = np.asarray(ego_metrics_iter["actor_loss"]).mean(axis=(0, 2, 3))
+        average_ego_entropy_losses = np.asarray(ego_metrics_iter["entropy_loss"]).mean(axis=(0, 2, 3))
+                
         # Process eval return metrics
         all_ego_returns = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
         average_ego_rets_per_iter = np.mean(all_ego_returns[..., 0], axis=(0, 2, 3))
@@ -136,12 +132,12 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
             for stat_name, stat_data in ego_stats.items():
                 if stat_data.shape[0] > step:  # Check if we have data for this step
                     stat_mean = stat_data[step, 0]
-                    logger.log_item(f"Train/Ego_{stat_name}", stat_mean, train_step=global_step, commit=True)
+                    logger.log_item(f"Train/Ego_{stat_name}", stat_mean, train_step=global_step)
             
-            logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], train_step=global_step, commit=True)
-            logger.log_item("Losses/EgoValueLoss", average_ego_value_losses[step], train_step=global_step, commit=True)
-            logger.log_item("Losses/EgoActorLoss", average_ego_actor_losses[step], train_step=global_step, commit=True)
-            logger.log_item("Losses/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=global_step, commit=True)
+            logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], checkpoint=global_step)
+            logger.log_item("Losses/EgoValueLoss", average_ego_value_losses[step], train_step=global_step)
+            logger.log_item("Losses/EgoActorLoss", average_ego_actor_losses[step], train_step=global_step)
+            logger.log_item("Losses/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=global_step)
                 
     logger.commit()
     

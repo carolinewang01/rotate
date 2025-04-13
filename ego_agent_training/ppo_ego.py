@@ -19,7 +19,7 @@ from envs.log_wrapper import LogWrapper
 from ppo.ippo import unbatchify, Transition
 from ego_agent_training.run_episodes import run_episodes
 from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, \
-    MLPActorCriticPolicy, ActorWithDoubleCriticPolicy, RNNActorCriticPolicy
+    MLPActorCriticPolicy, RNNActorCriticPolicy
 from common.wandb_visualizations import Logger
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
@@ -92,9 +92,6 @@ def train_ppo_ego_agent(config, env, train_rng,
             rng, reset_rng = jax.random.split(rng)
             reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
             obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
-
-            # Initialize hidden state for ego actor
-            init_hstate_0 = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
 
             # Each environment picks a partner index in [0, n_seeds*m_ckpts)
             rng, partner_rng = jax.random.split(rng)
@@ -297,10 +294,13 @@ def train_ppo_ego_agent(config, env, train_rng,
                 2. Compute advantage
                 3. PPO updates
                 """
-                (train_state, env_state, last_obs, last_done, last_hstate_0, partner_hstate, partner_indices, rng, update_steps) = update_runner_state
+                (train_state, env_state, last_obs, partner_indices, rng, update_steps) = update_runner_state
+                init_hstate_0 = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
+                init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
 
                 # 1) rollout
-                runner_state = (train_state, env_state, last_obs, last_done, last_hstate_0, partner_hstate, partner_indices, rng)
+                runner_state = (train_state, env_state, last_obs, init_done, init_hstate_0, init_partner_hstate, partner_indices, rng)
                 runner_state, traj_batch = jax.lax.scan(
                     _env_step, runner_state, None, config["ROLLOUT_LENGTH"])
                 (train_state, env_state, last_obs, last_done, last_hstate_0, partner_hstate, partner_indices, rng) = runner_state
@@ -351,19 +351,14 @@ def train_ppo_ego_agent(config, env, train_rng,
                 rng, reset_rng = jax.random.split(rng)
                 reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
                 obs, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
-                init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
                 
-                # Re-initialize hidden states for partners after resetting
-                # Note that we return the init_hstate_0 for the ego agent, which effectively resets it
-                init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
-
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
                 metric["actor_loss"] = all_losses[1][1]
                 metric["value_loss"] = all_losses[1][0]
                 metric["entropy_loss"] = all_losses[1][2]
-                new_runner_state = (train_state, env_state, obs, init_done, init_hstate_0, init_partner_hstate, new_partner_idx, rng, update_steps + 1)
+                new_runner_state = (train_state, env_state, obs, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
             # 3e) PPO Update and Checkpoint saving
@@ -379,15 +374,15 @@ def train_ppo_ego_agent(config, env, train_rng,
             max_episode_steps = config["ROLLOUT_LENGTH"]
             
             def _update_step_with_ckpt(state_with_ckpt, unused):
-                ((train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
+                ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
                  checkpoint_array, ckpt_idx, init_eval_last_info) = state_with_ckpt
 
                 # Single PPO update
                 (new_runner_state, metric) = _update_step(
-                    (train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
+                    (train_state, env_state, last_obs, partner_idx, rng, update_steps),
                     None
                 )
-                (train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps) = new_runner_state
+                (train_state, env_state, last_obs, partner_idx, rng, update_steps) = new_runner_state
 
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
@@ -420,7 +415,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 )
 
                 metric["eval_ep_last_info"] = eval_last_infos
-                return ((train_state, env_state, last_obs, last_done, hstate_0, partner_hstate, partner_idx, rng, update_steps),
+                return ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
                         checkpoint_array, ckpt_idx, eval_last_infos), metric
 
             # init checkpoint array
@@ -441,9 +436,7 @@ def train_ppo_ego_agent(config, env, train_rng,
 
             # initial runner state for scanning
             update_steps = 0
-            init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
             # Initialize partner hidden state
-            init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
             # Sample initial partner indices
             rng_train, partner_rng = jax.random.split(rng_train)
             partner_indices = partner_population.sample_agent_indices(config["NUM_UNCONTROLLED_ACTORS"], partner_rng)
@@ -452,9 +445,6 @@ def train_ppo_ego_agent(config, env, train_rng,
                 train_state,
                 env_state,
                 obsv,
-                init_done,
-                init_hstate_0,
-                init_partner_hstate,
                 partner_indices,
                 rng_train,
                 update_steps

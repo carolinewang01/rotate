@@ -187,6 +187,7 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
     @partial(jax.jit, static_argnums=(0,))
     def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
         """Get actions, values, and policy for the policy with double critics."""
+        # convention: val1 is value of of ego agent, val2 is value of best response agent
         pi, val1, val2 = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
         return action, (val1, val2), pi, None # no hidden state
