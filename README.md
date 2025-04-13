@@ -13,12 +13,8 @@
 
 ### Clean Up Code: 
 
-- Create general ego agent training scripts: 
-    - PPO S5 script: Figure out how to support a generic partner train function
-    - Once the above is done, update FCP, open-ended fcp, open-ended paired script use this function!
-    - Create generic ppo_ego_mlp and ppo_ego_rnn train scripts as well
-    - Once the above is done, update fcp scripts
-- Update open-ended minimax script following refactors and updates to PAIRED
+- Update FCP implementation: 
+    - log eval results to wandb
 
 ## Installation Guide
 Follow instructions at `install_instructions.md`

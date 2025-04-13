@@ -782,7 +782,7 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
 
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
-                max_eval_episodes = config["MAX_EVAL_EPISODES"]
+                max_eval_episodes = config["NUM_EVAL_EPISODES"]
                 
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
@@ -836,7 +836,7 @@ def train_regret_maximizing_partners(config, ego_policy, env, partner_rng):
             conf_policy = train_state_conf.params
 
             rng, rng_eval_ego, rng_eval_br = jax.random.split(rng, 3)
-            max_eval_episodes = config["MAX_EVAL_EPISODES"]
+            max_eval_episodes = config["NUM_EVAL_EPISODES"]
             ep_infos_ego = run_episodes_ego(rng_eval_ego, ego_policy, conf_policy, max_eval_episodes)
             ep_infos_br = run_episodes_br(rng_eval_br, train_state_br.params, conf_policy, max_eval_episodes)
 
@@ -1398,7 +1398,7 @@ def train_fcp_agent(config, partner_params, init_ego_params, env, train_rng):
                     
                     rng, eval_rng = jax.random.split(rng)
                     eval_ep_return_infos = jax.vmap(lambda x: run_episodes(
-                        eval_rng, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
+                        eval_rng, train_state.params, x, config["NUM_EVAL_EPISODES"]))(gathered_params)
                     return (new_ckpt_arr, cidx + 1, rng, eval_ep_return_infos)
                 
                 def skip_ckpt(args):
@@ -1421,7 +1421,7 @@ def train_fcp_agent(config, partner_params, init_ego_params, env, train_rng):
             # Init eval
             eval_partner_indices = jnp.arange(num_total_partners)
             gathered_params = gather_partner_params(partner_params, eval_partner_indices)
-            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(rng_eval, train_state.params, x, config["MAX_EVAL_EPISODES"]))(gathered_params)
+            eval_ep_return_infos = jax.vmap(lambda x: run_episodes(rng_eval, train_state.params, x, config["NUM_EVAL_EPISODES"]))(gathered_params)
 
             # initial runner state for scanning
             update_steps = 0

@@ -17,7 +17,7 @@ from flax.training.train_state import TrainState
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ppo.ippo import unbatchify, Transition
-from ego_agent_training.run_episodes import run_episodes
+from common.run_episodes import run_episodes
 from common.agent_interface import AgentPopulation, S5ActorCriticPolicy, \
     MLPActorCriticPolicy, RNNActorCriticPolicy
 from common.wandb_visualizations import Logger
@@ -404,7 +404,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                         eval_rng, env, agent_0_param=train_state.params, agent_0_policy=ego_policy, 
                         agent_1_param=x, agent_1_policy=partner_population.policy_cls, 
                         max_episode_steps=max_episode_steps, 
-                        num_eps=config["MAX_EVAL_EPISODES"]))(gathered_params)
+                        num_eps=config["NUM_EVAL_EPISODES"]))(gathered_params)
                     return (new_ckpt_arr, cidx + 1, rng, eval_eps_last_infos)
                 
                 def skip_ckpt(args):
@@ -432,7 +432,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                         agent_0_param=train_state.params, agent_0_policy=ego_policy, 
                         agent_1_param=x, agent_1_policy=partner_population.policy_cls, 
                         max_episode_steps=max_episode_steps, 
-                        num_eps=config["MAX_EVAL_EPISODES"]))(gathered_params)
+                        num_eps=config["NUM_EVAL_EPISODES"]))(gathered_params)
 
             # initial runner state for scanning
             update_steps = 0
@@ -621,13 +621,6 @@ def run_ego_training(config, partner_params, pop_size: int):
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     
-    # Create partner policy with direct parameters
-    # partner_policy = ActorWithDoubleCriticPolicy(
-    #     action_dim=env.action_space(env.agents[1]).n,
-    #     obs_dim=env.observation_space(env.agents[1]).shape[0],
-    #     activation=algorithm_config.get("ACTIVATION", "tanh")
-    # )
-
     partner_policy = MLPActorCriticPolicy(
         action_dim=env.action_space(env.agents[1]).n,
         obs_dim=env.observation_space(env.agents[1]).shape[0],
@@ -660,7 +653,7 @@ def run_ego_training(config, partner_params, pop_size: int):
         train_rng=train_rng,
         ego_policy=ego_policy,
         init_ego_params=init_params,
-        n_ego_train_seeds=algorithm_config["N_EGO_TRAIN_SEEDS"],
+        n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
         partner_population=partner_population,
         partner_params=partner_params
     )

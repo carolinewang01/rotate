@@ -15,9 +15,9 @@ from common.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy,
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger
+from common.run_episodes import run_episodes
 from envs import make_env
 from ego_agent_training.ppo_ego import train_ppo_ego_agent, initialize_s5_agent
-from ego_agent_training.run_episodes import run_episodes
 from ppo.ippo import unbatchify, Transition
 
 log = logging.getLogger(__name__)
@@ -680,13 +680,13 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                     last_ep_info_with_ego = run_episodes(rng, env, 
                         agent_0_param=train_state_conf.params, agent_0_policy=confederate_policy,
                         agent_1_param=ego_params, agent_1_policy=ego_policy, 
-                        max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["MAX_EVAL_EPISODES"]
+                        max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]
                     )
                     # conf vs br
                     last_ep_info_with_br = run_episodes(rng, env, 
                         agent_0_param=train_state_br.params, agent_0_policy=br_policy,
                         agent_1_param=ego_params, agent_1_policy=ego_policy, 
-                        max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["MAX_EVAL_EPISODES"]
+                        max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]
                     )
                     
                     return ((new_ckpt_arr_conf, new_ckpt_arr_br, last_ep_info_with_br, last_ep_info_with_ego), rng, cidx + 1)
@@ -723,12 +723,12 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
             ep_infos_ego = run_episodes(rng_eval_ego, env, 
                 agent_0_param=train_state_conf.params, agent_0_policy=confederate_policy,
                 agent_1_param=ego_params, agent_1_policy=ego_policy, 
-                max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["MAX_EVAL_EPISODES"]
+                max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]
             )
             ep_infos_br = run_episodes(rng_eval_br, env, 
                 agent_0_param=train_state_br.params, agent_0_policy=br_policy,
                 agent_1_param=ego_params, agent_1_policy=ego_policy, 
-                max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["MAX_EVAL_EPISODES"])
+                max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"])
 
             # Initialize hidden states
             init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])

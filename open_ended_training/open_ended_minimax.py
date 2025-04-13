@@ -453,7 +453,7 @@ def train_adversarial_partners(config, ego_policy, minimax_env):
             # initial runner state for scanning
             update_steps = 0
             gen_eval_rng = jax.random.PRNGKey(config["EVAL_SEED"])
-            max_episode_steps = config["MAX_EVAL_EPISODES"]
+            max_episode_steps = config["NUM_EVAL_EPISODES"]
             ep_infos = run_episodes(gen_eval_rng, ego_policy["params"], train_state.params, max_episode_steps)
             init_hstate_0 = StackedEncoderModel.initialize_carry(config["NUM_CONTROLLED_ACTORS"], ssm_size, n_layers)
             init_dones = jnp.ones(config["NUM_CONTROLLED_ACTORS"], dtype=bool)
@@ -897,7 +897,7 @@ def train_fcp_agent(config, checkpoints, fcp_env, init_fcp_params=None):
                     lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype), 
                     params_pytree)
 
-            max_episode_steps = config["MAX_EVAL_EPISODES"]
+            max_episode_steps = config["NUM_EVAL_EPISODES"]
 
             # TODO Gather single episode data
             def run_single_episode(rng, partner_param):
