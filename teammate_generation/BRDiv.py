@@ -58,6 +58,7 @@ def train_brdiv_partners(config, env, train_rng):
         assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
 
         # Define different minibatch sizes for interactions with ego agent and one with BR agent
+        config["NUM_ENVS"] = config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"]
         config["NUM_GAME_AGENTS"] = num_agents
         config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
 
@@ -413,7 +414,7 @@ def train_brdiv_partners(config, env, train_rng):
                         )
 
                         self_agent_id, other_agent_id = traj_batch.self_id, traj_batch.oppo_id
-                        actor_weights = jax.vmap(choose_actor_weight)(self_agent_id, other_agent_id, traj_batch.reward)
+                        actor_weights = jax.vmap(choose_actor_weight)(self_agent_id, other_agent_id, traj_batch.reward)         
 
                         # Policy gradient loss for interaction with ego agent
                         ratio = jnp.exp(log_prob - traj_batch.log_prob)
@@ -469,8 +470,8 @@ def train_brdiv_partners(config, env, train_rng):
                     (loss_val_conf, aux_vals_conf), grads_conf = jax.vmap(compute_conf_grads)(possible_agent_ids)
                     (loss_val_br, aux_vals_br), grads_br = jax.vmap(compute_br_grads)(possible_agent_ids)
                     
-                    grads_conf_new = jax.tree.map(lambda x: jnp.squeeze(x, 1)+1e-6, grads_conf)
-                    grads_br_new = jax.tree.map(lambda x: jnp.squeeze(x, 1)+1e-6, grads_br)
+                    grads_conf_new = jax.tree.map(lambda x: jnp.squeeze(x, 1), grads_conf)
+                    grads_br_new = jax.tree.map(lambda x: jnp.squeeze(x, 1), grads_br)
                     train_state_conf = train_state_conf.apply_gradients(grads=grads_conf_new)
                     train_state_br = train_state_br.apply_gradients(grads=grads_br_new)
                     return (train_state_conf, train_state_br), ((loss_val_conf, aux_vals_conf), (loss_val_br, aux_vals_br))
@@ -562,9 +563,25 @@ def train_brdiv_partners(config, env, train_rng):
                 reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
                 last_obs, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
 
-                rng, conf_sampling_rng, br_sampling_rng = jax.random.split(rng, 3)
-                conf_ids = jax.random.randint(conf_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])
-                br_ids = jax.random.randint(br_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])
+                rng, conf_sampling_sp_rng, conf_sampling_rng, br_sampling_rng = jax.random.split(rng, 4)
+
+                # Sampling IDs for SP data collection
+                ids_sp = jax.random.randint(conf_sampling_sp_rng, (config["NUM_ENVS_SP"],), 0, config["PARTNER_POP_SIZE"])
+
+                # Sampling IDs for XP data collection
+                conf_ids_xp = jax.random.randint(conf_sampling_rng, (config["NUM_ENVS_XP"],), 0, config["PARTNER_POP_SIZE"])
+
+                br_sampling_rngs = jax.random.split(br_sampling_rng, config["NUM_ENVS_XP"]+1)
+                br_sampling_rng = br_sampling_rngs[0]
+
+                # Sample BR IDs that are different from conf id
+                br_ids_xp = jax.random.randint(br_sampling_rng, (config["NUM_ENVS_XP"],), 0, config["PARTNER_POP_SIZE"])
+                sample_new_id = lambda a: (jax.random.split(a[0], 2)[1], jax.random.randint(a[0], a[1].shape, minval=0, maxval=config["PARTNER_POP_SIZE"]))
+                loop_logic = lambda z, x, y: jax.lax.while_loop(lambda a: jnp.equal(z,a[1]), sample_new_id, (x, y))
+                _, br_ids_xp = jax.vmap(loop_logic)(conf_ids_xp, br_sampling_rngs[1:], br_ids_xp)
+                
+                conf_ids = jnp.concatenate([ids_sp, conf_ids_xp], axis=-1)
+                br_ids = jnp.concatenate([ids_sp, br_ids_xp], axis=-1)
 
                 identity_matrix = jnp.eye(config["PARTNER_POP_SIZE"])
                 conf_one_hots = identity_matrix[conf_ids]
@@ -749,6 +766,7 @@ def train_brdiv_partners(config, env, train_rng):
                 "metrics": metrics, 
                 "all_pair_returns": all_ep_infos
             }
+            jax.debug.breakpoint()
             return out
 
         return train
@@ -764,17 +782,22 @@ if __name__ == "__main__":
     env = LogWrapper(env)
 
     config = {
-        "NUM_MINIBATCHES": 4,
+        "NUM_MINIBATCHES": 16,
         "ALG": "paired",
         "NUM_OPEN_ENDED_ITERS": 1,
         "PARTNER_POP_SIZE": 5,
         "TRAIN_SEED": 38410,
-        "NUM_ENVS": 64,
+        "NUM_ENVS_SP": 32,
+        "NUM_ENVS_XP": 32,
         "ENV_NAME": "lbf",
-        "ENV_KWARGS": {},
+        "ENV_KWARGS": {
+            "grid_size": 7, "fov": 7, 
+            "num_agents": 2, "num_food": 3, 
+            "max_agent_level": 2, "force_coop": True,
+        },
         "ROLLOUT_LENGTH": 128,
-        "TOTAL_TIMESTEPS": 1.6e7, # one step of open-ended training
-        "LR": 1.e-4,
+        "TOTAL_TIMESTEPS": 4e7, # one step of open-ended training
+        "LR": 5.e-4,
         "UPDATE_EPOCHS": 15,
         "MAX_EVAL_EPISODES": 20,
         "NUM_CHECKPOINTS": 5,
@@ -790,14 +813,17 @@ if __name__ == "__main__":
     }
 
     num_agents = 2
-    config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
+    config["NUM_ACTORS"] = num_agents * (config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"])
 
     # Right now assume control of both agent and its BR
     config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"]
 
-    config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
+    config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"])// (config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"])
     config["MINIBATCH_SIZE_EGO"] = ((config["NUM_ACTORS"]-1) * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
     config["MINIBATCH_SIZE_BR"] = (config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
     brdiv_outs = train_brdiv_partners(config, env, jax.random.PRNGKey(100))
-    print("DONE!!")
+    np_array = np.asarray(brdiv_outs["metrics"]["per_iter_ep_infos"])
+
+    meaned_array = np_array.mean(axis=-1).mean(axis=-1)[-1]
+    meaned_array = np.reshape(meaned_array, (config["PARTNER_POP_SIZE"],config["PARTNER_POP_SIZE"]))
