@@ -139,13 +139,18 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
 def run_episodes(rng, env, agent_0_param, agent_0_policy, 
                  agent_1_param, agent_1_policy, 
                  max_episode_steps, num_eps):
-    '''Given a single ego agent and a single partner agent, run num_eps episodes.'''
-    def body_fn(carry, _):
-        rng = carry
-        rng, ep_rng = jax.random.split(rng)
-        ep_last_info = run_single_episode(ep_rng, env, agent_0_param, agent_0_policy, 
-                                          agent_1_param, agent_1_policy, 
-                                          max_episode_steps)
-        return rng, ep_last_info
-    rng, all_outs = jax.lax.scan(body_fn, rng, None, length=num_eps)
+    '''Given a single ego agent and a single partner agent, run num_eps episodes in parallel using vmap.'''
+    # Create episode-specific RNGs
+    rngs = jax.random.split(rng, num_eps + 1)
+    ep_rngs = rngs[1:]
+    
+    # Vectorize run_single_episode over the first argument (rng)
+    vmap_run_single_episode = jax.vmap(
+        lambda ep_rng: run_single_episode(
+            ep_rng, env, agent_0_param, agent_0_policy,
+            agent_1_param, agent_1_policy, max_episode_steps
+        )
+    )
+    # Run episodes in parallel
+    all_outs = vmap_run_single_episode(ep_rngs)
     return all_outs  # each leaf has shape (num_eps, ...)
