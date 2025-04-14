@@ -766,7 +766,6 @@ def train_brdiv_partners(config, env, train_rng):
                 "metrics": metrics, 
                 "all_pair_returns": all_ep_infos
             }
-            jax.debug.breakpoint()
             return out
 
         return train
@@ -823,7 +822,22 @@ if __name__ == "__main__":
     config["MINIBATCH_SIZE_BR"] = (config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
     brdiv_outs = train_brdiv_partners(config, env, jax.random.PRNGKey(100))
-    np_array = np.asarray(brdiv_outs["metrics"]["per_iter_ep_infos"])
 
-    meaned_array = np_array.mean(axis=-1).mean(axis=-1)[-1]
+    # Shape: Number updates x (pop size)^2 x (num_eval_episodes) x 1
+    np_xp_returns_array = np.asarray(brdiv_outs["metrics"]["per_iter_ep_infos"])
+
+    # Shape: Number of updates x Update Epochs x Num minibatches per epoch x population size (i.e., num trained pairs)
+    np_conf_pg_loss_per_population = np.asarray(brdiv_outs["metrics"]["pg_loss_conf_agent"])
+    np_br_pg_loss_per_population = np.asarray(brdiv_outs["metrics"]["pg_loss_br_agent"])
+    np_conf_val_loss_per_population = np.asarray(brdiv_outs["metrics"]["value_loss_conf_agent"])
+    np_br_val_loss_per_population = np.asarray(brdiv_outs["metrics"]["value_loss_br_agent"])
+    np_conf_entropy_per_population = np.asarray(brdiv_outs["metrics"]["entropy_conf"])
+    np_br_entropy_per_population = np.asarray(brdiv_outs["metrics"]["entropy_br"])
+
+    # Final XP matrix
+    meaned_array = np_xp_returns_array.mean(axis=-1).mean(axis=-1)[-1]
     meaned_array = np.reshape(meaned_array, (config["PARTNER_POP_SIZE"],config["PARTNER_POP_SIZE"]))
+
+    # Average BR pg loss per population per update
+    br_pg_loss_per_pop = np_conf_pg_loss_per_population.mean(axis=1).mean(axis=1)
+
