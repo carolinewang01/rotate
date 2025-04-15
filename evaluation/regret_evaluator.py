@@ -20,6 +20,7 @@ from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
 from envs import make_env
 from envs.log_wrapper import LogWrapper
+from evaluation.vis_episodes import save_video
 from ppo.ippo import unbatchify, Transition
 
 log = logging.getLogger(__name__)
@@ -814,9 +815,56 @@ def run_regret_evaluation(config, ego_params):
     log.info(f"Regret-maximizing evaluation completed in {end_time - start_time} seconds.")
     
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    log_metrics(config, train_out, logger, metric_names)
+    log_metrics(config, env, logger, train_out, metric_names)
+    
+    if config["logger"]["log_video"] or config["local_logger"]["save_video"]:
+        log_video(config, logger, train_out, ego_params, ego_policy)
+    
+    logger.close()
 
-def log_metrics(config, train_out, logger, metric_names: tuple):
+
+def log_video(config, logger, train_out, ego_params, ego_policy):
+    '''Log video of confederate vs ego and confederate vs br to wandb.'''
+    savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    env = make_env(config["algorithm"]["ENV_NAME"], config["algorithm"]["ENV_KWARGS"])
+    
+    # Initialize best response and confederate policies
+    br_params = train_out["final_params_br"]
+    conf_params = train_out["final_params_conf"]
+
+    env_action_size = env.action_space(env.agents[0]).n
+    env_obs_size = env.observation_space(env.agents[0]).shape[0]
+    br_policy = MLPActorCriticPolicy(action_dim=env_action_size, obs_dim=env_obs_size)
+    conf_policy = ActorWithDoubleCriticPolicy(action_dim=env_action_size, obs_dim=env_obs_size)
+
+    savepath_ego_vs_conf = save_video(
+        env, env_name=config["algorithm"]["ENV_NAME"], 
+        agent_0_param=ego_params, agent_0_policy=ego_policy, 
+        agent_1_param=conf_params, agent_1_policy=conf_policy, 
+        max_episode_steps=config["algorithm"]["ROLLOUT_LENGTH"], num_eps=5, 
+        savevideo=True, 
+        save_dir=savedir, save_name="ego-vs-conf"
+    )
+
+    savepath_conf_vs_br = save_video(
+        env, env_name=config["algorithm"]["ENV_NAME"], 
+        agent_0_param=conf_params, agent_0_policy=conf_policy, 
+        agent_1_param=br_params, agent_1_policy=br_policy, 
+        max_episode_steps=config["algorithm"]["ROLLOUT_LENGTH"], num_eps=5, 
+        savevideo=True, 
+        save_dir=savedir, save_name="conf-vs-br"
+    )
+
+    if config["logger"]["log_video"]: # log to wandb
+        logger.log_video("Eval/Ego-vs-Conf-Video", savepath_ego_vs_conf)
+        logger.log_video("Eval/Conf-vs-BR-Video", savepath_conf_vs_br)
+
+    if not config["local_logger"]["save_video"]: # remove video from savepath
+        os.remove(savepath_ego_vs_conf)
+        os.remove(savepath_conf_vs_br)
+
+
+def log_metrics(config, env, logger, train_out, metric_names: tuple):
     '''Log metrics to wandb.'''
     metrics = train_out["metrics"]
     num_updates = metrics["returned_episode_returns"].shape[1]

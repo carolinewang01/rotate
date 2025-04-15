@@ -12,8 +12,6 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
                        ):
     '''
     Agent 0 is the ego agent, agent 1 is the partner agent.
-    TODO: rewrite this eval code parallelize the evaluation over max_episode_steps, following
-    the convention of _env_step().
     '''
     # Reset the env.
     rng, reset_rng = jax.random.split(rng)
