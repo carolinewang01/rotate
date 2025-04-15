@@ -61,5 +61,8 @@ class Logger:
             artifact.add_file(path)
         self.run.log_artifact(artifact)
     
+    def log_video(self, tag, path, commit=True):
+        wandb.log({tag: wandb.Video(path)}, commit=commit)
+    
     def close(self):
         wandb.finish()
