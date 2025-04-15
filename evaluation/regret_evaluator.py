@@ -25,6 +25,8 @@ from ppo.ippo import unbatchify, Transition
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+# suppress info logging from matplotlib.animation
+logging.getLogger('matplotlib.animation').setLevel(logging.CRITICAL)
 
 
 def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partner_rng):
@@ -828,10 +830,11 @@ def log_video(config, logger, train_out, ego_params, ego_policy):
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     env = make_env(config["algorithm"]["ENV_NAME"], config["algorithm"]["ENV_KWARGS"])
     
-    # Initialize best response and confederate policies
-    br_params = train_out["final_params_br"]
-    conf_params = train_out["final_params_conf"]
+    # Get the 0th population member
+    br_params = jax.tree.map(lambda x: x[0], train_out["final_params_br"])
+    conf_params = jax.tree.map(lambda x: x[0], train_out["final_params_conf"])
 
+    # Initialize best response and confederate policies
     env_action_size = env.action_space(env.agents[0]).n
     env_obs_size = env.observation_space(env.agents[0]).shape[0]
     br_policy = MLPActorCriticPolicy(action_dim=env_action_size, obs_dim=env_obs_size)
@@ -842,8 +845,7 @@ def log_video(config, logger, train_out, ego_params, ego_policy):
         agent_0_param=ego_params, agent_0_policy=ego_policy, 
         agent_1_param=conf_params, agent_1_policy=conf_policy, 
         max_episode_steps=config["algorithm"]["ROLLOUT_LENGTH"], num_eps=5, 
-        savevideo=True, 
-        save_dir=savedir, save_name="ego-vs-conf"
+        savevideo=True, save_dir=savedir, save_name="ego-vs-conf"
     )
 
     savepath_conf_vs_br = save_video(
@@ -851,8 +853,7 @@ def log_video(config, logger, train_out, ego_params, ego_policy):
         agent_0_param=conf_params, agent_0_policy=conf_policy, 
         agent_1_param=br_params, agent_1_policy=br_policy, 
         max_episode_steps=config["algorithm"]["ROLLOUT_LENGTH"], num_eps=5, 
-        savevideo=True, 
-        save_dir=savedir, save_name="conf-vs-br"
+        savevideo=True, save_dir=savedir, save_name="conf-vs-br"
     )
 
     if config["logger"]["log_video"]: # log to wandb

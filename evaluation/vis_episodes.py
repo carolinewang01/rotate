@@ -4,11 +4,11 @@ import os
 from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
 
 
-def save_video(env, env_name, agent_0_param, agent_0_policy, 
-                         agent_1_param, agent_1_policy, 
-                         max_episode_steps, num_eps, 
-                         savevideo: bool, 
-                         save_dir: str, save_name: str):
+def save_video(env, env_name, 
+               agent_0_param, agent_0_policy, 
+               agent_1_param, agent_1_policy, 
+               max_episode_steps, num_eps, 
+               savevideo: bool, save_dir: str, save_name: str):
     '''
     Render or save video of agent 0 and agent 1 playing against each other.
     
@@ -21,7 +21,6 @@ def save_video(env, env_name, agent_0_param, agent_0_policy,
         agent_1_policy: Policy for agent 1
         max_episode_steps: Maximum number of steps per episode
         num_eps: Number of episodes to run
-        render: Whether to render the episode
         savevideo: Whether to save a video of the episode
         save_dir: Directory to save the video
         save_name: Name to use for the saved video

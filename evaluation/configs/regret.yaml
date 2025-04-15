@@ -53,6 +53,6 @@ logger:
 
 # Local logger
 local_logger:
-  save_figures: true # currently unused
-  save_train_out: true
-  save_video: true # whether to save the video
+  save_figures: false # currently unused
+  save_train_out: false
+  save_video: false # whether to save the video locally
