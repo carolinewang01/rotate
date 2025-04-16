@@ -103,7 +103,7 @@ def train_brdiv_partners(config, env, train_rng):
                 def init_single_pair_optimizers(rng_agent, rng_br):
 
                     # Initialize parameters of the generated confederate and BR policy
-                    init_x = ( # init obs, avail_actions
+                    init_x = ( # init obs, ids, avail_actions
                         jnp.zeros(env.observation_space(env.agents[0]).shape),
                         jnp.zeros(config["PARTNER_POP_SIZE"]),
                         jnp.ones(env.action_space(env.agents[0]).n),
@@ -111,9 +111,9 @@ def train_brdiv_partners(config, env, train_rng):
                     init_params = conf_agent_net.init_with_output(rng_agent, init_x)[1]
 
                     init_x_br = ( # init obs, avail_actions
-                        jnp.zeros(env.observation_space(env.agents[0]).shape),
+                        jnp.zeros(env.observation_space(env.agents[1]).shape),
                         jnp.zeros(config["PARTNER_POP_SIZE"]),
-                        jnp.ones(env.action_space(env.agents[0]).n),
+                        jnp.ones(env.action_space(env.agents[1]).n),
                     )
                     init_params_br = br_agent_net.init_with_output(rng_br, init_x_br)[1]
 

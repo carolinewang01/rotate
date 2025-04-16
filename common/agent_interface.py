@@ -7,6 +7,7 @@ import jax.numpy as jnp
 
 from common.mlp_actor_critic import ActorCritic
 from common.mlp_actor_critic import ActorWithDoubleCritic
+from common.mlp_actor_critic import ActorWithConditionalCritic
 from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from common.rnn_actor_critic import RNNActorCritic, ScannedRNN
 
@@ -137,7 +138,7 @@ class MLPActorCriticPolicy(AgentPolicy):
             activation: str, activation function to use
         """
         super().__init__(action_dim, obs_dim)
-        self.activation = activation
+        # self.activation = activation
         self.network = ActorCritic(action_dim, activation=activation)
     
     @partial(jax.jit, static_argnums=(0,))
@@ -173,13 +174,13 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
             activation: str, activation function to use
         """
         super().__init__(action_dim, obs_dim)
-        self.activation = activation
-        # Initialize the network class once
+        # self.activation = activation
         self.network = ActorWithDoubleCritic(action_dim, activation=activation)
     
     @partial(jax.jit, static_argnums=(0,))
     def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
-        """Get actions for the policy with double critics."""
+        """Get actions for the policy with double critics.
+        """
         pi, _, _ = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
         return action, None  # no hidden state
@@ -199,6 +200,52 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
         init_x = (dummy_obs, dummy_avail)
         return self.network.init(rng, init_x)
 
+class ActorWithConditionalCriticPolicy(AgentPolicy):
+    """Policy wrapper for Actor with Conditional Critics"""
+    
+    def __init__(self, action_dim, obs_dim, pop_size, activation="tanh"):
+        """
+        Args:
+            action_dim: int, dimension of the action space
+            obs_dim: int, dimension of the observation space
+            pop_size: int, number of agents in the population that the critic was trained with
+            activation: str, activation function to use
+        """
+        super().__init__(action_dim, obs_dim)
+        # self.activation = activation
+        self.pop_size = pop_size
+        self.network = ActorWithConditionalCritic(action_dim, activation=activation)
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
+        """Get actions."""
+        # The agent id is only used by the critic, so we pass in a 
+        # dummy vector to represent the one-hot agent id
+        dummy_agent_id = jnp.zeros(obs.shape[:-1] + (self.pop_size,))
+        pi, _, _ = self.network.apply(params, (obs, dummy_agent_id, avail_actions))
+        action = pi.sample(seed=rng)
+        return action, None  # no hidden state
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, aux_obs):
+        """Get actions, values, and policy for the policy with conditional critics.
+        The auxiliary observation should be used to pass in the agent ids that we wish to predict 
+        values for.
+        """
+        pi, value = self.network.apply(params, (obs, aux_obs, avail_actions))
+        action = pi.sample(seed=rng)
+        return action, value, pi, None # no hidden state
+    
+    def init_params(self, rng):
+        """Initialize parameters for the policy with conditional critics."""
+        dummy_obs = jnp.zeros((self.obs_dim,))
+        dummy_ids = jnp.zeros((self.pop_size,))
+        dummy_avail = jnp.ones((self.action_dim,))
+        init_x = (dummy_obs, dummy_ids, dummy_avail)
+        # TODO: determine if it's okay to use the basic init function or if we must 
+        # use the init_with_output function
+        return self.network.init(rng, init_x)
+    
 class RNNActorCriticPolicy(AgentPolicy):
     """Policy wrapper for RNN Actor-Critic"""
     
@@ -213,9 +260,9 @@ class RNNActorCriticPolicy(AgentPolicy):
             gru_hidden_dim: int, dimension of the GRU hidden state
         """
         super().__init__(action_dim, obs_dim)
-        self.activation = activation
-        self.fc_hidden_dim = fc_hidden_dim
-        self.gru_hidden_dim = gru_hidden_dim
+        # self.activation = activation
+        # self.fc_hidden_dim = fc_hidden_dim
+        # self.gru_hidden_dim = gru_hidden_dim
         self.network = RNNActorCritic(
             action_dim, 
             fc_hidden_dim=fc_hidden_dim,
@@ -363,3 +410,4 @@ class S5ActorCriticPolicy(AgentPolicy):
         
         # Initialize model using the pre-initialized network
         return self.network.init(rng, init_hstate, dummy_x)
+    
