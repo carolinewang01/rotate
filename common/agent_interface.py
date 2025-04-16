@@ -201,8 +201,9 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
         return self.network.init(rng, init_x)
 
 class ActorWithConditionalCriticPolicy(AgentPolicy):
-    """Policy wrapper for Actor with Conditional Critics"""
-    
+    """Policy wrapper for ActorWithConditionalCritic
+    WARNING: this policy is not tested and may not work. (TODO: test)
+    """
     def __init__(self, action_dim, obs_dim, pop_size, activation="tanh"):
         """
         Args:

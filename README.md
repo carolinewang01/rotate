@@ -3,27 +3,36 @@
 ## TODOs
 
 ### Evaluation
-- Implement evaluating learning methods against BRDiv population
+- Implement evaluation of ego agent policies against BRDiv population - we can base this off the existing FCP eval code. 
+    - Implement RLiable metrics to visualize results
+    - Compute BRProx metric
+    - 
 - Implement evaluating learning methods against heurisic population
-    - Create heuristic population
-- Implement regret-based evaluation -- how to compute exploitability?
+    - Create heuristic population on LBF
+    - Create heuristic population on Overcooked
 
-
-### Baselines 
-- Implement L-BRDiv
-- Implement MEP
+- Regret-based evaluator: 
+    - The learning procedure been implemented, but can we compute/plot the actual regret number? 
+    Would it be comparable between different training runs? 
 
 ### Method Exploration: 
 - Add regret bounds to open-ended PAIRED
+- Allow population size to expand between open-ended iterations
 
-### Environments with Diverse Coordination Conventions: 
-- Train various teammates for LBF, Overcooked-v1
+### Baselines 
+- BRDiv: add feature of training an ego agent against generated BRDiv teammates
+- Implement L-BRDiv
+- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
+- Implement CoMeDi (if time permits)
+- Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations)
 
 ### Clean Up Code: 
-- Figure out eval pipeline
+- Figure out a general eval pipeline
 - Clean up FCP implementation (currently only roughly integrated into current logging paradigm)
+    - Move FCP implementation into teammate generation folder
 - Clean up BRDiv code
     - Consider making ego and br nets the same 
+    - Add feature of training an ego agent against the generated BRDiv policies
 - Update IPPO implementation to use wandb logging that's more aligned with rest of codebase
 
 ## Installation Guide
