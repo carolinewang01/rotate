@@ -9,7 +9,7 @@ defaults:
 ENV_NAME: overcooked-v1
 ROLLOUT_LENGTH: 400
 ENV_KWARGS: {
-  layout: "cramped_room",
+  layout: "cramped_room", # asymm_advantages, coord_ring, counter_circuit, cramped_room, forced_coord
   max_steps: 400
 }
 
@@ -18,7 +18,7 @@ name: ${ENV_KWARGS.layout}/brdiv
 
 algorithm:
   ALG: brdiv
-  PARTNER_POP_SIZE: 2
+  PARTNER_POP_SIZE: 4
   NUM_EVAL_EPISODES: 20
   TRAIN_SEED: 38410
   NUM_ENVS_SP: 32

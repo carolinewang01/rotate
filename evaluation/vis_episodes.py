@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import os
-from envs.overcooked.overcooked_visualizer_mp4 import OvercookedVisualizerMP4
+from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
 
 
 def save_video(env, env_name, 
@@ -55,9 +55,10 @@ def save_video(env, env_name,
         print(f"Video saved successfully at {savepath}")
 
     elif env_name == 'overcooked-v1':
-        viz = OvercookedVisualizerMP4()
+        viz = AdHocOvercookedVisualizer()
         # Get layout from env kwargs if available, otherwise use default
         viz.animate_mp4(states, env.agent_view_size, 
+            highlight_agent_idx=0,
             filename=savepath, 
             pixels_per_tile=32, fps=25)
         print(f"MP4 saved successfully at {savepath}")

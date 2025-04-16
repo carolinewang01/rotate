@@ -3,10 +3,12 @@
 ## TODOs
 
 ### Evaluation
+- Implement evaluation interface to enable evaluating against non-homogeneous agent population
+
 - Implement evaluation of ego agent policies against BRDiv population - we can base this off the existing FCP eval code. 
     - Implement RLiable metrics to visualize results
     - Compute BRProx metric
-    - 
+    
 - Implement evaluating learning methods against heurisic population
     - Create heuristic population on LBF
     - Create heuristic population on Overcooked
@@ -21,21 +23,29 @@
 ### Method Exploration: 
 - Add regret bounds to open-ended PAIRED
 - Allow population size to expand between open-ended iterations
+- Try initializing open-ended learning from BRDiv ego agent
+- Try initializing confederate/br agents to the ego agent; try NOT re-initializing the conf/br agents
+- Check if minimax return is better than minimax regret (Minimax AHT paper)
 
 ### Baselines 
 - BRDiv: add feature of training an ego agent against generated BRDiv teammates
 - Implement L-BRDiv
-- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
-- Implement CoMeDi (if time permits)
 - Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations)
+- Implement PAIRED - we need to stop resetting the confederate/br; we need to reduce the population param seeds to 1 and freeze it.
+- Finish open-ended minimax
+- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
+
+If time permits: 
+- Implement CoMeDi
+
 
 ### Clean Up Code: 
 - Figure out a general eval pipeline
 - Clean up FCP implementation (currently only roughly integrated into current logging paradigm)
     - Move FCP implementation into teammate generation folder
-- Clean up BRDiv code
+- Clean up (L)-BRDiv code
     - Consider making ego and br nets the same 
-    - Add feature of training an ego agent against the generated BRDiv policies
+    - Switch from logging BR/Conf losses to SP/XP losses!
 - Update IPPO implementation to use wandb logging that's more aligned with rest of codebase
 
 ## Installation Guide

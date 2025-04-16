@@ -8,7 +8,7 @@ from envs import make_env
 from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
 import jax.numpy as jnp
 
-from envs.overcooked.overcooked_visualizer_mp4 import OvercookedVisualizerMP4
+from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
 
 def rollout(ego_run_path, partner_run_path, 
             ego_seed_idx, partner_seed_idx,
@@ -81,9 +81,10 @@ def rollout(ego_run_path, partner_run_path,
         
     if savevideo:
         print(f"\nSaving mp4 with {len(states)} frames...")
-        viz = OvercookedVisualizerMP4()
+        viz = AdHocOvercookedVisualizer()
         viz.animate_mp4(states, env.agent_view_size, 
-            filename=f'results/overcooked/videos/{kwargs["layout"]}_{save_name}.mp4', 
+            highlight_agent_idx=0,
+            filename=f'results/overcooked-v1/videos/{kwargs["layout"]}_{save_name}.mp4', 
             pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 
