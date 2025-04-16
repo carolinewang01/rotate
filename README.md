@@ -15,6 +15,7 @@
 
 - Update FCP implementation: 
     - log eval results to wandb
+- Look for ways to simplify BRDiv code
 
 ## Installation Guide
 Follow instructions at `install_instructions.md`

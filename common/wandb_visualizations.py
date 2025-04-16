@@ -32,7 +32,7 @@ class Logger:
     def commit(self):
         self.log({}, commit=True)
 
-    def log_xp_matrix(self, tag, mat, step=None, columns=None, rows=None, commit=False, **kwargs):
+    def log_xp_matrix(self, tag, mat, step=None, columns=None, rows=None, commit=True, **kwargs):
         if rows is None:
             rows = [str(i) for i in range(mat.shape[0])]
         if columns is None:

@@ -1613,9 +1613,9 @@ def run_paired(config):
 
     for num_iter in range(average_xp_rets_per_iter.shape[0]):
         for num_step in range(average_xp_rets_per_iter.shape[1]):
-            logger.log_item("Returns/teammate_xp", average_xp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Returns/teammate_sp", average_sp_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
-            logger.log_item("Returns/ego", average_ego_rets_per_iter[num_iter][num_step], checkpoint=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Returns/teammate_xp", average_xp_rets_per_iter[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Returns/teammate_sp", average_sp_rets_per_iter[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
+            logger.log_item("Returns/ego", average_ego_rets_per_iter[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Losses/AverageConfValLoss-Against-Ego", average_value_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Losses/AverageConfActorLoss-Against-Ego", average_actor_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)
             logger.log_item("Losses/AverageConfEntropy-Against-Ego", average_entropy_losses_teammate_ego[num_iter][num_step], train_step=num_iter*average_xp_rets_per_iter.shape[1] + num_step)

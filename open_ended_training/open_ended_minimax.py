@@ -1213,8 +1213,8 @@ def run_minimax(config):
 
     for num_iter in range(all_metrics[0].shape[0]):
         for num_step in range(all_metrics[0].shape[1]):
-            logger.log_item("Returns/XP", all_metrics[0][num_iter][num_step], checkpoint=num_iter*all_metrics[0].shape[1] + num_step)
-            logger.log_item("Returns/EgoLearning", all_metrics[1][num_iter][num_step], checkpoint=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Returns/XP", all_metrics[0][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
+            logger.log_item("Returns/EgoLearning", all_metrics[1][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
             logger.log_item("Losses/AverageConfValueLoss", all_metrics[2][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
             logger.log_item("Losses/AverageConfActorLoss", all_metrics[3][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
             logger.log_item("Losses/AverageConfEntropy", all_metrics[4][num_iter][num_step], train_step=num_iter*all_metrics[0].shape[1] + num_step)
