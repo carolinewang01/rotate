@@ -816,23 +816,15 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     
     sp_mask, agent_id_cartesian_product = compute_sp_mask_and_ids(pop_size)
     sp_returns = all_returns[:, sp_mask]
-    sp_pairs = agent_id_cartesian_product[sp_mask]
     xp_returns = all_returns[:, ~sp_mask]
-    xp_pairs = agent_id_cartesian_product[~sp_mask]
     
-    sp_return_curve = sp_returns.mean(axis=(2, 3)).transpose() # shape (pop_size, num_updates)
-    xp_return_curve = xp_returns.mean(axis=(2, 3)).transpose() # shape ((pop_size)^2 - pop_size, num_updates)
-    
-    logger.log_item("Eval/SPReturnCurve", 
-            wandb.plot.line_series(xs=xs, ys=sp_return_curve, 
-            keys = [f"pair ({i}, {j})" for (i, j) in sp_pairs], 
-            title="SP Return Curve", xname="train_step")
-    )
-    logger.log_item("Eval/XPReturnCurve", 
-            wandb.plot.line_series(xs=xs, ys=xp_return_curve, 
-            keys = [f"pair ({i}, {j})" for (i, j) in xp_pairs], 
-            title="XP Return Curve", xname="train_step")
-    )
+    sp_return_curve = sp_returns.mean(axis=(1, 2, 3))
+    xp_return_curve = xp_returns.mean(axis=(1, 2, 3))
+
+    for step in range(num_updates):
+        logger.log_item("Eval/AvgSPReturnCurve", sp_return_curve[step], train_step=step)
+        logger.log_item("Eval/AvgXPReturnCurve", xp_return_curve[step], train_step=step)
+    logger.commit()
 
     # log final XP matrix to wandb
     last_returns_array = all_returns[-1].mean(axis=(1, 2))
@@ -849,7 +841,6 @@ def log_metrics(config, outs, logger, metric_names: tuple):
         "ConfEntropy": np.asarray(metrics["entropy_conf"]).mean(axis=(1, 2)).transpose(),
         "BREntropy": np.asarray(metrics["entropy_br"]).mean(axis=(1, 2)).transpose(),
     }
-    
     
     xs = list(range(num_updates))
     keys = [f"pair {i}" for i in range(pop_size)]
