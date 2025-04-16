@@ -893,9 +893,9 @@ def log_metrics(config, outs, logger, metric_names: tuple):
             
             # Log paired-specific metrics
             # Eval metrics
-            logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], checkpoint=global_step)
-            logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], checkpoint=global_step)
-            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], checkpoint=global_step)
+            logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
+            logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
+            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], train_step=global_step)
             
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
@@ -951,7 +951,7 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     
 def run_paired(config):
     algorithm_config = dict(config["algorithm"])
-    logger = Logger(config)
+    wandb_logger = Logger(config)
 
     # Create only one environment instance
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
@@ -997,4 +997,4 @@ def run_paired(config):
     log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
     
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    log_metrics(config, outs, logger, metric_names)
+    log_metrics(config, outs, wandb_logger, metric_names)
