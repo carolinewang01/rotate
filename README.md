@@ -15,6 +15,9 @@
     - The learning procedure been implemented, but can we compute/plot the actual regret number? 
     Would it be comparable between different training runs? 
 
+- Visualization: 
+    - Implement agent highlighter in Overcooked visualizer
+
 ### Method Exploration: 
 - Add regret bounds to open-ended PAIRED
 - Allow population size to expand between open-ended iterations

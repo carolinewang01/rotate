@@ -27,7 +27,7 @@ def make_env(env_name: str, env_kwargs: dict = {}):
         default_generator_args = {"grid_size": 7, "fov": 7, 
                           "num_agents": 2, "num_food": 3, 
                           "max_agent_level": 2, "force_coop": True}
-        default_viewer_args = {"highlight_agent_idx": None} # None to disable highlighting
+        default_viewer_args = {"highlight_agent_idx": 0} # None to disable highlighting
 
         generator_args, env_kwargs_copy = process_default_args(env_kwargs, default_generator_args)
         viewer_args, env_kwargs_copy = process_default_args(env_kwargs_copy, default_viewer_args)
