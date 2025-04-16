@@ -15,7 +15,7 @@ from jaxmarl.environments.overcooked.common import (
 from envs.overcooked.augmented_layouts import augmented_layouts as layouts
 
 
-class OvercookedV2(Overcooked):
+class OvercookedV1(Overcooked):
     '''This environment is a modified version of the JaxMARL Overcooked environment 
     that ensures environments are solvable. 
     
