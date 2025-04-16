@@ -9,7 +9,7 @@ from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader,
 import jax.numpy as jnp
 
 from common.save_load_utils import load_checkpoints
-from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
+from envs.overcooked.overcooked_visualizer_mp4 import OvercookedVisualizerMP4
 
 def rollout(ego_run_path, partner_run_path, 
             ego_seed_idx, partner_seed_idx,
@@ -18,7 +18,7 @@ def rollout(ego_run_path, partner_run_path,
             savevideo, save_name, 
             kwargs, verbose
             ):
-    env = make_env('overcooked-v2', kwargs)
+    env = make_env('overcooked-v1', kwargs)
 
     policies = {}
     policies[0] = MLPActorCriticLoader(ego_run_path, env.action_space(env.agents[0]).n, 
@@ -75,7 +75,7 @@ def rollout(ego_run_path, partner_run_path,
         
     if savevideo:
         print(f"\nSaving mp4 with {len(states)} frames...")
-        viz = OvercookedVisualizerV2()
+        viz = OvercookedVisualizerMP4()
         viz.animate_mp4(states, env.agent_view_size, 
             filename=f'results/overcooked/videos/{kwargs["layout"]}_{save_name}.mp4', 
             pixels_per_tile=32, fps=25)

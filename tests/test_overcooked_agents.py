@@ -2,9 +2,9 @@ import numpy as np
 from typing import Dict, Tuple
 
 import jax
-from envs.overcooked.overcooked_wrapper import OvercookedWrapper
-from envs.overcooked.overcooked_visualizer_v2 import OvercookedVisualizerV2
+from envs.overcooked.overcooked_visualizer_mp4 import OvercookedVisualizerMP4
 from envs.overcooked.augmented_layouts import augmented_layouts
+from envs import make_env
 from agents.overcooked import OnionAgent, PlateAgent, IndependentAgent, StaticAgent
 import time
 
@@ -76,12 +76,15 @@ def main(num_episodes,
     # Initialize environment
     print("Initializing environment...")
     layout = augmented_layouts[layout_name]
-    env = OvercookedWrapper(
-        layout=layout,
-        random_reset=random_reset,
-        random_obj_state=random_obj_state,
-        max_steps=max_steps,
-    )
+    # directly initialize the env
+    # env = OvercookedWrapper(
+    #     layout=layout,
+    #     random_reset=random_reset,
+    #     random_obj_state=random_obj_state,
+    #     max_steps=max_steps,
+    # )
+    # use the make_env function to initialize the env
+    env = make_env(env_name="overcooked-v1", env_kwargs={"layout": layout_name})
     print("Environment initialized")
     
     # Initialize agents
@@ -127,15 +130,15 @@ def main(num_episodes,
     # Visualize state sequences
     if visualize:
         print("Visualizing state sequences...")
-        viz = OvercookedVisualizerV2()
+        viz = OvercookedVisualizerMP4()
         for state in state_seq_all:
             viz.render(env.agent_view_size, state, highlight=False)
             time.sleep(.1)
     if save_gif:
         print(f"\nSaving mp4 with {len(state_seq_all)} frames...")
-        viz = OvercookedVisualizerV2()
+        viz = OvercookedVisualizerMP4()
         viz.animate_mp4(state_seq_all, env.agent_view_size, 
-            filename=f'results/overcooked/mp4/{layout_name}_{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
+            filename=f'results/overcooked/videos/{layout_name}_{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
             pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 

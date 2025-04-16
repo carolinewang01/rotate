@@ -4,7 +4,7 @@ from moviepy import ImageSequenceClip
 
 from jaxmarl.viz.overcooked_visualizer import OvercookedVisualizer
 
-class OvercookedVisualizerV2(OvercookedVisualizer):
+class OvercookedVisualizerMP4(OvercookedVisualizer):
     '''
     This class implements saving MP4 videos of Overcooked episodes. 
     The original OvercookedVisualizer class only allows for saving GIFs, 
