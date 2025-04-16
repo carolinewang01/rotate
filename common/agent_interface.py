@@ -37,7 +37,7 @@ class AgentPopulation:
             return jax.vmap(lambda idx: leaf[idx])(agent_indices)
         return jax.tree.map(gather_leaf, pop_params)
     
-    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng):
+    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, aux_obs=None):
         '''
         Get the actions of the agents specified by agent_indices.
         
@@ -49,7 +49,7 @@ class AgentPopulation:
             avail_actions: available actions with shape (num_envs, num_actions)
             hstate: hidden state with shape (num_envs, ...) or None if policy doesn't use hidden state
             rng: random key
-            
+            aux_obs: an optional auxiliary vector to append to the observation
         Returns:
             actions: actions with shape (num_envs,)
             new_hstate: new hidden state with shape (num_envs, ...) or None
@@ -59,7 +59,7 @@ class AgentPopulation:
         rngs_batched = jax.random.split(rng, num_envs)
         actions, new_hstate = jax.vmap(self.policy_cls.get_action)(
             gathered_params, obs, done, avail_actions, hstate, 
-            rngs_batched)
+            rngs_batched, aux_obs)
         return actions, new_hstate
     
     def init_hstate(self, n: int):
@@ -80,7 +80,7 @@ class AgentPolicy(abc.ABC):
 
     @abc.abstractmethod
     @partial(jax.jit, static_argnums=(0,))
-    def get_action(self, params, obs, done, avail_actions, hstate, rng) -> Tuple[int, chex.Array]:
+    def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None) -> Tuple[int, chex.Array]:
         """
         Only computes an action given an observation, done flag, available actions, hidden state, and random key.
 
@@ -91,14 +91,14 @@ class AgentPolicy(abc.ABC):
             avail_actions (chex.Array): The available actions.
             hstate (chex.Array): The hidden state.
             key (jax.random.PRNGKey): The random key.
-
+            aux_obs (chex.Array): an optional auxiliary vector to append to the observation
         Returns:
             Tuple[int, chex.Array]: A tuple containing the action and the new hidden state.
         """
         pass
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng) -> Tuple[int, chex.Array, chex.Array, chex.Array]:
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None) -> Tuple[int, chex.Array, chex.Array, chex.Array]:
         """
         Computes the action, value, and policy given an observation, 
         done flag, available actions, hidden state, and random key.
@@ -110,7 +110,7 @@ class AgentPolicy(abc.ABC):
             avail_actions (chex.Array): The available actions.
             hstate (chex.Array): The hidden state.
             key (jax.random.PRNGKey): The random key.
-
+            aux_obs (chex.Array): an optional auxiliary vector to append to the observation
         Returns:
             Tuple[int, chex.Array, chex.Array, chex.Array]: 
                 A tuple containing the action, value, policy, and new hidden state.
@@ -141,14 +141,14 @@ class MLPActorCriticPolicy(AgentPolicy):
         self.network = ActorCritic(action_dim, activation=activation)
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions for the MLP policy."""
         pi, _ = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
         return action, None  # no hidden state
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions, values, and policy for the MLP policy."""
         pi, val = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
@@ -178,14 +178,14 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
         self.network = ActorWithDoubleCritic(action_dim, activation=activation)
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions for the policy with double critics."""
         pi, _, _ = self.network.apply(params, (obs, avail_actions))
         action = pi.sample(seed=rng)
         return action, None  # no hidden state
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions, values, and policy for the policy with double critics."""
         # convention: val1 is value of of ego agent, val2 is value of best response agent
         pi, val1, val2 = self.network.apply(params, (obs, avail_actions))
@@ -224,7 +224,7 @@ class RNNActorCriticPolicy(AgentPolicy):
         )
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions for the RNN policy. 
         The first dim of obs and done should be the time dimension."""
         new_hstate, pi, _ = self.network.apply(params, hstate, (obs, done, avail_actions))
@@ -232,7 +232,7 @@ class RNNActorCriticPolicy(AgentPolicy):
         return action, new_hstate
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions, values, and policy for the RNN policy.
         The first dim of obs and done should be the time dimension."""
         new_hstate, pi, val = self.network.apply(params, hstate, (obs, done, avail_actions))
@@ -332,14 +332,14 @@ class S5ActorCriticPolicy(AgentPolicy):
         )
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions for the S5 policy."""
         new_hstate, pi, _ = self.network.apply(params, hstate, (obs, done, avail_actions))
         action = pi.sample(seed=rng)
         return action, new_hstate
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng):
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, aux_obs=None):
         """Get actions, values, and policy for the S5 policy."""
         new_hstate, pi, val = self.network.apply(params, hstate, (obs, done, avail_actions))
         action = pi.sample(seed=rng)

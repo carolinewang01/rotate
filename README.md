@@ -2,20 +2,29 @@
 
 ## TODOs
 
-### Metrics / Logging: 
-- Explore open-ended learning metrics 
+### Evaluation
+- Implement evaluating learning methods against BRDiv population
+- Implement evaluating learning methods against heurisic population
+    - Create heuristic population
+- Implement regret-based evaluation -- how to compute exploitability?
+
+
+### Baselines 
+- Implement L-BRDiv
+- Implement MEP
 
 ### Method Exploration: 
-- Implement (L)BR-Div
+- Add regret bounds to open-ended PAIRED
 
 ### Environments with Diverse Coordination Conventions: 
 - Train various teammates for LBF, Overcooked-v1
 
 ### Clean Up Code: 
-
-- Update FCP implementation: 
-    - log eval results to wandb
-- Look for ways to simplify BRDiv code
+- Figure out eval pipeline
+- Clean up FCP implementation (currently only roughly integrated into current logging paradigm)
+- Clean up BRDiv code
+    - Consider making ego and br nets the same 
+- Update IPPO implementation to use wandb logging that's more aligned with rest of codebase
 
 ## Installation Guide
 Follow instructions at `install_instructions.md`
