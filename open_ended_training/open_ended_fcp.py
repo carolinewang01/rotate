@@ -135,7 +135,7 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
                     stat_mean = stat_data[step, 0]
                     logger.log_item(f"Train/Ego_{stat_name}", stat_mean, train_step=global_step)
             
-            logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], checkpoint=global_step)
+            logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], train_step=global_step)
             logger.log_item("Losses/EgoValueLoss", average_ego_value_losses[step], train_step=global_step)
             logger.log_item("Losses/EgoActorLoss", average_ego_actor_losses[step], train_step=global_step)
             logger.log_item("Losses/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=global_step)
@@ -160,7 +160,7 @@ def run_fcp(config):
     Run the open-ended FCP training loop.
     '''
     algorithm_config = dict(config["algorithm"])
-    logger = Logger(config)
+    wandb_logger = Logger(config)
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
 
@@ -204,7 +204,7 @@ def run_fcp(config):
     
     # Log metrics
     metric_names = get_metric_names(config["ENV_NAME"])
-    log_metrics(config, outs, logger, metric_names, 
+    log_metrics(config, outs, wandb_logger, metric_names, 
                 num_controlled_actors=algorithm_config["NUM_ENVS"])
     
     return outs
