@@ -3,6 +3,7 @@ from typing import Dict, Tuple
 
 import jax
 from envs.overcooked.overcooked_visualizer_mp4 import OvercookedVisualizerMP4
+from envs.overcooked.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked.augmented_layouts import augmented_layouts
 from envs import make_env
 from agents.overcooked import OnionAgent, PlateAgent, IndependentAgent, StaticAgent
@@ -77,14 +78,14 @@ def main(num_episodes,
     print("Initializing environment...")
     layout = augmented_layouts[layout_name]
     # directly initialize the env
-    # env = OvercookedWrapper(
-    #     layout=layout,
-    #     random_reset=random_reset,
-    #     random_obj_state=random_obj_state,
-    #     max_steps=max_steps,
-    # )
+    env = OvercookedWrapper(
+        layout=layout,
+        random_reset=random_reset,
+        random_obj_state=random_obj_state,
+        max_steps=max_steps,
+    )
     # use the make_env function to initialize the env
-    env = make_env(env_name="overcooked-v1", env_kwargs={"layout": layout_name})
+    # env = make_env(env_name="overcooked-v1", env_kwargs={"layout": layout_name})
     print("Environment initialized")
     
     # Initialize agents
