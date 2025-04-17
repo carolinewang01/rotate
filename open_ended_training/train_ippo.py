@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
 
-from common.mlp_actor_critic import ActorCritic
+from agents.mlp_actor_critic import ActorCritic
 from ppo.ippo import batchify, unbatchify, Transition
 
 

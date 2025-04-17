@@ -13,7 +13,7 @@ import wandb
 
 from envs import make_env
 from ppo.ippo import unbatchify
-from common.mlp_actor_critic import ActorWithConditionalCritic
+from agents.mlp_actor_critic import ActorWithConditionalCritic
 from common.wandb_visualizations import Logger
 from common.plot_utils import get_metric_names
 from common.save_load_utils import save_train_run

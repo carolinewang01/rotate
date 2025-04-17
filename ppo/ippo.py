@@ -10,7 +10,7 @@ import optax
 from flax.training.train_state import TrainState
 from envs.log_wrapper import LogWrapper
 
-from common.mlp_actor_critic import ActorCritic
+from agents.mlp_actor_critic import ActorCritic
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
 from envs import make_env
 

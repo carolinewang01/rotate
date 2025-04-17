@@ -12,8 +12,7 @@ import jax.numpy as jnp
 import optax
 import numpy as np
 
-from common.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
-from common.initialize_agents import initialize_s5_agent, initialize_mlp_agent
+from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
 from common.plot_utils import get_metric_names, get_stats
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger
@@ -21,6 +20,7 @@ from common.run_episodes import run_episodes
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from evaluation.vis_episodes import save_video
+from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 from ppo.ippo import unbatchify, Transition
 
 log = logging.getLogger(__name__)
@@ -788,7 +788,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
     return out
 
 
-def run_regret_evaluation(config, ego_params):
+def run_regret_evaluation(config):
     algorithm_config = dict(config["algorithm"])
     wandb_logger = Logger(config)
 
@@ -798,21 +798,13 @@ def run_regret_evaluation(config, ego_params):
     
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
+    ego_agent_config = dict(config["ego_agent"])
+    ego_policy, ego_params, _ = initialize_rl_agent_from_config(ego_agent_config, env, init_rng)
     
-    # Initialize ego agent using initialize_s5_agent from ppo_ego.py
-    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    else:
-        raise ValueError(f"Invalid EGO_ACTOR_TYPE: {algorithm_config['EGO_ACTOR_TYPE']}")
-    
-    
+    # run evaluation
     log.info("Starting regret-maximizing evaluation...")
     start_time = time.time()
-
     train_out = train_regret_maximizing_partners(algorithm_config, ego_params, ego_policy, env, train_rng)
-    
     end_time = time.time()
     log.info(f"Regret-maximizing evaluation completed in {end_time - start_time} seconds.")
     

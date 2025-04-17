@@ -12,8 +12,8 @@ from envs.log_wrapper import LogWrapper
 
 from envs import make_env
 from common.wandb_visualizations import Logger
-from common.agent_interface import MLPActorCriticPolicy, AgentPopulation
-from common.initialize_agents import initialize_s5_agent
+from agents.agent_interface import MLPActorCriticPolicy, AgentPopulation
+from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from open_ended_training.train_ippo import make_train as make_ppo_train

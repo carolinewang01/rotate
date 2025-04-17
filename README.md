@@ -46,6 +46,7 @@ If time permits:
 - Clean up (L)-BRDiv code
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
+- Move various actor critic implementation to agents folder
 - Update IPPO implementation to use wandb logging that's more aligned with rest of codebase
 
 ## Installation Guide

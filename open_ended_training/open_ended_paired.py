@@ -10,8 +10,8 @@ import optax
 from flax.training.train_state import TrainState
 
 
-from common.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
-from common.initialize_agents import initialize_s5_agent
+from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
+from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger
