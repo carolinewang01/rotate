@@ -799,7 +799,7 @@ def run_regret_evaluation(config):
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     ego_agent_config = dict(config["ego_agent"])
-    ego_policy, ego_params, _ = initialize_rl_agent_from_config(ego_agent_config, env, init_rng)
+    ego_policy, ego_params, _ = initialize_rl_agent_from_config(ego_agent_config, "ego", env, init_rng)
     
     # run evaluation
     log.info("Starting regret-maximizing evaluation...")

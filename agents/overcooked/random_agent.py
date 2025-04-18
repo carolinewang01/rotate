@@ -34,7 +34,7 @@ class RandomAgent(BaseAgent):
         updated_agent_state = AgentState(
             holding=agent_state.holding,
             goal=agent_state.goal,
-            onions_in_pot=agent_state.onions_in_pot,
+            nonfull_pots=agent_state.nonfull_pots,
             soup_ready=agent_state.soup_ready,
             rng_key=rng_key
         )

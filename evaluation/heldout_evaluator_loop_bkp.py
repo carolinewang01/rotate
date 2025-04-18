@@ -1,28 +1,18 @@
 '''This script implements evaluating ego agents against heldout agents. 
 Warning: ActorCritic agents that rely on auxiliary information to compute actions are not currently supported.'''
 
-import os
 import jax
-import numpy as np
-from prettytable import PrettyTable
 
 from agents.lbf.agent_policy_wrappers import LBFRandomPolicyWrapper
-from agents.overcooked.agent_policy_wrappers import (OvercookedIndependentPolicyWrapper, 
-    OvercookedOnionPolicyWrapper,
-    OvercookedPlatePolicyWrapper,
-    OvercookedStaticPolicyWrapper,
-    OvercookedRandomPolicyWrapper)
-
 from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 from common.run_episodes import run_episodes
 from common.tree_utils import tree_stack
 from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from envs.overcooked.augmented_layouts import augmented_layouts
+from prettytable import PrettyTable
 
-
-def extract_params(params, init_params, idx_labels=None):
+def extract_params(params, init_params, idx_list=None):
     '''params is a pytree of n model checkpoints, where each leaf has an unknown number 
     of checkpoint dimensions, and the last dimension corresponds to the layer dimension. 
     This function extracts each of the n checkpoints and returns a list of n pytrees, 
@@ -31,96 +21,60 @@ def extract_params(params, init_params, idx_labels=None):
     Args:
         params: pytree of n checkpoints (n >= 1)
         init_params: pytree corresp. to ONE checkpoint. used as a reference for the structure of the output pytrees.
-        idx_labels: array of string labels with the same shape as the original checkpoints. If None, numeric indices will be used.
-
+        idx_list: list of indices that each checkpoint corresponds to. If None, all checkpoints will be extracted.
     Returns:
-        Tuple of:
-            - list of n pytrees with same structure as init_params
-            - list of n index labels identifying the original location of each checkpoint
+        list of n pytrees with same structure as init_params
     '''
     assert jax.tree.structure(params) == jax.tree.structure(init_params), "Params and init_params must have the same structure."
 
     model_list = []
-    flattened_idx_labels = []
     params_shape = jax.tree.leaves(params)[0].shape
     init_params_shape = jax.tree.leaves(init_params)[0].shape
     
     # only one model, no extraction needed
-    
     if params_shape == init_params_shape:
         model_list = [params]
-        
-        # Handle labels for a single model case
-        if idx_labels is None:
-            flattened_idx_labels = ["0"]
-        else:
-            flattened_idx_labels = idx_labels
     # multiple models, extract each one
     else:
         # first, flatten the params so that each leaf has shape (..., init_params_shape)
         flattened_params = jax.tree.map(lambda x, y: x.reshape((-1,) + y.shape), params, init_params)        
         # then, extract each model
         n_models = jax.tree.leaves(flattened_params)[0].shape[0]
-        
-        # Now, flatten the idx_labels to match the flattened parameters
-        if idx_labels is None:
-            flattened_idx_labels = [str(i) for i in range(n_models)]
-        else:
-            flattened_idx_labels = np.array(idx_labels).reshape(n_models)
-            
-        # Extract each model
         for i in range(n_models):
             model_i = jax.tree.map(lambda x: x[i], flattened_params)
             model_list.append(model_i)
-    
-    return model_list, flattened_idx_labels
+    return model_list
 
-def load_heldout_set(heldout_config, env, env_name, env_kwargs,rng):
+def load_heldout_set(heldout_config, env, env_name, rng):
     '''Load heldout evaluation agents from config.
     Returns a dictionary of agents with keys as agent names and values as tuples of (policy, params).
     '''
     heldout_agents = {}
     for agent_name, agent_config in heldout_config.items():
         params_list = None
-        idx_labels = None
         # Load RL-based agents
         if "path" in agent_config:
             # ensure that each rl agent has a unique initialization rng
             rng, init_rng = jax.random.split(rng)
-            policy, params, init_params, idx_labels = initialize_rl_agent_from_config(agent_config, agent_name, env, init_rng)
+            policy, params, init_params = initialize_rl_agent_from_config(agent_config, agent_name, env, init_rng)
             # params contains multiple model checkpoints, so we need to extract each one
-            params_list, idx_labels = extract_params(params, init_params, idx_labels)
+            params_list = extract_params(params, init_params, agent_config["idx_list"])
 
         # Load non-RL-based heuristic agents
         elif env_name == 'lbf':
+            # load heuristic agents
             if agent_config["actor_type"] == 'random_agent':
                 policy = LBFRandomPolicyWrapper()
-
         elif env_name == 'overcooked-v1':
-            aug_layout_dict = augmented_layouts[env_kwargs["layout"]]
-            if agent_config["actor_type"] == 'random_agent':
-                policy = OvercookedRandomPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
-            elif agent_config["actor_type"] == 'static_agent':
-                policy = OvercookedStaticPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
-            elif agent_config["actor_type"] == 'independent_agent':
-                policy = OvercookedIndependentPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
-            elif agent_config["actor_type"] == 'onion_agent':
-                policy = OvercookedOnionPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
-            elif agent_config["actor_type"] == 'plate_agent':
-                policy = OvercookedPlatePolicyWrapper(aug_layout_dict, using_log_wrapper=True   )
+            pass # TODO: implement overcooked agent policy wrappers
         else:
             raise ValueError(f"Unknown environment: {env_name}")
         
-        # Generate agent labels
         if params_list is None: # heuristic agent
             heldout_agents[agent_name] = (policy, None)
         else: # rl agent
             for i, params_i in enumerate(params_list):
-                if idx_labels is None:
-                    agent_label = f'{agent_name} ({i})'
-                else:
-                    agent_label = f'{agent_name} ({idx_labels[i]})'
-                heldout_agents[agent_label] = (policy, params_i)
+                heldout_agents[f'{agent_name}_{i}'] = (policy, params_i)
 
     return heldout_agents
 
@@ -187,24 +141,21 @@ def run_heldout_evaluation(config, print_metrics=False):
     
     # load ego agents
     ego_agent_config = dict(config["ego_agent"])
-    ego_policy, ego_params, init_ego_params, ego_idx_labels = initialize_rl_agent_from_config(ego_agent_config, "ego", env, ego_init_rng)
-    ego_params_list, ego_idx_labels = extract_params(ego_params, init_ego_params, ego_idx_labels)
+    ego_policy, ego_params, init_ego_params = initialize_rl_agent_from_config(ego_agent_config, "ego", env, ego_init_rng)
+    ego_params_list = extract_params(ego_params, init_ego_params, ego_agent_config["idx_list"])
     ego_agent_list = [(ego_policy, p) for p in ego_params_list]
-    
-    # create ego agent names using the idx labels
-    ego_names = [f"ego ({label})" for label in ego_idx_labels]
     
     # load heldout agents
     heldout_cfg = config["heldout_set"][config["ENV_NAME"]]
-    heldout_agents = load_heldout_set(heldout_cfg, env, config["ENV_NAME"], config["ENV_KWARGS"], heldout_init_rng)
+    heldout_agents = load_heldout_set(heldout_cfg, env, config["ENV_NAME"], heldout_init_rng)
     heldout_agent_list = list(heldout_agents.values())
-    
     # run evaluation
     eval_metrics = eval_egos_vs_heldouts(config, env, eval_rng, config["NUM_EVAL_EPISODES"], ego_agent_list, heldout_agent_list)
 
     if print_metrics:
         # each leaf of eval_metrics has shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
         metric_names = get_metric_names(config["ENV_NAME"])
+        ego_names = [f"ego_{i}" for i in range(len(ego_agent_list))]
         heldout_names = list(heldout_agents.keys())
         for metric_name in metric_names:
             print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names)

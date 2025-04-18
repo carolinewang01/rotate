@@ -7,8 +7,7 @@ class LBFRandomPolicyWrapper(AgentPolicy):
         self.policy = RandomAgent(agent_id) # agent id doesn't matter for the random agent
 
     def get_action(self, params, obs, done, avail_actions, hstate, rng, 
-                   env_state, aux_obs=None):
-        
+                   env_state, aux_obs=None, test_mode=False):
         # hstate represents the agent state
         action, new_hstate =  self.policy.get_action(obs, env_state, hstate)
         return action, new_hstate
