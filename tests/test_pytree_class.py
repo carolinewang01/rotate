@@ -1,8 +1,19 @@
 import sys
 import jax
 import jax.numpy as jnp
-'''Testing whether python classes can be used as pytree leaves.'''
+from common.tree_utils import tree_stack, tree_unstack
 
+# test combining two pytrees into a single pytree
+atree = {"a": jnp.zeros((4,)), "b": jnp.zeros((4,))}
+b = [atree, atree]
+c = tree_stack(b)
+print(jax.tree.structure(b))
+print(jax.tree.structure(c))
+
+sys.exit(0)
+
+################
+# test flattening a pytree based on the structure of another pytree
 atree = {"a": jnp.zeros((1, 2, 16)), "b": jnp.zeros((1, 2, 16))}
 btree = {"a": jnp.zeros((16,)), "b": jnp.zeros((16,))}
 
@@ -14,6 +25,7 @@ print(jax.tree.structure(flattened_atree))
 sys.exit(0)
 
 ###############
+'''Testing whether python classes can be used as pytree leaves.'''
 class Dog:
     def __init__(self, name, age):
         self.name = name

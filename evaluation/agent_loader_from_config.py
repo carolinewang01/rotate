@@ -10,7 +10,6 @@ from common.save_load_utils import load_checkpoints
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
 def initialize_rl_agent_from_config(agent_config, env, rng):
     '''Load RL agent from checkpoint and initialize from config.
     The agent_config dictionary should have the following structure:
@@ -43,8 +42,8 @@ def initialize_rl_agent_from_config(agent_config, env, rng):
         else:
             idx_tuple = tuple(idx_list)
     
-    log.info(f"Loaded agent checkpoint where leaf 0 has shape {leaf0_shape}.")
-    log.info(f"Selecting indices {idx_list} for evaluation.")
+    log.info(f"Loaded agent checkpoint where leaf 0 has shape {leaf0_shape}. "
+             f" Selecting indices {idx_list} for evaluation.")
 
     agent_params = jax.tree.map(lambda x: x[idx_tuple], agent_ckpt)
 

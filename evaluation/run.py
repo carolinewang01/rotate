@@ -21,7 +21,7 @@ def run_evaluation(cfg):
         run_regret_evaluation(cfg)
 
     elif cfg["name"] == "heldout_eval":
-        run_heldout_evaluation(cfg)
+        run_heldout_evaluation(cfg, print_metrics=True)
 
     else: 
         raise ValueError(f"Evaluator {cfg['name']} not found.")

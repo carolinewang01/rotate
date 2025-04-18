@@ -234,7 +234,7 @@ class ActorWithConditionalCriticPolicy(AgentPolicy):
         # The agent id is only used by the critic, so we pass in a 
         # dummy vector to represent the one-hot agent id
         dummy_agent_id = jnp.zeros(obs.shape[:-1] + (self.pop_size,))
-        pi, _, _ = self.network.apply(params, (obs, dummy_agent_id, avail_actions))
+        pi, _ = self.network.apply(params, (obs, dummy_agent_id, avail_actions))
         action = pi.sample(seed=rng)
         return action, None  # no hidden state
     

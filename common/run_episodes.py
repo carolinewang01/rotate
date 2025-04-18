@@ -46,7 +46,8 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
         done_0_reshaped,
         avail_actions_0,
         init_hstate_0,
-        act_rng
+        act_rng,
+        env_state=env_state
     )
     act_0 = act_0.squeeze()
 
@@ -59,7 +60,8 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
         done_1_reshaped,
         avail_actions_1,
         init_hstate_1,  # Pass the proper hidden state
-        part_rng
+        part_rng,
+        env_state=env_state
     )
     act_1 = act_1.squeeze()
     
@@ -98,7 +100,8 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
                 done_0_reshaped,
                 avail_actions_0,
                 hstate_0,
-                act_rng
+                act_rng,
+                env_state=env_state
             )
             act_0 = act_0.squeeze()
 
@@ -109,7 +112,8 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
                 done_1_reshaped,
                 avail_actions_1,
                 hstate_1,
-                part_rng
+                part_rng,
+                env_state=env_state
             )
             act_1 = act_1.squeeze()
             
@@ -143,12 +147,12 @@ def run_episodes(rng, env, agent_0_param, agent_0_policy,
     ep_rngs = rngs[1:]
     
     # Vectorize run_single_episode over the first argument (rng)
-    vmap_run_single_episode = jax.vmap(
+    vmap_run_single_episode = jax.jit(jax.vmap(
         lambda ep_rng: run_single_episode(
             ep_rng, env, agent_0_param, agent_0_policy,
             agent_1_param, agent_1_policy, max_episode_steps
         )
-    )
+    ))
     # Run episodes in parallel
     all_outs = vmap_run_single_episode(ep_rngs)
     return all_outs  # each leaf has shape (num_eps, ...)
