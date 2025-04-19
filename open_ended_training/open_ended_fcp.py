@@ -17,12 +17,11 @@ from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from open_ended_training.train_ippo import make_train as make_ppo_train
-from open_ended_training.heldout_eval import run_heldout_evaluation
+from open_ended_training.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
 
 def train_partners_in_parallel(config, partner_rng, env):
     '''
@@ -155,41 +154,6 @@ def log_train_metrics(config, logger, outs,
     if not config["local_logger"]["save_train_out"]:
         os.remove(out_savepath)
     
-def log_heldout_metrics(config, logger, eval_metrics, ego_names, heldout_names, metric_names: tuple):
-    '''Log heldout evaluation metrics.'''
-    num_oel_iter, _, num_eval_episodes, _ = eval_metrics[metric_names[0]].shape
-    table_data = []
-    for metric_name in metric_names:
-        # shape of eval_metrics is (num_oel_iter, num_heldout_agents, num_eval_episodes, 2)
-        metric_mean = eval_metrics[metric_name][..., 0].mean(axis=(-1)) # shape (num_oel_iter, num_heldout_agents)
-        metric_std = eval_metrics[metric_name][..., 0].std(axis=(-1)) # shape (num_oel_iter, num_heldout_agents)
-        metric_ci = 1.96 * metric_std / np.sqrt(num_eval_episodes) # shape (num_oel_iter, num_heldout_agents)
-        # log curve
-        for i in range(num_oel_iter):
-            logger.log_item(f"HeldoutEval/AvgEgo_{metric_name}", metric_mean[i].mean(), iter=i)
-        
-        mean0, ci0 = metric_mean[-1], metric_ci[-1]
-
-        mean_and_ci_str = [f"{mean0[i]:.3f} ± {ci0[i]:.3f}" for i in range(len(mean0))]
-        table_data.append(mean_and_ci_str)
-        
-    # log table where the columns are the metric names and the rows are the heldout agents vs the last ego agent
-    table_data = np.array(table_data) # shape (num_metrics, num_heldout_agents)
-    logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data.T, 
-                         columns=list(metric_names), rows=heldout_names)
-    logger.commit()
-
-    # Saving artifacts
-    savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-    out_savepath = save_train_run(eval_metrics, savedir, savename="heldout_eval_metrics")
-    if config["logger"]["log_eval_out"]:
-        logger.log_artifact(name="heldout_eval_metrics", path=out_savepath, type_name="eval_metrics")
-    
-    # Cleanup locally logged out file
-    if not config["local_logger"]["save_eval_out"]:
-        os.remove(out_savepath)
-
-
 def run_fcp(config):
     '''
     Run the open-ended FCP training loop.
@@ -203,7 +167,7 @@ def run_fcp(config):
     rng, ego_init_rng, train_rng = jax.random.split(rng, 3)
 
     # Initialize ego agent
-    ego_policy, init_params = initialize_s5_agent(algorithm_config, env, ego_init_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, ego_init_rng)
     
     # Initialize partner policy once - reused for all iterations
     partner_policy = MLPActorCriticPolicy(
@@ -222,7 +186,7 @@ def run_fcp(config):
         return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
     # Define initial carry with policies included
-    init_carry = (init_params, train_rng)
+    init_carry = (init_ego_params, train_rng)
 
     log.info("Starting open-ended FCP training...")
     start_time = time.time()
@@ -241,7 +205,7 @@ def run_fcp(config):
     log.info("Running heldout evaluation...")
     _ , ego_outs = outs
     ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
-    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_params)
+    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
     
     # Log metrics
     log.info("Logging metrics...")

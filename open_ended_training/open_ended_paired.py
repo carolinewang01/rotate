@@ -12,7 +12,7 @@ from flax.training.train_state import TrainState
 
 from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent
-from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
+from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
@@ -20,6 +20,7 @@ from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
 from ppo.ippo import unbatchify, Transition
+from open_ended_training.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -826,7 +827,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     return carry, (train_out, ego_out)
 
 
-def log_metrics(config, outs, logger, metric_names: tuple):
+def log_metrics(config, logger, outs, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
     
     Args:
@@ -945,10 +946,7 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
         os.remove(out_savepath)
-    
-    # Cleanup
-    logger.close()
-    
+        
 def run_paired(config):
     algorithm_config = dict(config["algorithm"])
     wandb_logger = Logger(config)
@@ -961,7 +959,7 @@ def run_paired(config):
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     
     # Initialize ego agent using initialize_s5_agent from ppo_ego.py
-    ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
     
     # Initialize partner policy once - reused for all iterations
     partner_policy = ActorWithDoubleCriticPolicy(
@@ -979,7 +977,7 @@ def run_paired(config):
     def open_ended_step_fn(carry, unused):
         return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
-    init_carry = (init_params, train_rng)
+    init_carry = (init_ego_params, train_rng)
     
     log.info("Starting open-ended PAIRED training...")
     start_time = time.time()
@@ -995,6 +993,17 @@ def run_paired(config):
     
     end_time = time.time()
     log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
-    
+
+    # Run heldout evaluation 
+    log.info("Running heldout evaluation...")
+    _ , ego_outs = outs
+    ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
+
+    # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    log_metrics(config, outs, wandb_logger, metric_names)
+    log_metrics(config, wandb_logger, outs, metric_names)
+    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names)
+
+    # Cleanup
+    wandb_logger.close()

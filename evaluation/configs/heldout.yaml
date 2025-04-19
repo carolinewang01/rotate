@@ -7,7 +7,7 @@ ENV_KWARGS: {"layout": "cramped_room"}
 
 EVAL_SEED: 34957
 MAX_EPISODE_STEPS: 400 # evaluation will use true episode length
-NUM_EVAL_EPISODES: 10
+NUM_EVAL_EPISODES: 32
 
 name: heldout_eval
 
@@ -28,7 +28,7 @@ ego_agent:
 
 # heldout set
 heldout_set:
-  lbf: # doesn't matter what you name each agent
+  lbf:
     # brdiv: 
     #   path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
     #   actor_type: actor_with_conditional_critic

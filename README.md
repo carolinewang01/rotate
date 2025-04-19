@@ -1,24 +1,18 @@
 # continual-aht
 
 ## TODOs
-
 ### Evaluation
-- Implement evaluation interface to enable evaluating against non-homogeneous agent population
-
-- Implement evaluation of ego agent policies against BRDiv population - we can base this off the existing FCP eval code. 
+- Metrics: 
     - Implement RLiable metrics to visualize results
-    - Compute BRProx metric
+    - BRProx metric
     
-- Implement evaluating learning methods against heurisic population
+- Create evaluation partners:
     - Create heuristic population on LBF
     - Create heuristic population on Overcooked
 
 - Regret-based evaluator: 
     - The learning procedure been implemented, but can we compute/plot the actual regret number? 
     Would it be comparable between different training runs? 
-
-- Visualization: 
-    - Implement agent highlighter in Overcooked visualizer
 
 ### Method Exploration: 
 - Add regret bounds to open-ended PAIRED
@@ -37,7 +31,6 @@
 
 If time permits: 
 - Implement CoMeDi
-
 
 ### Clean Up Code: 
 - Figure out a general eval pipeline
