@@ -1,7 +1,6 @@
 '''
-Script for training an PPO ego agent against a fixed partner policy.
-This script uses AgentPolicy and AgentPopulation abstractions to 
-support training with any type of ego or partner policy.
+Script for training a PPO ego agent against a population of partner agents. 
+Warning: this script is used as the main script for ego training throughout the project.
 '''
 import os
 import time
@@ -16,11 +15,10 @@ from flax.training.train_state import TrainState
 
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from ppo.ippo import unbatchify, Transition
+from common.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
 from agents.agent_interface import AgentPopulation, MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
-from common.wandb_visualizations import Logger
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 
@@ -531,11 +529,8 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     if not config["local_logger"]["save_train_out"]:
         os.remove(out_savepath)
    
-    # Cleanup
-    logger.close()
-
     
-def run_ego_training(config, partner_params, pop_size: int):
+def run_ego_training(config, wandb_logger, partner_params, pop_size: int):
     '''Run ego agent training against the population of partner agents.
     
     Args:
@@ -544,7 +539,6 @@ def run_ego_training(config, partner_params, pop_size: int):
         pop_size: int, number of partner agents in the population
     '''
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
 
     # Create only one environment instance
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
@@ -566,11 +560,11 @@ def run_ego_training(config, partner_params, pop_size: int):
     )
     
     # Initialize ego agent
-    if algorithm_config["ALG"] == "ppo_s5":
+    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
         ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["ALG"] == "ppo_mlp":
+    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
         ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["ALG"] == "ppo_rnn":
+    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
         # WARNING: currently the RNN policy is not working. 
         # TODO: fix this!
         ego_policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)

@@ -67,7 +67,7 @@ class AgentPopulation:
         vmapped_get_action = jax.vmap(self.policy_cls.get_action, in_axes=(0, 0, 0, 0, 0, 0, None))
         actions, new_hstate = vmapped_get_action(
             gathered_params, obs, done, avail_actions, hstate, 
-            rngs_batched, test_mode)
+            rngs_batched, test_mode=test_mode)
         return actions, new_hstate
     
     def init_hstate(self, n: int):

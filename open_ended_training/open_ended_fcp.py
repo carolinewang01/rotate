@@ -16,7 +16,7 @@ from agents.agent_interface import MLPActorCriticPolicy, AgentPopulation
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from open_ended_training.train_ippo import make_train as make_ppo_train
+from ppo.ippo import make_train as make_ppo_train
 from open_ended_training.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
 

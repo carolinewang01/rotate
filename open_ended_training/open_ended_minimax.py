@@ -5,12 +5,11 @@ import numpy as np
 from flax.training.train_state import TrainState
 from envs.log_wrapper import LogWrapper
 
-
-from envs import make_env
-from ppo.ippo import unbatchify, Transition
 from agents.mlp_actor_critic import ActorCritic
 from agents.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from common.wandb_visualizations import Logger
+from common.ppo_utils import Transition, unbatchify
+from envs import make_env
 
 
 def train_adversarial_partners(config, ego_policy, minimax_env):

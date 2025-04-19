@@ -70,6 +70,7 @@ def fcp_pipeline(config):
               num_episodes=config["NUM_EVAL_EPISODES"],
               metric_names=metric_names)
 
+    logger.close()
     return fcp_out
 
 if __name__ == "__main__":

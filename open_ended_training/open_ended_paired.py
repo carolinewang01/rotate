@@ -16,10 +16,10 @@ from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
+from common.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from ppo.ippo import unbatchify, Transition
 from open_ended_training.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
