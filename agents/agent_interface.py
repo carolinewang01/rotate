@@ -13,7 +13,10 @@ from agents.rnn_actor_critic import RNNActorCritic, ScannedRNN
 
 
 class AgentPopulation:
-    '''Base class for a population of identical agents'''
+    '''Base class for a population of identical agents
+    TODO: develop more complex population classes that can handle heterogeneous agents
+    and agents that depend on auxiliary observations or environment state.
+    '''
     def __init__(self, pop_size, policy_cls):
         '''
         Args:
@@ -39,10 +42,10 @@ class AgentPopulation:
             return jax.vmap(lambda idx: leaf[idx])(agent_indices)
         return jax.tree.map(gather_leaf, pop_params)
     
-    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, 
-                    aux_obs=None, env_state=None, test_mode=False):
+    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, test_mode=False):
         '''
-        Get the actions of the agents specified by agent_indices.
+        Get the actions of the agents specified by agent_indices. Does not support agents that 
+        require environment state or auxiliary observations.
         
         Args:
             pop_params: pytree of parameters for the population of agents of shape (pop_size, ...).
@@ -61,9 +64,10 @@ class AgentPopulation:
         gathered_params = self.gather_agent_params(pop_params, agent_indices)
         num_envs = agent_indices.squeeze().shape[0]
         rngs_batched = jax.random.split(rng, num_envs)
-        actions, new_hstate = jax.vmap(self.policy_cls.get_action)(
+        vmapped_get_action = jax.vmap(self.policy_cls.get_action, in_axes=(0, 0, 0, 0, 0, 0, None))
+        actions, new_hstate = vmapped_get_action(
             gathered_params, obs, done, avail_actions, hstate, 
-            rngs_batched, env_state, aux_obs, test_mode)
+            rngs_batched, test_mode)
         return actions, new_hstate
     
     def init_hstate(self, n: int):

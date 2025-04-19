@@ -1,6 +1,5 @@
 '''
-This file contains the code for running episodes with some ego agent and some population 
-of partner agents in the environment.
+This file contains the code for running episodes with an ego agent and a partner agent. 
 '''
 import jax
 import jax.numpy as jnp
