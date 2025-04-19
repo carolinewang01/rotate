@@ -1,6 +1,7 @@
 defaults:
   - hydra: hydra_simple
   - ego_defaults@ego_train_algorithm
+  - heldout_eval
   - _self_
 
 # ENV_NAME: lbf
@@ -65,9 +66,11 @@ logger:
   entity: aht-project
   mode: offline # options: online, offline, disabled
   verbose: true
-  log_train_out: true # whether to log the out dictionary
+  log_train_out: false # whether to log the out dictionary
+  log_eval_out: false # whether to log the eval metrics
 
 # Local logger
 local_logger:
   save_figures: false # unused
   save_train_out: true
+  save_eval_out: true

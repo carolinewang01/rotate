@@ -3,7 +3,6 @@ Based on the IPPO implementation from jaxmarl. Trains a parameter-shared IPPO ag
 fully cooperative multi-agent environment.
 '''
 import os
-from typing import NamedTuple
 
 import hydra
 import jax

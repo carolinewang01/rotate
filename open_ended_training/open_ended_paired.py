@@ -20,7 +20,7 @@ from common.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from open_ended_training.heldout_eval import run_heldout_evaluation, log_heldout_metrics
+from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

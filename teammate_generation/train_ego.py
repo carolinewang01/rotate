@@ -6,16 +6,11 @@ import jax
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 
-from agents.agent_interface import MLPActorCriticPolicy, AgentPopulation
-from common.plot_utils import get_metric_names
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
-from ego_agent_training.ppo_ego import train_ppo_ego_agent, log_metrics
+from ego_agent_training.ppo_ego import train_ppo_ego_agent
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-'''Plan: the teammate generation algorithm should return the flattened partner params, and partner population.
-From this, we can compute the population size and initialize the partner population.'''
 
 def train_ego_agent(config, logger, partner_params, partner_population):
     '''
@@ -35,13 +30,13 @@ def train_ego_agent(config, logger, partner_params, partner_population):
     
     # Initialize ego agent
     if config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_params = initialize_s5_agent(config, env, init_rng)
+        ego_policy, init_ego_params = initialize_s5_agent(config, env, init_rng)
     elif config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_params = initialize_mlp_agent(config, env, init_rng)
+        ego_policy, init_ego_params = initialize_mlp_agent(config, env, init_rng)
     elif config["EGO_ACTOR_TYPE"] == "rnn":
         # WARNING: currently the RNN policy is not working. 
         # TODO: fix this!
-        ego_policy, init_params = initialize_rnn_agent(config, env, init_rng)
+        ego_policy, init_ego_params = initialize_rnn_agent(config, env, init_rng)
     
     log.info("Starting ego agent training...")
     start_time = time.time()
@@ -52,15 +47,11 @@ def train_ego_agent(config, logger, partner_params, partner_population):
         env=env,
         train_rng=train_rng,
         ego_policy=ego_policy,
-        init_ego_params=init_params,
+        init_ego_params=init_ego_params,
         n_ego_train_seeds=config["NUM_EGO_TRAIN_SEEDS"],
         partner_population=partner_population,
         partner_params=partner_params
     )
     
     log.info(f"Ego agent training completed in {time.time() - start_time:.2f} seconds")
-    
-    # process and log metrics
-    metric_names = get_metric_names(config["ENV_NAME"])
-    log_metrics(config, out, logger, metric_names)
-    return out    
+    return out, ego_policy, init_ego_params

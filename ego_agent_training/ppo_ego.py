@@ -522,9 +522,9 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     # Saving artifacts
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     # TODO: in the future, add video logging feature
-    out_savepath = save_train_run(train_out, savedir, savename="saved_train_run")
+    out_savepath = save_train_run(train_out, savedir, savename="ego_train_run")
     if config["logger"]["log_train_out"]:
-        logger.log_artifact(name="saved_train_run", path=out_savepath, type_name="train_run")
+        logger.log_artifact(name="ego_train_run", path=out_savepath, type_name="train_run")
         # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
         os.remove(out_savepath)
@@ -561,13 +561,13 @@ def run_ego_training(config, wandb_logger, partner_params, pop_size: int):
     
     # Initialize ego agent
     if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+        ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
     elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
+        ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
     elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
         # WARNING: currently the RNN policy is not working. 
         # TODO: fix this!
-        ego_policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)
+        ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
     
     log.info("Starting ego agent training...")
     start_time = time.time()
@@ -578,7 +578,7 @@ def run_ego_training(config, wandb_logger, partner_params, pop_size: int):
         env=env,
         train_rng=train_rng,
         ego_policy=ego_policy,
-        init_ego_params=init_params,
+        init_ego_params=init_ego_params,
         n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
         partner_population=partner_population,
         partner_params=partner_params

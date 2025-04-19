@@ -64,10 +64,13 @@ class AgentPopulation:
         gathered_params = self.gather_agent_params(pop_params, agent_indices)
         num_envs = agent_indices.squeeze().shape[0]
         rngs_batched = jax.random.split(rng, num_envs)
-        vmapped_get_action = jax.vmap(self.policy_cls.get_action, in_axes=(0, 0, 0, 0, 0, 0, None))
+        vmapped_get_action = jax.vmap(partial(self.policy_cls.get_action, 
+                                              aux_obs=None, 
+                                              env_state=None, 
+                                              test_mode=test_mode))
         actions, new_hstate = vmapped_get_action(
             gathered_params, obs, done, avail_actions, hstate, 
-            rngs_batched, test_mode=test_mode)
+            rngs_batched)
         return actions, new_hstate
     
     def init_hstate(self, n: int):
