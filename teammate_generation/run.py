@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 from common.wandb_visualizations import Logger
 
 from BRDiv import run_brdiv
+from fcp import train_fcp_partners
 from ego_agent_training.ppo_ego import log_metrics as log_ego_metrics
 from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from common.plot_utils import get_metric_names
@@ -15,8 +16,11 @@ def run_training(cfg):
     wandb_logger = Logger(cfg)
     cfg = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
 
+    # train partner population
     if cfg["algorithm"]["ALG"] == "brdiv":
         partner_params, partner_population = run_brdiv(cfg, wandb_logger)
+    elif cfg["algorithm"]["ALG"] == "fcp":
+        partner_params, partner_population = train_fcp_partners(cfg, wandb_logger)
     else:
         raise NotImplementedError("Selected method not implemented.")
     

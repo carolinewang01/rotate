@@ -320,7 +320,7 @@ def run_ippo(config, logger):
 def log_metrics(config, out, logger):
     '''Save train run output and log to wandb as artifact.'''
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-    
+    # save artifacts
     out_savepath = save_train_run(out, savedir, savename="saved_train_run")
     if config["logger"]["log_train_out"]:
         logger.log_artifact(name="saved_train_run", path=out_savepath, type_name="train_run")
