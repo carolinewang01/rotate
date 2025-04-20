@@ -1,6 +1,7 @@
 # continual-aht
 
 ## TODOs
+
 ### Evaluation
 - Create evaluation partners:
     - Create heuristic population on LBF
@@ -13,6 +14,7 @@
 - Regret-based evaluator: 
     - The learning procedure been implemented, but can we compute/plot the actual regret number? 
     Would it be comparable between different training runs? 
+    - Update regret evaluator to allow weighting between conf and br losses
 
 ### Method Exploration: 
 - Add regret bounds to open-ended PAIRED (Arrasy)

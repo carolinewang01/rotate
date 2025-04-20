@@ -11,6 +11,7 @@ algorithm:
   ALG: paired
   NUM_OPEN_ENDED_ITERS: 5 # 300
   PARTNER_POP_SIZE: 5 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
+  CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
   TRAIN_SEED: 38410
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}

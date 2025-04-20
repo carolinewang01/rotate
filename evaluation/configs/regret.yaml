@@ -7,7 +7,7 @@ ROLLOUT_LENGTH: 128 # should be larger than episode length
 ENV_KWARGS: {}
 
 ego_agent:
-  path: results/lbf/fcp_s5/2025-04-13_18-42-46/saved_train_run
+  path: "results/lbf/ppo_ego_s5/2025-04-13_11-43-33/saved_train_run" # results/lbf/fcp_s5/2025-04-13_18-42-46/saved_train_run
   actor_type: s5
   idx_list: [[0, -1]] # list of idxs to load from checkpoint for evaluation. If null, all checkpoints will be loaded.
   # provide any necessary args to initialize the agent here
@@ -17,6 +17,7 @@ ego_agent:
 algorithm:
   ALG: regret_maximizing
   PARTNER_POP_SIZE: 1 # how many regret-maximizing pairs to train
+  CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
   TRAIN_SEED: 38410
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}

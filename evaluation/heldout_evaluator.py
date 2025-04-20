@@ -1,7 +1,6 @@
 '''This script implements evaluating ego agents against heldout agents. 
-Warning: ActorCritic agents that rely on auxiliary information to compute actions are not currently supported.'''
-
-import os
+Warning: ActorCritic agents that rely on auxiliary information to compute actions are not currently supported.
+'''
 import jax
 import numpy as np
 from prettytable import PrettyTable

@@ -26,7 +26,6 @@ def train_ego_agent(config, logger, partner_params, partner_population):
 
     rng = jax.random.PRNGKey(config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
-
     
     # Initialize ego agent
     if config["EGO_ACTOR_TYPE"] == "s5":

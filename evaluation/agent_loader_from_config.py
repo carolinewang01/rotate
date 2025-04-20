@@ -50,14 +50,12 @@ def create_idx_labels(idx_list, checkpoint_shape):
             # Create a 1D array of labels
             idx_labels = [f"{i}" for i in range(checkpoint_shape[0])]
     # If loading specific checkpoints, create labels by converting idx_list to strings
+    elif isinstance(idx_list[0], list):
+        # For 2D indices like [[0, -1], [1, -1], [2, -1]]
+        idx_labels = [f"{idx[0]}, {idx[1]}" for idx in idx_list]
     else:
-        if isinstance(idx_list[0], list):
-            # For 2D indices like [[0, -1], [1, -1], [2, -1]]
-            idx_labels = [f"{idx[0]}, {idx[1]}" for idx in idx_list]
-        else:
-            # For 1D indices like [0, 1, 2]
-            idx_labels = [f"{idx}" for idx in idx_list]
-    
+        # For 1D indices like [0, 1, 2]
+        idx_labels = [f"{idx}" for idx in idx_list]
     return idx_labels
 
 

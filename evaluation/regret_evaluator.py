@@ -362,8 +362,9 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                         
                         # Entropy for interaction with best response agent
                         entropy_br = jnp.mean(pi_br.entropy())
-
-                        total_loss = (pg_loss_ego + pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
+                        ego_loss = pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
+                        br_loss = pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br
+                        total_loss = (1 - config["CONF_BR_WEIGHT"]) * ego_loss + config["CONF_BR_WEIGHT"] * br_loss
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
@@ -725,6 +726,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
             # initial state for scan over _update_step_with_ckpt
             update_steps = 0
             rng, rng_eval_ego, rng_eval_br = jax.random.split(rng, 3)
+            
             ep_infos_ego = run_episodes(rng_eval_ego, env, 
                 agent_0_param=train_state_conf.params, agent_0_policy=confederate_policy,
                 agent_1_param=ego_params, agent_1_policy=ego_policy, 
@@ -799,8 +801,12 @@ def run_regret_evaluation(config):
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     ego_agent_config = dict(config["ego_agent"])
-    ego_policy, ego_params, _ = initialize_rl_agent_from_config(ego_agent_config, "ego", env, init_rng)
-    
+    ego_policy, ego_params, _, idx_labels = initialize_rl_agent_from_config(ego_agent_config, "ego", env, init_rng)
+    n_ego_agents = len(np.array(idx_labels).flatten())
+    assert n_ego_agents == 1, "Regret evaluation only supports a single ego agent currently."
+    # TODO: update regret evaluation to vmap over multiple ego agents
+    ego_params = jax.tree.map(lambda x: x[0], ego_params)
+
     # run evaluation
     log.info("Starting regret-maximizing evaluation...")
     start_time = time.time()

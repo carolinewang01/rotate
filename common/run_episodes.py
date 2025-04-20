@@ -1,5 +1,6 @@
 '''
-This file contains the code for running episodes with an ego agent and a partner agent. 
+This file contains the code for running episodes with an ego agent and a partner agent.
+Does not currently support actors that require aux_obs.
 '''
 import jax
 import jax.numpy as jnp
@@ -8,9 +9,6 @@ import jax.numpy as jnp
 def run_single_episode(rng, env, agent_0_param, agent_0_policy, 
                        agent_1_param, agent_1_policy, 
                        max_episode_steps, test_mode=False):
-    '''
-    Agent 0 is the ego agent, agent 1 is the partner agent.
-    '''
     # Reset the env.
     rng, reset_rng = jax.random.split(rng)
     obs, env_state = env.reset(reset_rng)
@@ -31,7 +29,7 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
     avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
 
     # Do one step to get a dummy info structure
-    rng, act_rng, part_rng, step_rng = jax.random.split(rng, 4)
+    rng, act1_rng, act2_rng, step_rng = jax.random.split(rng, 4)
     
     # Reshape inputs
     obs_0_reshaped = obs_0.reshape(1, 1, -1)
@@ -44,7 +42,8 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
         done_0_reshaped,
         avail_actions_0,
         init_hstate_0,
-        act_rng,
+        act1_rng,
+        aux_obs=None,
         env_state=env_state,
         test_mode=test_mode
     )
@@ -53,13 +52,15 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
     # Get partner action using the underlying policy class's get_action method directly
     obs_1_reshaped = obs_1.reshape(1, 1, -1)
     done_1_reshaped = init_done["agent_1"].reshape(1, 1)
+
     act_1, hstate_1 = agent_1_policy.get_action(
         agent_1_param, 
         obs_1_reshaped, 
         done_1_reshaped,
         avail_actions_1,
-        init_hstate_1,  # Pass the proper hidden state
-        part_rng,
+        init_hstate_1,  # shape of entry 0 is (1, 1, 8)
+        act2_rng,
+        aux_obs=None,
         env_state=env_state,
         test_mode=test_mode
     )
