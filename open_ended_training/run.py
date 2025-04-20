@@ -1,9 +1,10 @@
 import hydra
 from omegaconf import OmegaConf
 
-from open_ended_minimax2 import run_minimax
+from open_ended_minimax import run_minimax
 from open_ended_paired import run_paired
 from open_ended_fcp import run_fcp
+from paired_ued import run_paired_ued
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
 def run_training(cfg):
@@ -13,6 +14,8 @@ def run_training(cfg):
         run_minimax(cfg)
     elif cfg.algorithm["ALG"] == "paired":
         run_paired(cfg)
+    elif cfg.algorithm["ALG"] == "paired_ued":
+        run_paired_ued(cfg)
     elif cfg.algorithm["ALG"] == "fcp":
         run_fcp(cfg)
     else:

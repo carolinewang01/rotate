@@ -5,12 +5,12 @@ NUM_EVAL_EPISODES: 32
 
 heldout_set:
   lbf: # doesn't matter what you name each agent
-    brdiv: 
-      path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
-      actor_type: actor_with_conditional_critic
-      idx_list: [[0, -1], [1, -1], [2, -1]] # If null, all checkpoints will be loaded.
-      ckpt_key: checkpoints_conf # key to load from checkpoint. default is "checkpoints"
-      POP_SIZE: 5 # for brdiv, we need to specify population size that the method was trained with
+    # brdiv: 
+    #   path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
+    #   actor_type: actor_with_conditional_critic
+    #   idx_list: [[0, -1], [1, -1], [2, -1]] # If null, all checkpoints will be loaded.
+    #   ckpt_key: checkpoints_conf # key to load from checkpoint. default is "checkpoints"
+    #   POP_SIZE: 5 # for brdiv, we need to specify population size that the method was trained with
     ppo_ego_s5: 
       path: "results/lbf/ppo_ego_s5/2025-04-13_11-43-33/saved_train_run"
       actor_type: s5

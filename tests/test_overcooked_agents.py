@@ -147,7 +147,7 @@ def main(num_episodes,
 
 if __name__ == "__main__":
     DEBUG = False
-    VISUALIZE = False
+    VISUALIZE = True
     SAVE_VIDEO = not VISUALIZE    
     NUM_EPISODES = 1
 
