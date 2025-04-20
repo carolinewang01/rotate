@@ -1,7 +1,7 @@
 import hydra
 from omegaconf import OmegaConf
 
-from open_ended_minimax import run_minimax
+from open_ended_minimax2 import run_minimax
 from open_ended_paired import run_paired
 from open_ended_fcp import run_fcp
 
