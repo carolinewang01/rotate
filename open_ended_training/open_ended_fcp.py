@@ -212,7 +212,7 @@ def run_fcp(config):
     metric_names = get_metric_names(config["ENV_NAME"])
     log_train_metrics(config, wandb_logger, outs, metric_names, 
                       num_controlled_actors=algorithm_config["NUM_ENVS"])
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names)
+    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
     
     # Cleanup
     wandb_logger.close()
