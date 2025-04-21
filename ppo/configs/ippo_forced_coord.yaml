@@ -7,17 +7,17 @@ ENV_KWARGS:
   layout: forced_coord
   do_reward_shaping: true
   reward_shaping_params:
-    PLACEMENT_IN_POT_REW: 3 # reward for putting ingredients 
-    PLATE_PICKUP_REWARD: 3 # reward for picking up a plate
+    PLACEMENT_IN_POT_REW: 1 # reward for putting ingredients 
+    PLATE_PICKUP_REWARD: 1 # reward for picking up a plate
     SOUP_PICKUP_REWARD: 5 # reward for picking up a ready soup
-    ONION_PICKUP_REWARD: 0
+    ONION_PICKUP_REWARD: 1
     COUNTER_PICKUP_REWARD: 0
     COUNTER_DROP_REWARD: 0
     DISH_DISP_DISTANCE_REW: 0
     POT_DISTANCE_REW: 0
     SOUP_DISTANCE_REW: 0
 
-TOTAL_TIMESTEPS: 1e6
+TOTAL_TIMESTEPS: 5e6
 SEED: 12345
 LR: .0001
 NUM_ENVS: 8
