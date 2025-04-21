@@ -1,0 +1,49 @@
+defaults:
+  - hydra: hydra_simple
+  - _self_
+
+ENV_NAME: lbf
+ROLLOUT_LENGTH: 128
+ENV_KWARGS: {}
+
+algorithm:
+  ALG: lbrdiv
+  PARTNER_POP_SIZE: 5
+  NUM_EVAL_EPISODES: 20
+  TRAIN_SEED: 38410
+  NUM_ENVS_SP: 32
+  NUM_ENVS_XP: 32
+  XP_LOSS_WEIGHTS: 5.0
+  ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
+  ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
+  TOTAL_TIMESTEPS: 6e7 # 4e7 # divided among each pair of BR and Conf agents
+  LR: 5.e-4
+  UPDATE_EPOCHS: 15
+  NUM_MINIBATCHES: 16
+  NUM_CHECKPOINTS: 5
+  GAMMA: 0.99
+  GAE_LAMBDA: 0.95
+  CLIP_EPS: 0.05
+  ENT_COEF: 0.01
+  VF_COEF: 1.0
+  MAX_GRAD_NORM: 1.0
+  TOLERANCE_FACTOR: 0.1
+  LAGRANGE_LR: 0.1
+  ANNEAL_LR: false # TODO: test True!
+
+name: l-brdiv
+
+# wandb settings
+logger: 
+  load_dir: l-brdiv
+  project: open-ended-aht
+  entity: aht-project
+  mode: online # options: online, offline, disabled
+  verbose: true
+  log_train_out: false # whether to log the out dictionary
+
+# Local logger
+local_logger:
+  save_figures: false # unused
+  save_train_out: true
