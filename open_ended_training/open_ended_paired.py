@@ -1,4 +1,4 @@
-import os
+import shutil
 import time
 import logging
 
@@ -947,7 +947,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
         
 def run_paired(config):
     algorithm_config = dict(config["algorithm"])

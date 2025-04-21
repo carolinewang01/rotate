@@ -1,7 +1,7 @@
 ''''Implementation of heldout evaluation helper functions used by learners.'''
 import jax
 import numpy as np
-import os
+import shutil
 import hydra
 
 from common.save_load_utils import save_train_run
@@ -67,5 +67,5 @@ def log_heldout_metrics(config, logger, eval_metrics, ego_names, heldout_names, 
     
     # Cleanup locally logged out file
     if not config["local_logger"]["save_eval_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
 

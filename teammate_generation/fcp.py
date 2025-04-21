@@ -1,4 +1,5 @@
 import os
+import shutil
 import time
 import logging
 import hydra
@@ -48,7 +49,7 @@ def log_metrics(config, out, logger):
         logger.log_artifact(name="saved_train_run", path=out_savepath, type_name="train_run")
         # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
    
     metric_names = get_metric_names(config["ENV_NAME"])
 
