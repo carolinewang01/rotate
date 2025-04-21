@@ -5,11 +5,11 @@ import jax
 
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from common.agent_interface import MLPActorCriticPolicy
+from agents.agent_interface import MLPActorCriticPolicy
 from common.save_load_utils import load_checkpoints, save_train_run
 from common.plot_utils import plot_xp_from_eval_metrics
 from common.run_episodes import run_episodes
-from common.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
+from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

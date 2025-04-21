@@ -6,9 +6,9 @@ import jax
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 
-from common.agent_interface import MLPActorCriticPolicy, AgentPopulation
+from agents.agent_interface import MLPActorCriticPolicy, AgentPopulation
 from common.plot_utils import get_metric_names
-from common.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
+from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from ego_agent_training.ppo_ego import train_ppo_ego_agent, log_metrics
 
 log = logging.getLogger(__name__)

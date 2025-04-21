@@ -1,3 +1,4 @@
+'''Implemented to be as faithful to the original PAIRED as possible.'''
 import os
 import time
 import logging
@@ -788,26 +789,14 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
 
 def open_ended_training_step(carry, ego_policy, partner_population, config, env):
     '''
-    Train the ego agent against the regret-maximizing partners. 
-    Note: Currently training fcp agent against **all** adversarial partner checkpoints
-    TODO: Limit training against the last adversarial checkpoints instead.
+    Train the ego agent against the **final** confederate.
     '''
     prev_ego_params, rng = carry
     rng, partner_rng, ego_rng = jax.random.split(rng, 3)
     
     # Train partner agents with ego_policy
     train_out = train_regret_maximizing_partners(config, prev_ego_params, ego_policy, env, partner_rng)
-    train_partner_params = train_out["checkpoints_conf"]
-    
-    # Reshape partner parameters for AgentPopulation
-    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-
-    
-    # Flatten partner parameters for AgentPopulation
-    flattened_partner_params = jax.tree.map(
-        lambda x: x.reshape((pop_size,) + x.shape[2:]), 
-        train_partner_params
-    )
+    train_partner_params = train_out["final_params_conf"]
     
     # Train ego agent using train_ppo_ego_agent
     ego_out = train_ppo_ego_agent(
@@ -818,7 +807,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
         init_ego_params=prev_ego_params,
         n_ego_train_seeds=1,
         partner_population=partner_population,
-        partner_params=flattened_partner_params
+        partner_params=train_partner_params
     )
     
     updated_ego_parameters = ego_out["final_params"]
@@ -949,7 +938,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     if not config["local_logger"]["save_train_out"]:
         os.remove(out_savepath)
         
-def run_paired(config):
+def run_paired_ued(config):
     algorithm_config = dict(config["algorithm"])
     wandb_logger = Logger(config)
 
@@ -971,7 +960,7 @@ def run_paired(config):
     
     # Create partner population
     partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        pop_size=algorithm_config["PARTNER_POP_SIZE"],
         policy_cls=partner_policy
     )
 
@@ -981,7 +970,7 @@ def run_paired(config):
     
     init_carry = (init_ego_params, train_rng)
     
-    log.info("Starting open-ended PAIRED training...")
+    log.info("Starting PAIRED-UED training...")
     start_time = time.time()
 
     DEBUG = False
@@ -994,7 +983,7 @@ def run_paired(config):
         )
     
     end_time = time.time()
-    log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
+    log.info(f"PAIRED-UED training completed in {end_time - start_time} seconds.")
 
     # Run heldout evaluation 
     log.info("Running heldout evaluation...")

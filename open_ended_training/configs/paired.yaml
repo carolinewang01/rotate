@@ -1,5 +1,6 @@
 defaults:
   - hydra: hydra_simple
+  - heldout_eval
   - _self_
 
 ENV_NAME: lbf
@@ -10,6 +11,7 @@ algorithm:
   ALG: paired
   NUM_OPEN_ENDED_ITERS: 5 # 300
   PARTNER_POP_SIZE: 5 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
+  CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
   TRAIN_SEED: 38410
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
@@ -48,8 +50,10 @@ logger:
   mode: online # options: online, offline, disabled
   verbose: true
   log_train_out: false # whether to log the out dictionary
+  log_eval_out: false # whether to log the heldout eval metrics
 
 # Local logger
 local_logger:
   save_figures: true # currently unused
   save_train_out: true
+  save_eval_out: true

@@ -10,10 +10,11 @@ from envs.log_wrapper import LogWrapper
 
 
 from envs import make_env
-from ppo.ippo import unbatchify, Transition
-from common.mlp_actor_critic import ActorCritic, ActorWithDoubleCritic
-from common.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
+from agents.mlp_actor_critic import ActorCritic, ActorWithDoubleCritic
+from agents.s5_actor_critic import S5ActorCritic, StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
+from common.ppo_utils import Transition, unbatchify
 from common.wandb_visualizations import Logger
+
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

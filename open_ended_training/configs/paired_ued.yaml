@@ -8,24 +8,25 @@ ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
 
 algorithm:
-  ALG: fcp
-  NUM_OPEN_ENDED_ITERS: 10
-  PARTNER_POP_SIZE: 3 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
-  NUM_EVAL_EPISODES: 20
+  ALG: paired_ued
+  NUM_OPEN_ENDED_ITERS: 5 # 300
+  PARTNER_POP_SIZE: 1 # Only train one confederate-br pair at a time.
+  CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
   TRAIN_SEED: 38410
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
-  TOTAL_TIMESTEPS: 3e4 # 3e5  # per iter of open-ended training
+  TOTAL_TIMESTEPS: 1.6e7 # one step of open-ended training
   LR: 1.e-4
   UPDATE_EPOCHS: 15
   NUM_MINIBATCHES: 4
+  NUM_EVAL_EPISODES: 20
   NUM_CHECKPOINTS: 5
   GAMMA: 0.99
   GAE_LAMBDA: 0.95
   CLIP_EPS: 0.05
-  ENT_COEF: 0.01
+  ENT_COEF: 0.001 # TODO: check if this should be larger?
   VF_COEF: 1.0
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: false
@@ -39,11 +40,11 @@ algorithm:
   S5_PRENORM: true
   S5_DO_GTRXL_NORM: true
 
-name: open_ended_fcp
+name: paired_ued
 
 # wandb settings
 logger: 
-  load_dir: open_ended_fcp
+  load_dir: paired_ued
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
