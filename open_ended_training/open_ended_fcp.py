@@ -2,7 +2,7 @@
 An implementation of open-ended FCP where both the ego agent and all 
 partner agents are MLP actor critics.
 '''
-import os
+import shutil
 import time
 import logging
 import jax
@@ -12,16 +12,16 @@ from envs.log_wrapper import LogWrapper
 
 from envs import make_env
 from common.wandb_visualizations import Logger
-from common.agent_interface import MLPActorCriticPolicy, AgentPopulation
-from common.initialize_agents import initialize_s5_agent
+from agents.agent_interface import MLPActorCriticPolicy, AgentPopulation
+from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from open_ended_training.train_ippo import make_train as make_ppo_train
+from ppo.ippo import make_train as make_ppo_train
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
+from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
 
 def train_partners_in_parallel(config, partner_rng, env):
     '''
@@ -70,7 +70,9 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     carry = (updated_ego_parameters, rng)
     return carry, (train_partner_out, ego_out)
 
-def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors: int):
+def log_train_metrics(config, logger, outs, 
+                      metric_names: tuple, num_controlled_actors: int
+                      ):
     """Process training metrics and log them using the provided logger.
     
     Args:
@@ -84,7 +86,7 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
     # ego metrics is a pytree where each leaf has shape 
     # (n_oel_updates, 1, n_updates, rollout_length, num_envs)
 
-    # Note that the discrepancy in the last dim is because the partner training process 
+    # The discrepancy in the last dim is because the partner training process 
     # logs metrics for both agents in the environment, but the ego training process only logs
     # metrics for the ego agent.
     partner_outs, ego_outs = outs
@@ -150,11 +152,8 @@ def log_metrics(config, outs, logger, metric_names: tuple, num_controlled_actors
     
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
     
-    # Cleanup
-    logger.close()
-
 def run_fcp(config):
     '''
     Run the open-ended FCP training loop.
@@ -168,7 +167,7 @@ def run_fcp(config):
     rng, ego_init_rng, train_rng = jax.random.split(rng, 3)
 
     # Initialize ego agent
-    ego_policy, init_params = initialize_s5_agent(algorithm_config, env, ego_init_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, ego_init_rng)
     
     # Initialize partner policy once - reused for all iterations
     partner_policy = MLPActorCriticPolicy(
@@ -187,7 +186,7 @@ def run_fcp(config):
         return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
     # Define initial carry with policies included
-    init_carry = (init_params, train_rng)
+    init_carry = (init_ego_params, train_rng)
 
     log.info("Starting open-ended FCP training...")
     start_time = time.time()
@@ -201,10 +200,19 @@ def run_fcp(config):
     
     end_time = time.time()
     log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
+
+    # Run heldout evaluation 
+    log.info("Running heldout evaluation...")
+    _ , ego_outs = outs
+    ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
+    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
     
     # Log metrics
+    log.info("Logging metrics...")
     metric_names = get_metric_names(config["ENV_NAME"])
-    log_metrics(config, outs, wandb_logger, metric_names, 
-                num_controlled_actors=algorithm_config["NUM_ENVS"])
+    log_train_metrics(config, wandb_logger, outs, metric_names, 
+                      num_controlled_actors=algorithm_config["NUM_ENVS"])
+    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names)
     
-    return outs
+    # Cleanup
+    wandb_logger.close()

@@ -1,0 +1,51 @@
+defaults:
+  - hydra: hydra_simple
+  - heldout_eval
+  - _self_
+
+ENV_NAME: lbf
+ROLLOUT_LENGTH: 128
+ENV_KWARGS: {}
+
+algorithm:
+  ALG: paired_ued
+  NUM_OPEN_ENDED_ITERS: 2 # 50
+  NUM_SEEDS: 1
+  PARTNER_POP_SIZE: 1 # Only train one confederate-br pair at a time.
+  CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
+  TRAIN_SEED: 38410
+  NUM_ENVS: 16
+  ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
+  ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
+  TOTAL_TIMESTEPS: 1e5 # 1e6 # one step of open-ended training
+  LR: 1.e-4
+  UPDATE_EPOCHS: 15
+  NUM_MINIBATCHES: 4
+  NUM_EVAL_EPISODES: 20
+  NUM_CHECKPOINTS: 1
+  GAMMA: 0.99
+  GAE_LAMBDA: 0.95
+  CLIP_EPS: 0.05
+  ENT_COEF: 0.001 # TODO: check if this should be larger?
+  VF_COEF: 1.0
+  MAX_GRAD_NORM: 1.0
+  ANNEAL_LR: false
+
+name: paired_ued
+
+# wandb settings
+logger: 
+  load_dir: paired_ued
+  project: open-ended-aht
+  entity: aht-project
+  mode: online # options: online, offline, disabled
+  verbose: true
+  log_train_out: false # whether to log the out dictionary
+  log_eval_out: false # whether to log the heldout eval metrics
+
+# Local logger
+local_logger:
+  save_figures: true # currently unused
+  save_train_out: true
+  save_eval_out: true

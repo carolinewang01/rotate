@@ -90,8 +90,8 @@ def main(num_episodes,
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = OnionAgent("agent_0", layout=layout) # red
-    agent1 = IndependentAgent("agent_1", layout=layout) # blue
+    agent0 = OnionAgent(agent_id=0, layout=layout) # red
+    agent1 = IndependentAgent(agent_id=1, layout=layout) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())
@@ -147,7 +147,7 @@ def main(num_episodes,
 
 if __name__ == "__main__":
     DEBUG = False
-    VISUALIZE = False
+    VISUALIZE = True
     SAVE_VIDEO = not VISUALIZE    
     NUM_EPISODES = 1
 
