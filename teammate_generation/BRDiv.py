@@ -15,7 +15,7 @@ from envs import make_env
 from ppo.ippo import unbatchify
 from common.mlp_actor_critic import ActorWithConditionalCritic
 from common.wandb_visualizations import Logger
-from common.plot_utils import get_metric_names, plot_xp_matrix
+from common.plot_utils import get_metric_names
 from common.save_load_utils import save_train_run
 from typing import NamedTuple
 
