@@ -4,7 +4,7 @@ defaults:
 ENV_NAME: overcooked-v1
 ROLLOUT_LENGTH: 400 # rollout length must be greater than episode length
 ENV_KWARGS:
-  layout: cramped_room
+  layout: counter_circuit
 
 TOTAL_TIMESTEPS: 1e6
 SEED: 12345
