@@ -5,7 +5,7 @@ from common.wandb_visualizations import Logger as WandBLogger
 from ippo import run_ippo
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="ippo")
+@hydra.main(version_base=None, config_path="configs", config_name="default")
 def main(config):
     print(OmegaConf.to_yaml(config, resolve=True))
     logger = WandBLogger(config)

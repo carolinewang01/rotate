@@ -29,15 +29,6 @@ algorithm:
   VF_COEF: 1.0
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: false
-  S5_ACTOR_CRITIC_HIDDEN_DIM: 64
-  S5_D_MODEL: 16
-  S5_SSM_SIZE: 16
-  S5_N_LAYERS: 2
-  S5_BLOCKS: 1
-  S5_ACTIVATION: full_glu
-  S5_DO_NORM: true
-  S5_PRENORM: true
-  S5_DO_GTRXL_NORM: true
 
 name: open_ended_fcp
 

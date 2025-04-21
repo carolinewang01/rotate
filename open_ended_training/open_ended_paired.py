@@ -689,7 +689,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                     # conf vs br
                     last_ep_info_with_br = run_episodes(rng, env, 
                         agent_0_param=train_state_br.params, agent_0_policy=br_policy,
-                        agent_1_param=ego_params, agent_1_policy=ego_policy, 
+                        agent_1_param=train_state_conf.params, agent_1_policy=confederate_policy, 
                         max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]
                     )
                     
