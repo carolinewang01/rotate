@@ -25,6 +25,43 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
+    """Create minibatches for PPO updates, where each leaf has shape 
+        (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
+    This function ensures that the rollout (time) dimension is kept separate from the minibatch and num_actors 
+    dimensions, so that the minibatches are compatible with recurrent ActorCritics.
+    """
+    # Create batch containing trajectory, advantages, and targets
+
+    batch = (
+        init_hstate, # shape (1, num_actors, hidden_dim) = (1, 16, 64)
+        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
+        advantages, # shape (rollout_len, num_actors) = (128, 16)
+        targets # shape (rollout_len, num_actors) = (128, 16)
+            )
+
+    permutation = jax.random.permutation(perm_rng, num_actors)
+
+    # each leaf of shuffled batch has shape (rollout_len, num_actors, feat_shape)
+    # except for init_hstate which has shape (1, num_actors, hidden_dim)
+    shuffled_batch = jax.tree.map(
+        lambda x: jnp.take(x, permutation, axis=1), batch
+    )
+    # each leaf has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape)
+    # except for init_hstate which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim)
+    minibatches = jax.tree_util.tree_map(
+        lambda x: jnp.swapaxes(
+            jnp.reshape(
+                x,
+                [x.shape[0], num_minibatches, -1] 
+                + list(x.shape[2:]),
+        ), 1, 0,),
+        shuffled_batch,
+    )
+
+    return minibatches
+
+
 def train_paired_ued(config, env, partner_rng):
     '''
     Train regret-maximizing confederate/best-response pairs, and an ego agent.
@@ -35,16 +72,14 @@ def train_paired_ued(config, env, partner_rng):
         assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
 
         # Define different minibatch sizes for interactions with ego agent and one with BR agent
-        config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
+        # config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
 
         # Right now assume control of just 1 agent
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] *3)// config["NUM_ENVS"]
-        config["MINIBATCH_SIZE_CONF"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"] // 2
-        config["MINIBATCH_SIZE_EGO"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"] // 2
-        config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
+        # config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -318,11 +353,12 @@ def train_paired_ued(config, env, partner_rng):
             def _update_epoch(update_state, unused):
                 def _update_minbatch_conf(train_state_conf, batch_infos):
                     minbatch_conf_ego, minbatch_conf_br = batch_infos
-                    traj_batch_conf_ego, advantages_conf_ego, returns_conf_ego = minbatch_conf_ego
-                    traj_batch_conf_br, advantages_conf_br, returns_conf_br = minbatch_conf_br
+                    init_hstate_conf_ego, traj_batch_conf_ego, advantages_conf_ego, returns_conf_ego = minbatch_conf_ego
+                    init_hstate_conf_br, traj_batch_conf_br, advantages_conf_br, returns_conf_br = minbatch_conf_br
 
-                    init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-                    def _loss_fn_conf(params, traj_batch_conf_ego, gae_conf_ego, target_v_conf_ego, traj_batch_conf_br, gae_conf_br, target_v_conf_br):
+                    def _loss_fn_conf(params, 
+                        init_hstate_conf_ego, traj_batch_conf_ego, gae_conf_ego, target_v_conf_ego, 
+                        init_hstate_conf_br, traj_batch_conf_br, gae_conf_br, target_v_conf_br):
                         # get policy and value of confederate versus ego and best response agents respectively
 
                         _, (value_conf_ego, _), pi_conf_ego, _ = confederate_policy.get_action_value_policy(
@@ -330,7 +366,7 @@ def train_paired_ued(config, env, partner_rng):
                             obs=traj_batch_conf_ego.obs, 
                             done=traj_batch_conf_ego.done,
                             avail_actions=traj_batch_conf_ego.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_hstate_conf_ego,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                         _, (_, value_conf_br), pi_conf_br, _ = confederate_policy.get_action_value_policy(
@@ -338,7 +374,7 @@ def train_paired_ued(config, env, partner_rng):
                             obs=traj_batch_conf_br.obs, 
                             done=traj_batch_conf_br.done,
                             avail_actions=traj_batch_conf_br.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_hstate_conf_br,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
 
@@ -401,21 +437,20 @@ def train_paired_ued(config, env, partner_rng):
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
                         train_state_conf.params, 
-                        traj_batch_conf_ego, advantages_conf_ego, returns_conf_ego, 
-                        traj_batch_conf_br, advantages_conf_br, returns_conf_br)
+                        init_hstate_conf_ego, traj_batch_conf_ego, advantages_conf_ego, returns_conf_ego, 
+                        init_hstate_conf_br, traj_batch_conf_br, advantages_conf_br, returns_conf_br)
                     train_state_conf = train_state_conf.apply_gradients(grads=grads)
                     return train_state_conf, (loss_val, aux_vals)
                 
                 def _update_minbatch_br(train_state_br, batch_info):
-                    traj_batch_br, advantages, returns = batch_info
-                    init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-                    def _loss_fn_br(params, traj_batch_br, gae, target_v):
+                    init_hstate_br, traj_batch_br, advantages, returns = batch_info
+                    def _loss_fn_br(params, init_hstate_br, traj_batch_br, gae, target_v):
                         _, value, pi, _ = br_policy.get_action_value_policy(
                             params=params, 
                             obs=traj_batch_br.obs, 
                             done=traj_batch_br.done,
                             avail_actions=traj_batch_br.avail_actions,
-                            hstate=init_br_hstate,
+                            hstate=init_hstate_br,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                         log_prob = pi.log_prob(traj_batch_br.action)
@@ -449,20 +484,19 @@ def train_paired_ued(config, env, partner_rng):
 
                     grad_fn = jax.value_and_grad(_loss_fn_br, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
-                        train_state_br.params, traj_batch_br, advantages, returns)
+                        train_state_br.params, init_hstate_br, traj_batch_br, advantages, returns)
                     train_state_br = train_state_br.apply_gradients(grads=grads)
                     return train_state_br, (loss_val, aux_vals)
 
                 def _update_minbatch_ego(train_state_ego, batch_info):
-                    traj_batch_ego, advantages, returns = batch_info
-                    init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-                    def _loss_fn_ego(params, traj_batch_ego, gae, target_v):
+                    init_hstate_ego, traj_batch_ego, advantages, returns = batch_info
+                    def _loss_fn_ego(params, init_hstate_ego, traj_batch_ego, gae, target_v):
                         _, value, pi, _ = ego_policy.get_action_value_policy(
-                            params=params, 
-                            obs=traj_batch_ego.obs, 
-                            done=traj_batch_ego.done,
-                            avail_actions=traj_batch_ego.avail_actions,
-                            hstate=init_ego_hstate,
+                            params=params, # (64,)
+                            obs=traj_batch_ego.obs, # (512, 15)
+                            done=traj_batch_ego.done, # (512,)
+                            avail_actions=traj_batch_ego.avail_actions, # (512, 6)
+                            hstate=init_hstate_ego, # (1, 16, 8)
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                         log_prob = pi.log_prob(traj_batch_ego.action)
@@ -496,7 +530,7 @@ def train_paired_ued(config, env, partner_rng):
 
                     grad_fn = jax.value_and_grad(_loss_fn_ego, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
-                        train_state_ego.params, traj_batch_ego, advantages, returns)
+                        train_state_ego.params, init_hstate_ego, traj_batch_ego, advantages, returns)
                     train_state_ego = train_state_ego.apply_gradients(grads=grads)
                     return train_state_ego, (loss_val, aux_vals)
 
@@ -508,82 +542,30 @@ def train_paired_ued(config, env, partner_rng):
                     rng_ego, rng_br
                 ) = update_state
 
-                rng_ego, perm_rng_conf, perm_rng_ego, perm_rng_br0, perm_rng_br1 = jax.random.split(rng_ego, 5)
+                init_hstate_ego = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                init_hstate_br = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                init_hstate_conf = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
 
-                # Divide batch size by TWO because we are only training on data for 1 out of 2 agents
-                batch_size_conf = config["MINIBATCH_SIZE_CONF"] * config["NUM_MINIBATCHES"] // 2 
-                batch_size_ego = config["MINIBATCH_SIZE_EGO"] * config["NUM_MINIBATCHES"] // 2 
-                batch_size_br = config["MINIBATCH_SIZE_BR"] * config["NUM_MINIBATCHES"] // 2 
-                assert (
-                    batch_size_ego == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"] // 2
-                ), "batch size must be equal to number of steps * number of actors"
-
-                permutation_conf = jax.random.permutation(perm_rng_conf, batch_size_ego)
-                permutation_ego = jax.random.permutation(perm_rng_ego, batch_size_ego)
-                permutation_br0 = jax.random.permutation(perm_rng_br0, batch_size_br)
-                permutation_br1 = jax.random.permutation(perm_rng_br1, batch_size_br)
-
-                batch_conf_ego = (traj_batch_conf_ego, advantages_conf, targets_conf)
-                batch_ego = (traj_batch_ego, advantages_ego, targets_ego)
-                batch_conf_br = (traj_batch_conf_br, advantages_conf_br, targets_conf_br)
-                batch_br = (traj_batch_br, advantages_br, targets_br)
-                
-                # batch of data for confederate, interacting with ego
-                batch_conf_ego_reshaped = jax.tree.map( 
-                    lambda x: x.reshape((batch_size_conf,) + x.shape[2:]), batch_conf_ego
-                )
-                # batch of data for ego, interacting with confederate
-                batch_ego_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_ego,) + x.shape[2:]), batch_ego
-                )
-                # batch of data for confederate, interacting with best response
-                batch_conf_br_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_conf_br
-                )
-                # batch of data for best response, interacting with confederate
-                batch_br_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br
-                )
-
-                shuffled_batch_conf_ego = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_conf, axis=0), batch_conf_ego_reshaped
-                )
-                shuffled_batch_ego = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_ego, axis=0), batch_ego_reshaped
-                )
-                shuffled_batch_conf_br = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_br0, axis=0), batch_conf_br_reshaped
-                )
-                shuffled_batch_br = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_br1, axis=0), batch_br_reshaped
-                )
-
-                minibatches_conf_ego = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_conf_ego,
+                rng_ego, perm_rng_conf_ego, perm_rng_ego, perm_rng_conf_br, perm_rng_br = jax.random.split(rng_ego, 5)
+                # Create minibatches for each agent and interaction type
+                minibatches_conf_ego = _create_minibatches(
+                    traj_batch_conf_ego, advantages_conf, targets_conf, init_hstate_conf,
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_conf_ego
                 )
                 
-                minibatches_ego = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_ego,
+                minibatches_ego = _create_minibatches(
+                    traj_batch_ego, advantages_ego, targets_ego, init_hstate_ego,
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_ego
                 )
-
-                minibatches_conf_br = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_conf_br,
+                
+                minibatches_conf_br = _create_minibatches(
+                    traj_batch_conf_br, advantages_conf_br, targets_conf_br, init_hstate_conf,
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_conf_br
                 )
-
-                minibatches_br = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_br,
+                
+                minibatches_br = _create_minibatches(
+                    traj_batch_br, advantages_br, targets_br, init_hstate_br,
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br
                 )
 
                 # Update confederate based on interaction with ego and br
@@ -936,21 +918,21 @@ def log_metrics(config, logger, outs, metric_names: tuple):
         metric_names: tuple, names of metrics to extract from training logs
     """
     metrics = outs["metrics"]
-    import pdb; pdb.set_trace() # TODO: check shape of all metrics to enable proper logging!
+
     # Extract metrics for all agents
     # shape (num_seeds, num_updates, num_eval_episodes, num_agents_per_env)
     avg_conf_returns_vs_ego = np.asarray(metrics["eval_ep_last_info_ego"]["returned_episode_returns"])[..., 0].mean(axis=(0, 2))
     avg_conf_returns_vs_br = np.asarray(metrics["eval_ep_last_info_br"]["returned_episode_returns"])[..., 0].mean(axis=(0, 2))
     
     # Value losses
-    #  shape (num_seeds, num_updates, update_epochs, num_minibatches)
+    # shape (num_seeds, num_updates, update_epochs, num_minibatches)
     avg_value_losses_conf_vs_ego = np.asarray(metrics["value_loss_conf_against_ego"]).mean(axis=(0, 2, 3))
     avg_value_losses_conf_vs_br = np.asarray(metrics["value_loss_conf_against_br"]).mean(axis=(0, 2, 3)) 
     avg_value_losses_br = np.asarray(metrics["value_loss_br"]).mean(axis=(0, 2, 3))
     avg_value_losses_ego = np.asarray(metrics["value_loss_ego"]).mean(axis=(0, 2, 3))
     
     # Actor losses
-    #  shape (num_seeds, num_updates, update_epochs, num_minibatches)
+    # shape (num_seeds, num_updates, update_epochs, num_minibatches)
     avg_actor_losses_conf_vs_ego = np.asarray(metrics["pg_loss_conf_against_ego"]).mean(axis=(0, 2, 3)) 
     avg_actor_losses_conf_vs_br = np.asarray(metrics["pg_loss_conf_against_br"]).mean(axis=(0, 2, 3))
     avg_actor_losses_br = np.asarray(metrics["pg_loss_br"]).mean(axis=(0, 2, 3))
@@ -1047,7 +1029,7 @@ def run_paired_ued(config):
 
     # Run heldout evaluation 
     log.info("Running heldout evaluation...")
-    ego_params = outs["final_params_ego"]  # To be updated when we implement the full algorithm
+    ego_params = outs["final_params_ego"]
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, eval_rng)
     heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)

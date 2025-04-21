@@ -9,7 +9,6 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 
-
 from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
@@ -24,6 +23,38 @@ from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+
+def _create_minibatches(traj_batch, advantages, targets, batch_size, num_minibatches, permutation_rng):
+    """Create minibatches for PPO updates, where each leaf has shape (num_minibatches, batch_size, ...) 
+    Note that the rollout dimension is combined with the num_actors dimension.
+    """
+    # Create batch containing trajectory, advantages, and targets
+    batch = (
+        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
+        advantages, # shape (rollout_len, num_agents) = (128, 16)
+        targets # shape (rollout_len, num_agents) = (128, 16)
+            )
+    # Reshape batch to expected dimensions
+    batch_reshaped = jax.tree.map(
+        lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
+    )
+    
+    # Shuffle using the provided RNG key
+    permutation = jax.random.permutation(permutation_rng, batch_size)
+    shuffled_batch = jax.tree.map(
+        lambda x: jnp.take(x, permutation, axis=0), batch_reshaped
+    )
+    
+    # Create minibatches for training
+    minibatches = jax.tree.map(
+        lambda x: jnp.reshape(
+            x, [num_minibatches, -1] + list(x.shape[1:])
+        ),
+        shuffled_batch,
+    )
+    
+    return minibatches
 
 
 def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partner_rng):
@@ -291,7 +322,6 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                     init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
-
                         _, (value_ego, _), pi_ego, _ = confederate_policy.get_action_value_policy(
                             params=params, 
                             obs=traj_batch_ego.obs, 
@@ -438,53 +468,15 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                     batch_size_ego == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"] // 2
                 ), "batch size must be equal to number of steps * number of actors"
 
-                permutation_ego = jax.random.permutation(perm_rng_ego, batch_size_ego)
-                permutation_br0 = jax.random.permutation(perm_rng_br0, batch_size_br)
-                permutation_br1 = jax.random.permutation(perm_rng_br1, batch_size_br)
-
-                batch_ego = (traj_batch_ego, advantages_conf_ego, targets_conf_ego)
-                batch_br0 = (traj_batch_br_0, advantages_conf_br, targets_conf_br)
-                batch_br1 = (traj_batch_br_1, advantages_br, targets_br)
-                
-                batch_ego_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_ego,) + x.shape[2:]), batch_ego
+                # Create minibatches for each agent and interaction type
+                minibatches_ego = _create_minibatches(
+                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, batch_size_ego, config["NUM_MINIBATCHES"], perm_rng_ego
                 )
-                batch_br0_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br0
+                minibatches_br0 = _create_minibatches(
+                    traj_batch_br_0, advantages_conf_br, targets_conf_br, batch_size_br, config["NUM_MINIBATCHES"], perm_rng_br0
                 )
-                batch_br1_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br1
-                )
-
-                shuffled_batch_ego = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_ego, axis=0), batch_ego_reshaped
-                )
-                shuffled_batch_br0 = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_br0, axis=0), batch_br0_reshaped
-                )
-                shuffled_batch_br1 = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_br1, axis=0), batch_br1_reshaped
-                )
-
-                minibatches_ego = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_ego,
-                )
-
-                minibatches_br0 = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_br0,
-                )
-
-                minibatches_br1 = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_br1,
+                minibatches_br1 = _create_minibatches(
+                    traj_batch_br_1, advantages_br, targets_br, batch_size_br, config["NUM_MINIBATCHES"], perm_rng_br1
                 )
 
                 # Update confederate

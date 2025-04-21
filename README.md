@@ -14,7 +14,6 @@
 - Regret-based evaluator: 
     - The learning procedure been implemented, but can we compute/plot the actual regret number? 
     Would it be comparable between different training runs? 
-    - Update regret evaluator to allow weighting between conf and br losses
 
 ### Method Exploration: 
 - Add regret bounds to open-ended PAIRED (Arrasy)
@@ -26,8 +25,6 @@
 ### Baselines 
 - Implement L-BRDiv - Arrasy
 - Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations)
-- Implement PAIRED - we need to stop resetting the confederate/br; we need to reduce the population param seeds to 1 and freeze it.
-- Finish open-ended minimax
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
 If time permits: 
