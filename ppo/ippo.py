@@ -1,9 +1,8 @@
 '''
-Based on the IPPO implementation from jaxmarl. Trains a parameter-shared IPPO agent on a
-fully cooperative multi-agent environment.
+Based on the IPPO implementation from jaxmarl. Trains a parameter-shared, MLP IPPO agent on a
+fully cooperative multi-agent environment. Note that this code is only compatible with MLP policies.
 '''
-import os
-
+import shutil
 import hydra
 import jax
 import jax.numpy as jnp
@@ -326,7 +325,7 @@ def log_metrics(config, out, logger):
         logger.log_artifact(name="saved_train_run", path=out_savepath, type_name="train_run")
         # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
    
     metric_names = get_metric_names(config["ENV_NAME"])
 

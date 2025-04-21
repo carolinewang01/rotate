@@ -2,7 +2,7 @@
 An implementation of open-ended FCP where both the ego agent and all 
 partner agents are MLP actor critics.
 '''
-import os
+import shutil
 import time
 import logging
 import jax
@@ -152,7 +152,7 @@ def log_train_metrics(config, logger, outs,
     
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
     
 def run_fcp(config):
     '''

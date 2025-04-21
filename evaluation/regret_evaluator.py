@@ -726,15 +726,16 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
             # initial state for scan over _update_step_with_ckpt
             update_steps = 0
             rng, rng_eval_ego, rng_eval_br = jax.random.split(rng, 3)
-            
+            # conf vs ego
             ep_infos_ego = run_episodes(rng_eval_ego, env, 
                 agent_0_param=train_state_conf.params, agent_0_policy=confederate_policy,
                 agent_1_param=ego_params, agent_1_policy=ego_policy, 
                 max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]
             )
+            # br vs conf
             ep_infos_br = run_episodes(rng_eval_br, env, 
                 agent_0_param=train_state_br.params, agent_0_policy=br_policy,
-                agent_1_param=ego_params, agent_1_policy=ego_policy, 
+                agent_1_param=train_state_conf.params, agent_1_policy=confederate_policy, 
                 max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"])
 
             # Initialize hidden states

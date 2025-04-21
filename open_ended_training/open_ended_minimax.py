@@ -1,4 +1,5 @@
-import os
+
+import shutil
 import time
 import logging
 
@@ -535,7 +536,6 @@ def log_metrics(config, logger, outs, metric_names: tuple):
 
     # Conf vs ego losses
     #  shape (num_open_ended_iters, num_partner_seeds, num_updates, update_epochs, num_minibatches)
-    import pdb; pdb.set_trace()
     avg_value_losses_teammate_against_ego = np.asarray(teammate_metrics["value_loss_conf_against_ego"]).mean(axis=(1, 3, 4))
     avg_actor_losses_teammate_against_ego = np.asarray(teammate_metrics["pg_loss_conf_against_ego"]).mean(axis=(1, 3, 4)) 
     avg_entropy_losses_teammate_against_ego = np.asarray(teammate_metrics["entropy_conf_against_ego"]).mean(axis=(1, 3, 4))
@@ -610,7 +610,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
         
 def run_minimax(config):
     algorithm_config = dict(config["algorithm"])

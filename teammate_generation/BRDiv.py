@@ -1,4 +1,5 @@
 import os
+import shutil
 import time
 import logging
 from typing import NamedTuple
@@ -885,4 +886,4 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     
     # Cleanup locally logged out files
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)

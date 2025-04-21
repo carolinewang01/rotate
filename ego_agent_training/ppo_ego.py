@@ -2,7 +2,7 @@
 Script for training a PPO ego agent against a population of partner agents. 
 Warning: this script is used as the main script for ego training throughout the project.
 '''
-import os
+import shutil
 import time
 import logging
 
@@ -527,7 +527,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
         logger.log_artifact(name="ego_train_run", path=out_savepath, type_name="train_run")
         # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
+        shutil.rmtree(out_savepath)
    
     
 def run_ego_training(config, wandb_logger, partner_params, pop_size: int):

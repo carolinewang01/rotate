@@ -1,4 +1,5 @@
-import shutil
+'''Implemented to be as faithful to the original PAIRED as possible.'''
+import os
 import time
 import logging
 
@@ -8,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from flax.training.train_state import TrainState
+
 
 from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent
@@ -23,38 +25,6 @@ from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-
-
-def _create_minibatches(traj_batch, advantages, targets, batch_size, num_minibatches, permutation_rng):
-    """Create minibatches for PPO updates, where each leaf has shape (num_minibatches, batch_size, ...) 
-    Note that the rollout dimension is combined with the num_actors dimension.
-    """
-    # Create batch containing trajectory, advantages, and targets
-    batch = (
-        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
-        advantages, # shape (rollout_len, num_agents) = (128, 16)
-        targets # shape (rollout_len, num_agents) = (128, 16)
-            )
-    # Reshape batch to expected dimensions
-    batch_reshaped = jax.tree.map(
-        lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-    )
-    
-    # Shuffle using the provided RNG key
-    permutation = jax.random.permutation(permutation_rng, batch_size)
-    shuffled_batch = jax.tree.map(
-        lambda x: jnp.take(x, permutation, axis=0), batch_reshaped
-    )
-    
-    # Create minibatches for training
-    minibatches = jax.tree.map(
-        lambda x: jnp.reshape(
-            x, [num_minibatches, -1] + list(x.shape[1:])
-        ),
-        shuffled_batch,
-    )
-    
-    return minibatches
 
 
 def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partner_rng):
@@ -322,6 +292,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                     init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
+
                         _, (value_ego, _), pi_ego, _ = confederate_policy.get_action_value_policy(
                             params=params, 
                             obs=traj_batch_ego.obs, 
@@ -468,15 +439,53 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                     batch_size_ego == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"] // 2
                 ), "batch size must be equal to number of steps * number of actors"
 
-                # Create minibatches for each agent and interaction type
-                minibatches_ego = _create_minibatches(
-                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, batch_size_ego, config["NUM_MINIBATCHES"], perm_rng_ego
+                permutation_ego = jax.random.permutation(perm_rng_ego, batch_size_ego)
+                permutation_br0 = jax.random.permutation(perm_rng_br0, batch_size_br)
+                permutation_br1 = jax.random.permutation(perm_rng_br1, batch_size_br)
+
+                batch_ego = (traj_batch_ego, advantages_conf_ego, targets_conf_ego)
+                batch_br0 = (traj_batch_br_0, advantages_conf_br, targets_conf_br)
+                batch_br1 = (traj_batch_br_1, advantages_br, targets_br)
+                
+                batch_ego_reshaped = jax.tree.map(
+                    lambda x: x.reshape((batch_size_ego,) + x.shape[2:]), batch_ego
                 )
-                minibatches_br0 = _create_minibatches(
-                    traj_batch_br_0, advantages_conf_br, targets_conf_br, batch_size_br, config["NUM_MINIBATCHES"], perm_rng_br0
+                batch_br0_reshaped = jax.tree.map(
+                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br0
                 )
-                minibatches_br1 = _create_minibatches(
-                    traj_batch_br_1, advantages_br, targets_br, batch_size_br, config["NUM_MINIBATCHES"], perm_rng_br1
+                batch_br1_reshaped = jax.tree.map(
+                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br1
+                )
+
+                shuffled_batch_ego = jax.tree.map(
+                    lambda x: jnp.take(x, permutation_ego, axis=0), batch_ego_reshaped
+                )
+                shuffled_batch_br0 = jax.tree.map(
+                    lambda x: jnp.take(x, permutation_br0, axis=0), batch_br0_reshaped
+                )
+                shuffled_batch_br1 = jax.tree.map(
+                    lambda x: jnp.take(x, permutation_br1, axis=0), batch_br1_reshaped
+                )
+
+                minibatches_ego = jax.tree.map(
+                    lambda x: jnp.reshape(
+                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
+                    ),
+                    shuffled_batch_ego,
+                )
+
+                minibatches_br0 = jax.tree.map(
+                    lambda x: jnp.reshape(
+                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
+                    ),
+                    shuffled_batch_br0,
+                )
+
+                minibatches_br1 = jax.tree.map(
+                    lambda x: jnp.reshape(
+                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
+                    ),
+                    shuffled_batch_br1,
                 )
 
                 # Update confederate
@@ -780,26 +789,14 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
 
 def open_ended_training_step(carry, ego_policy, partner_population, config, env):
     '''
-    Train the ego agent against the regret-maximizing partners. 
-    Note: Currently training fcp agent against **all** adversarial partner checkpoints
-    TODO: Limit training against the last adversarial checkpoints instead.
+    Train the ego agent against the **final** confederate.
     '''
     prev_ego_params, rng = carry
     rng, partner_rng, ego_rng = jax.random.split(rng, 3)
     
     # Train partner agents with ego_policy
     train_out = train_regret_maximizing_partners(config, prev_ego_params, ego_policy, env, partner_rng)
-    train_partner_params = train_out["checkpoints_conf"]
-    
-    # Reshape partner parameters for AgentPopulation
-    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-
-    
-    # Flatten partner parameters for AgentPopulation
-    flattened_partner_params = jax.tree.map(
-        lambda x: x.reshape((pop_size,) + x.shape[2:]), 
-        train_partner_params
-    )
+    train_partner_params = train_out["final_params_conf"]
     
     # Train ego agent using train_ppo_ego_agent
     ego_out = train_ppo_ego_agent(
@@ -810,7 +807,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
         init_ego_params=prev_ego_params,
         n_ego_train_seeds=1,
         partner_population=partner_population,
-        partner_params=flattened_partner_params
+        partner_params=train_partner_params
     )
     
     updated_ego_parameters = ego_out["final_params"]
@@ -941,7 +938,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
         
-def run_paired(config):
+def run_paired_ued(config):
     algorithm_config = dict(config["algorithm"])
     wandb_logger = Logger(config)
 
@@ -963,7 +960,7 @@ def run_paired(config):
     
     # Create partner population
     partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        pop_size=algorithm_config["PARTNER_POP_SIZE"],
         policy_cls=partner_policy
     )
 
@@ -973,7 +970,7 @@ def run_paired(config):
     
     init_carry = (init_ego_params, train_rng)
     
-    log.info("Starting open-ended PAIRED training...")
+    log.info("Starting PAIRED-UED training...")
     start_time = time.time()
 
     DEBUG = False
@@ -986,7 +983,7 @@ def run_paired(config):
         )
     
     end_time = time.time()
-    log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
+    log.info(f"PAIRED-UED training completed in {end_time - start_time} seconds.")
 
     # Run heldout evaluation 
     log.info("Running heldout evaluation...")
