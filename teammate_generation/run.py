@@ -10,7 +10,7 @@ from common.plot_utils import get_metric_names
 from train_ego import train_ego_agent
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="default")
+@hydra.main(version_base=None, config_path="configs", config_name="base_config")
 def run_training(cfg):
     print(OmegaConf.to_yaml(cfg, resolve=True))
     wandb_logger = Logger(cfg)

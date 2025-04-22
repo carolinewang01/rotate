@@ -1,8 +1,8 @@
 defaults:
-  - task: overcooked/cramped_room # will look here for task-specific configs
-  - algorithm@algorithm: brdiv/${task} # will look here for algorithmm-specific configs
+  - task: overcooked/cramped_room # task configs
+  - algorithm@algorithm: fcp/${task} # task-specific algorithm configs
   - hydra: hydra_simple
-  - ego_defaults@ego_train_algorithm
+  - algorithm@ego_train_algorithm: ego_ppo/${task} # task-specific ego configs
   - heldout_eval
   - _self_
 
@@ -26,9 +26,9 @@ algorithm:
 # ego training settings
 ego_train_algorithm:
   TOTAL_TIMESTEPS: 3e4
+  NUM_EGO_TRAIN_SEEDS: 1
   NUM_EVAL_EPISODES: 20
   TRAIN_SEED: 204829
-  NUM_EGO_TRAIN_SEEDS: 1
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
