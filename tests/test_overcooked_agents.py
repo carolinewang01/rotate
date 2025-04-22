@@ -144,7 +144,7 @@ def main(num_episodes,
         viz = AdHocOvercookedVisualizer()
         viz.animate_mp4([s.env_state for s in state_seq_all], env.agent_view_size, 
             highlight_agent_idx=0,
-            filename=f'results/overcooked/videos/{layout_name}_{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
+            filename=f'results/overcooked-v1/videos/{layout_name}_{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
             pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 
