@@ -1016,7 +1016,6 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     metrics = outs["metrics"]
     num_updates, _, _, pop_size = metrics["pg_loss_conf_agent"].shape # number of trained pairs
 
-
     ### Log evaluation metrics
     # we plot XP return curves separately from SP return curves 
     # shape (num_updates, (pop_size)^2, num_eval_episodes, 1)
