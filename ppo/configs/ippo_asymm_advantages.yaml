@@ -7,7 +7,7 @@ ENV_KWARGS:
   layout: asymm_advantages
   random_obj_state: true
 
-TOTAL_TIMESTEPS: 1e6
+TOTAL_TIMESTEPS: 5e5
 SEED: 12345
 LR: .0001
 NUM_ENVS: 8
