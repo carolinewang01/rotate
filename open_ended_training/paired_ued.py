@@ -71,15 +71,11 @@ def train_paired_ued(config, env, partner_rng):
         num_agents = env.num_agents
         assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
 
-        # Define different minibatch sizes for interactions with ego agent and one with BR agent
-        # config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
-
         # Right now assume control of just 1 agent
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] *3)// config["NUM_ENVS"]
-        # config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -1006,7 +1002,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
-        
+
 def run_paired_ued(config):
     algorithm_config = dict(config["algorithm"])
     wandb_logger = Logger(config)
@@ -1037,7 +1033,7 @@ def run_paired_ued(config):
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, wandb_logger, outs, metric_names)
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names)
+    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
 
     # Cleanup
     wandb_logger.close()

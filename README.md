@@ -32,11 +32,13 @@ If time permits:
 
 ### Clean Up Code: 
 - Clean up (L)-BRDiv code
+    - Consider merging L-BRDiv and BRDiv implementations
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
 - Clean up IPPO: 
     - Update IPPO to use the general agent interface
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
+- Clean up multiple copies of log_heldout_metrics
 
 ## Installation Guide
 Follow instructions at `install_instructions.md`

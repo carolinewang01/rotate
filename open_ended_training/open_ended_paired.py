@@ -997,7 +997,7 @@ def run_paired(config):
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, wandb_logger, outs, metric_names)
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names)
+    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
 
     # Cleanup
     wandb_logger.close()

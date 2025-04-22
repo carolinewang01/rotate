@@ -10,7 +10,7 @@ from common.plot_utils import get_metric_names
 from train_ego import train_ego_agent
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="default")
+@hydra.main(version_base=None, config_path="configs", config_name="base_config")
 def run_training(cfg):
     print(OmegaConf.to_yaml(cfg, resolve=True))
     wandb_logger = Logger(cfg)
@@ -24,14 +24,14 @@ def run_training(cfg):
     else:
         raise NotImplementedError("Selected method not implemented.")
     
-    metric_names = get_metric_names(cfg["ENV_NAME"])
+    metric_names = get_metric_names(cfg["task"]["ENV_NAME"])
     if cfg["train_ego"]:
         out, ego_policy, init_ego_params = train_ego_agent(cfg["ego_train_algorithm"], wandb_logger, partner_params, partner_population)
         log_ego_metrics(cfg, out, wandb_logger, metric_names)
     
     if cfg["heldout_eval"]:
         eval_metrics, ego_names, heldout_names = run_heldout_evaluation(cfg, ego_policy, out['checkpoints'], init_ego_params)
-        log_heldout_metrics(cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names)
+        log_heldout_metrics(cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
     wandb_logger.close()
 
 if __name__ == '__main__':
