@@ -6,6 +6,7 @@ defaults:
 ENV_NAME: lbf
 ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
+TASK_NAME: lbf
 
 algorithm:
   ALG: fcp

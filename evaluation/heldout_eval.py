@@ -24,8 +24,8 @@ def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params):
     ego_names = [f"ego ({i})" for i in range(num_ego_agents)]
     
     # load heldout agents
-    heldout_cfg = config["heldout_set"][config["ENV_NAME"]]
-    heldout_agents = load_heldout_set(heldout_cfg, env, config["ENV_NAME"], config["ENV_KWARGS"], heldout_init_rng)
+    heldout_cfg = config["heldout_set"][config["TASK_NAME"]]
+    heldout_agents = load_heldout_set(heldout_cfg, env, config["TASK_NAME"], config["ENV_KWARGS"], heldout_init_rng)
     heldout_agent_list = list(heldout_agents.values())
     heldout_names = list(heldout_agents.keys())
 

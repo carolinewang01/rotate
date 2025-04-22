@@ -4,6 +4,7 @@ defaults:
   - _self_
 
 ENV_NAME: lbf
+TASK_NAME: lbf
 ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
 
