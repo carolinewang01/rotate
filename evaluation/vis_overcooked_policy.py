@@ -98,7 +98,7 @@ if __name__ == "__main__":
         "max_steps": 400
     }
 
-    ego_run_path = "results_sweep/overcooked-v1/counter_circuit/ippo/2025-04-21_15-46-35/saved_train_run" # ippo agent, trained for 3e6 steps
+    ego_run_path = "eval_teammates/overcooked-v1/counter_circuit/ippo/2025-04-21_22-55-42/saved_train_run" # ippo agent, trained for 3e6 steps
     partner_run_path = ego_run_path # ippo training partner, trained for 3e6 steps
     
     import re
