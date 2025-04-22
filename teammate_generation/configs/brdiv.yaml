@@ -1,5 +1,4 @@
 defaults:
-  - hydra: hydra_simple
   - ego_defaults@ego_train_algorithm
   - heldout_eval
   - _self_
@@ -16,7 +15,7 @@ ENV_KWARGS: {
 }
 
 # name: brdiv
-name: ${ENV_KWARGS.layout}/brdiv
+name: ${ENV_KWARGS.layout}/${algorithm.ALG}
 
 # training settings
 train_ego: true # whether to train the ego agent
@@ -74,3 +73,12 @@ local_logger:
   save_figures: false # unused
   save_train_out: true
   save_eval_out: true
+
+hydra: 
+  job:
+    chdir: true
+  run:
+    dir: results/${ENV_NAME}/${name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: results_sweep/${ENV_NAME}/${name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${run.seed}

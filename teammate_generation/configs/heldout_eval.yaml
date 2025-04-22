@@ -1,4 +1,4 @@
-# heldout set
+# heldout eval settings
 EVAL_SEED: 34957
 MAX_EPISODE_STEPS: 400 # evaluation will use true episode length
 NUM_EVAL_EPISODES: 32

@@ -5,7 +5,7 @@ ENV_NAME: lbf
 ROLLOUT_LENGTH: 128 # rollout length must be greater than episode length
 ENV_KWARGS: {}
 
-TOTAL_TIMESTEPS: 3e5
+TOTAL_TIMESTEPS: 5e5
 SEED: 12345
 LR: .0001
 NUM_ENVS: 8
@@ -30,7 +30,7 @@ logger:
   log_train_out: false # whether to log the out dictionary
 
 local_logger:
-  save_figures: true
+  save_figures: true  
   save_train_out: false
 
 hydra:

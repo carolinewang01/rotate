@@ -1,0 +1,2 @@
+# @package algorithm
+# ^ tells hydra to place these value directly under algorithm key
