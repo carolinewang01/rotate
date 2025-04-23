@@ -6,7 +6,7 @@ global_heldout_settings:
   NUM_EVAL_EPISODES: 64
 
 heldout_set:
-  lbf:
+  lbf: # DONE - DO NOT MODIFY
     ippo_mlp: 
       path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
       actor_type: mlp
@@ -16,33 +16,33 @@ heldout_set:
     ippo_mlp_s2c1:
       path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
       actor_type: mlp
-      idx_list: [[2, 1]]    
+      idx_list: [[2, 1]] # load in seed 2 ckpt 1
       test_mode: true
-    brdiv-conf: 
+    brdiv-conf1: 
       path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
       actor_type: actor_with_conditional_critic
       idx_list: [0, 1, 2] # load in population members 0, 1, 2
       ckpt_key: final_params_conf # key to load from checkpoint.
       POP_SIZE: 5 # for brdiv, we need to specify population size that the method was trained with
-  overcooked-v1/cramped_room:
+    brdiv-conf2:
+      path: "eval_teammates/lbf/brdiv/2025-04-23/13-48-47/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0, 1]
+      ckpt_key: final_params_conf
+      POP_SIZE: 3
+  overcooked-v1/cramped_room: # DONE - DO NOT MODIFY
     ippo_mlp: 
       path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"
       actor_type: mlp
       ckpt_key: final_params
       idx_list: [0, 1, 2]
       test_mode: true
-    # brdiv-conf: # TODO: replace!
-    #   path: "eval_teammates/overcooked-v1/cramped_room/brdiv/artifacts/saved_train_run"
-    #   actor_type: actor_with_conditional_critic
-    #   idx_list: [1, 2] # load in population members 1, 2
-    #   ckpt_key: final_params_conf
-    #   POP_SIZE: 4
-    # brdiv-br:
-    #   path: "eval_teammates/overcooked-v1/cramped_room/brdiv/artifacts/saved_train_run"
-    #   actor_type: actor_with_conditional_critic
-    #   idx_list: [1, 2] # load in population members 1, 2
-    #   ckpt_key: final_params_br
-    #   POP_SIZE: 4
+    brdiv-conf:
+      path: "eval_teammates/overcooked-v1/cramped_room/brdiv/2025-04-23-12-55-47/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0, 1] # load in population members 1, 2
+      ckpt_key: final_params_conf
+      POP_SIZE: 4
     independent_agent_0.4:
       actor_type: independent_agent
       p_onion_on_counter: 0.4
@@ -57,15 +57,19 @@ heldout_set:
     plate_agent_0.1:
       actor_type: plate_agent
       p_plate_on_counter: 0.1
-    random_agent: 
-      actor_type: random_agent
-  overcooked-v1/asymm_advantages:
+  overcooked-v1/asymm_advantages: # DONE - DO NOT MODIFY
     ippo_mlp: 
       path: "eval_teammates/overcooked-v1/asymm_advantages/ippo/2025-04-21_22-53-56/saved_train_run"
       actor_type: mlp
       ckpt_key: final_params
       idx_list: [0, 1, 2]
       test_mode: true
+    brdiv-conf: 
+      path: "eval_teammates/overcooked-v1/asymm_advantages/brdiv/2025-04-23/13-16-34/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0, 1, 2]
+      ckpt_key: final_params_conf
+      POP_SIZE: 4
     independent_agent_0:
       actor_type: independent_agent
       p_onion_on_counter: 0.0

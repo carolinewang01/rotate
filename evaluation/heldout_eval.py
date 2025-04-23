@@ -66,8 +66,8 @@ def log_heldout_metrics(config, logger, eval_metrics,
         
     # log table where the columns are the metric names and the rows are the heldout agents vs the last ego agent
     table_data = np.array(table_data) # shape (num_metrics, num_heldout_agents)
-    logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data.T, 
-                         columns=list(metric_names), rows=heldout_names)
+    logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data, 
+                         columns=list(heldout_names), rows=list(metric_names))
     logger.commit()
 
     # Saving artifacts
