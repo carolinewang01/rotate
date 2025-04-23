@@ -1,5 +1,5 @@
 '''
-This file contains the code for running episodes with an ego agent and a partner agent.
+This file contains the code for running evaluation episodes with an ego agent and a partner agent.
 Does not currently support actors that require aux_obs.
 '''
 import jax
@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 def run_single_episode(rng, env, agent_0_param, agent_0_policy, 
                        agent_1_param, agent_1_policy, 
-                       max_episode_steps, test_mode=False):
+                       max_episode_steps, test_mode=True):
     # Reset the env.
     rng, reset_rng = jax.random.split(rng)
     obs, env_state = env.reset(reset_rng)
@@ -143,7 +143,7 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
 
 def run_episodes(rng, env, agent_0_param, agent_0_policy, 
                  agent_1_param, agent_1_policy, 
-                 max_episode_steps, num_eps, test_mode=False):
+                 max_episode_steps, num_eps, test_mode=True):
     '''Given a single ego agent and a single partner agent, run num_eps episodes in parallel using vmap.'''
     # Create episode-specific RNGs
     rngs = jax.random.split(rng, num_eps + 1)

@@ -6,7 +6,7 @@ from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualize
 from envs.overcooked.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked.augmented_layouts import augmented_layouts
 from envs import make_env
-from agents.overcooked import OnionAgent, PlateAgent, IndependentAgent, StaticAgent
+from agents.overcooked import OnionAgent, PlateAgent, IndependentAgent, StaticAgent, RandomAgent
 import time
 
 def run_episode(env, agent0, agent1, key) -> Tuple[Dict[str, float], int]:
@@ -97,8 +97,8 @@ def main(num_episodes,
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = OnionAgent(agent_id=0, layout=layout) # red
-    agent1 = IndependentAgent(agent_id=1, layout=layout) # blue
+    agent0 = IndependentAgent(agent_id=0, layout=layout, p_onion_on_counter=0.6, p_plate_on_counter=0.6) # red
+    agent1 = IndependentAgent(agent_id=1, layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())
@@ -144,7 +144,7 @@ def main(num_episodes,
         viz = AdHocOvercookedVisualizer()
         viz.animate_mp4([s.env_state for s in state_seq_all], env.agent_view_size, 
             highlight_agent_idx=0,
-            filename=f'results/overcooked-v1/videos/{layout_name}_{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
+            filename=f'results/overcooked-v1/videos/{layout_name}/{agent0.get_name()}_vs_{agent1.get_name()}.mp4', 
             pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 
@@ -155,11 +155,11 @@ if __name__ == "__main__":
     NUM_EPISODES = 1
 
     layout_names = [
-        "asymm_advantages", 
+        # "cramped_room", 
+        # "asymm_advantages", 
         # "coord_ring", 
         # "counter_circuit", 
-        # "cramped_room", 
-        # "forced_coord"
+        "forced_coord"
                     ]
 
 

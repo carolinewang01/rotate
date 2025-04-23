@@ -1,10 +1,13 @@
 defaults:
+  - task: overcooked/cramped_room # task configs
   - hydra: hydra_simple
   - _self_
 
-ENV_NAME: lbf
-ROLLOUT_LENGTH: 128 # should be larger than episode length
-ENV_KWARGS: {}
+# TODO: restructure this config to use per task and per-algorithm configs!
+ENV_NAME: ${task.ENV_NAME}
+ENV_KWARGS: ${task.ENV_KWARGS}
+ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
+TASK_NAME: ${task.TASK_NAME}
 
 ego_agent:
   path: "results/lbf/ppo_ego_s5/2025-04-13_11-43-33/saved_train_run" # results/lbf/fcp_s5/2025-04-13_18-42-46/saved_train_run
@@ -37,11 +40,10 @@ algorithm:
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: false
 
-name: regret_maximizing
+name: ${TASK_NAME}/regret_maximizing
 
 # wandb settings
 logger: 
-  load_dir: regret_maximizing
   project: open-ended-aht
   entity: aht-project
   mode: offline # options: online, offline, disabled

@@ -74,7 +74,7 @@ def extract_params(params, init_params, idx_labels=None):
     
     return model_list, flattened_idx_labels
 
-def load_heldout_set(heldout_config, env, env_name, env_kwargs,rng):
+def load_heldout_set(heldout_config, env, task_name, env_kwargs,rng):
     '''Load heldout evaluation agents from config.
     Returns a dictionary of agents with keys as agent names and values as tuples of (policy, params).
     '''
@@ -91,24 +91,31 @@ def load_heldout_set(heldout_config, env, env_name, env_kwargs,rng):
             params_list, idx_labels = extract_params(params, init_params, idx_labels)
 
         # Load non-RL-based heuristic agents
-        elif env_name == 'lbf':
+        elif task_name == 'lbf':
             if agent_config["actor_type"] == 'random_agent':
                 policy = LBFRandomPolicyWrapper()
 
-        elif env_name == 'overcooked-v1':
+        elif 'overcooked-v1' in task_name:
             aug_layout_dict = augmented_layouts[env_kwargs["layout"]]
             if agent_config["actor_type"] == 'random_agent':
                 policy = OvercookedRandomPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
             elif agent_config["actor_type"] == 'static_agent':
                 policy = OvercookedStaticPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
             elif agent_config["actor_type"] == 'independent_agent':
-                policy = OvercookedIndependentPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
+                policy = OvercookedIndependentPolicyWrapper(
+                    aug_layout_dict, using_log_wrapper=True, 
+                    p_onion_on_counter=agent_config.get("p_onion_on_counter", 0.0), 
+                    p_plate_on_counter=agent_config.get("p_plate_on_counter", 0.0))
             elif agent_config["actor_type"] == 'onion_agent':
-                policy = OvercookedOnionPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
+                policy = OvercookedOnionPolicyWrapper(
+                    aug_layout_dict, using_log_wrapper=True, 
+                    p_onion_on_counter=agent_config.get("p_onion_on_counter", 0.0))
             elif agent_config["actor_type"] == 'plate_agent':
-                policy = OvercookedPlatePolicyWrapper(aug_layout_dict, using_log_wrapper=True   )
+                policy = OvercookedPlatePolicyWrapper(
+                    aug_layout_dict, using_log_wrapper=True, 
+                    p_plate_on_counter=agent_config.get("p_plate_on_counter", 0.0))
         else:
-            raise ValueError(f"Unknown environment: {env_name}")
+            raise ValueError(f"Unknown task: {task_name}")
         
         # Generate agent labels
         if params_list is None: # heuristic agent
@@ -139,7 +146,7 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
                             agent_0_policy=single_ego_policy, agent_0_param=single_ego_params,
                             agent_1_policy=heldout_policy, agent_1_param=heldout_params,
                             max_episode_steps=config["MAX_EPISODE_STEPS"],
-                            num_eps=num_episodes, test_mode=True)
+                            num_eps=num_episodes, test_mode=config["EVAL_AGENT_TEST_MODE"])
 
     # Outer Python loop over heterogeneous heldout partners
     all_metrics_for_partners = []
@@ -191,8 +198,8 @@ def run_heldout_evaluation(config, print_metrics=False):
     flattened_ego_params = jax.tree.map(lambda x, y: x.reshape((-1,) + y.shape), ego_params, init_ego_params)        
         
     # load heldout agents
-    heldout_cfg = config["heldout_set"][config["ENV_NAME"]]
-    heldout_agents = load_heldout_set(heldout_cfg, env, config["ENV_NAME"], config["ENV_KWARGS"], heldout_init_rng)
+    heldout_cfg = config["heldout_set"][config["TASK_NAME"]]
+    heldout_agents = load_heldout_set(heldout_cfg, env, config["TASK_NAME"], config["ENV_KWARGS"], heldout_init_rng)
     heldout_agent_list = list(heldout_agents.values())
     
     # run evaluation

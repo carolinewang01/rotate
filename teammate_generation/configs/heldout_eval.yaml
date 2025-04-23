@@ -2,6 +2,7 @@
 EVAL_SEED: 34957
 MAX_EPISODE_STEPS: 400 # evaluation will use true episode length
 NUM_EVAL_EPISODES: 32
+EVAL_AGENT_TEST_MODE: ${task.EVAL_AGENT_TEST_MODE} # whether to run the agent in test mode during evaluation
 
 heldout_set:
   lbf: # doesn't matter what you name each agent
