@@ -74,8 +74,10 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] + config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
-        config["MINIBATCH_SIZE_EGO"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-        config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
+        config["MINIBATCH_SIZE"] = config["ROLLOUT_LENGTH"] * config["NUM_CONTROLLED_ACTORS"]
+
+        assert config["MINIBATCH_SIZE"] % config["NUM_MINIBATCHES"] == 0, "MINIBATCH_SIZE must be divisible by NUM_MINIBATCHES"
+        assert config["MINIBATCH_SIZE"] >= config["NUM_MINIBATCHES"], "MINIBATCH_SIZE must be >= NUM_MINIBATCHES"
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -461,22 +463,15 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
 
                 rng_ego, perm_rng_ego, perm_rng_br0, perm_rng_br1 = jax.random.split(rng_ego, 4)
 
-                # Divide batch size by TWO because we are only training on data of agent_0
-                batch_size_ego = config["MINIBATCH_SIZE_EGO"] * config["NUM_MINIBATCHES"] // 2 
-                batch_size_br = config["MINIBATCH_SIZE_BR"] * config["NUM_MINIBATCHES"] // 2 
-                assert (
-                    batch_size_ego == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"] // 2
-                ), "batch size must be equal to number of steps * number of actors"
-
                 # Create minibatches for each agent and interaction type
                 minibatches_ego = _create_minibatches(
-                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, batch_size_ego, config["NUM_MINIBATCHES"], perm_rng_ego
+                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_ego
                 )
                 minibatches_br0 = _create_minibatches(
-                    traj_batch_br_0, advantages_conf_br, targets_conf_br, batch_size_br, config["NUM_MINIBATCHES"], perm_rng_br0
+                    traj_batch_br_0, advantages_conf_br, targets_conf_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br0
                 )
                 minibatches_br1 = _create_minibatches(
-                    traj_batch_br_1, advantages_br, targets_br, batch_size_br, config["NUM_MINIBATCHES"], perm_rng_br1
+                    traj_batch_br_1, advantages_br, targets_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br1
                 )
 
                 # Update confederate
@@ -991,7 +986,7 @@ def run_paired(config):
     # Run heldout evaluation 
     log.info("Running heldout evaluation...")
     _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
     heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
 
     # Log metrics

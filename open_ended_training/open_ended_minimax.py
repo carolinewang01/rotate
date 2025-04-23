@@ -662,7 +662,7 @@ def run_minimax(config):
     # Run heldout evaluation 
     log.info("Running heldout evaluation...")
     _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
     heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
 
     # Log metrics

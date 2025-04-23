@@ -26,6 +26,42 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
+    """Create minibatches for PPO updates, where each leaf has shape 
+        (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
+    This function ensures that the rollout (time) dimension is kept separate from the minibatch and num_actors 
+    dimensions, so that the minibatches are compatible with recurrent ActorCritics.
+    """
+    # Create batch containing trajectory, advantages, and targets
+
+    batch = (
+        init_hstate, # shape (1, num_actors, hidden_dim) = (1, 16, 64)
+        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
+        advantages, # shape (rollout_len, num_actors) = (128, 16)
+        targets # shape (rollout_len, num_actors) = (128, 16)
+            )
+
+    permutation = jax.random.permutation(perm_rng, num_actors)
+
+    # each leaf of shuffled batch has shape (rollout_len, num_actors, feat_shape)
+    # except for init_hstate which has shape (1, num_actors, hidden_dim)
+    shuffled_batch = jax.tree.map(
+        lambda x: jnp.take(x, permutation, axis=1), batch
+    )
+    # each leaf has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape)
+    # except for init_hstate which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim)
+    minibatches = jax.tree_util.tree_map(
+        lambda x: jnp.swapaxes(
+            jnp.reshape(
+                x,
+                [x.shape[0], num_minibatches, -1] 
+                + list(x.shape[2:]),
+        ), 1, 0,),
+        shuffled_batch,
+    )
+
+    return minibatches
+
 def train_ppo_ego_agent(config, env, train_rng, 
                         ego_policy, init_ego_params, n_ego_train_seeds,
                         partner_population: AgentPopulation,
@@ -61,7 +97,9 @@ def train_ppo_ego_agent(config, env, train_rng,
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["ROLLOUT_LENGTH"] // config["NUM_ENVS"]
 
         config["NUM_ACTIONS"] = env.action_space(env.agents[0]).n
-        
+        assert config["NUM_CONTROLLED_ACTORS"] % config["NUM_MINIBATCHES"] == 0, "NUM_CONTROLLED_ACTORS must be divisible by NUM_MINIBATCHES"
+        assert config["NUM_CONTROLLED_ACTORS"] >= config["NUM_MINIBATCHES"], "NUM_CONTROLLED_ACTORS must be >= NUM_MINIBATCHES"
+
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
             return config["LR"] * frac
@@ -253,33 +291,7 @@ def train_ppo_ego_agent(config, env, train_rng,
             def _update_epoch(update_state, unused):
                 train_state, init_hstate_0, traj_batch, advantages, targets, rng = update_state
                 rng, perm_rng = jax.random.split(rng)
-                # batch_size is now config["NUM_ENVS"]
-                permutation = jax.random.permutation(perm_rng, config["NUM_CONTROLLED_ACTORS"])
-
-                batch = (
-                    init_hstate_0, # shape (1, num_agents, hidden_dim) = (1, 16, 64)
-                    traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15)
-                    advantages, # shape (rollout_len, num_agents) = (128, 16)
-                    targets # shape (rollout_len, num_agents) = (128, 16)
-                )
-
-                # each leaf of shuffled batch has shape (rollout_len, num_agents, feat_shape)
-                # except for init_hstate_0 which has shape (1, num_agents, hidden_dim)
-                shuffled_batch = jax.tree.map(
-                    lambda x: jnp.take(x, permutation, axis=1), batch
-                )
-
-                # each leaf has shape (num_minibatches, rollout_len, num_agents/num_minibatches, feat_shape)
-                # except for init_hstate_0 which has shape (num_minibatches, 1, num_agents/num_minibatches, hidden_dim)
-                minibatches = jax.tree_util.tree_map(
-                    lambda x: jnp.swapaxes(
-                        jnp.reshape(
-                            x,
-                            [x.shape[0], config["NUM_MINIBATCHES"], -1] 
-                            + list(x.shape[2:]),
-                    ), 1, 0,),
-                    shuffled_batch,
-                )
+                minibatches = _create_minibatches(traj_batch, advantages, targets, init_hstate_0, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng)
                 train_state, total_loss = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )

@@ -25,8 +25,8 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
         return run_episodes(rng, env, 
                             agent_0_param=param1, agent_0_policy=policy1,
                             agent_1_param=param2, agent_1_policy=policy2,
-                            max_episode_steps=config["MAX_EPISODE_STEPS"],
-                            num_eps=num_episodes, test_mode=config["EVAL_AGENT_TEST_MODE"])
+                            max_episode_steps=config["global_heldout_settings"]["MAX_EPISODE_STEPS"],
+                            num_eps=num_episodes, test_mode=config["global_heldout_settings"]["EVAL_AGENT_TEST_MODE"])
 
     # Initialize results array
     all_metrics = []
@@ -64,7 +64,7 @@ def run_heldout_xp_evaluation(config, print_metrics=False):
     env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
     
-    rng = jax.random.PRNGKey(config["EVAL_SEED"])
+    rng = jax.random.PRNGKey(config["global_heldout_settings"]["EVAL_SEED"])
     rng, ego_init_rng, heldout_init_rng, eval_rng = jax.random.split(rng, 4)
     
     # load heldout agents
@@ -74,7 +74,7 @@ def run_heldout_xp_evaluation(config, print_metrics=False):
     
     # run evaluation
     eval_metrics = heldout_crossplay(
-        config, env, eval_rng, config["NUM_EVAL_EPISODES"], 
+        config, env, eval_rng, config["global_heldout_settings"]["NUM_EVAL_EPISODES"], 
         heldout_agent_list)
 
     if print_metrics:

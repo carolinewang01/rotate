@@ -18,7 +18,7 @@ ego_agent:
   path: results/overcooked-v1/cramped_room/brdiv/2025-04-16/13-53-06/saved_train_run
   actor_type: actor_with_conditional_critic
   idx_list: [[0, -1], [1, -1]]
-  ckpt_key: checkpoints_conf
+  ckpt_key: final_params_conf
   POP_SIZE: 4
   # lbf test policy
   # path: results/lbf/fcp_s5/2025-04-13_18-42-46/saved_train_run

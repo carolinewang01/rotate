@@ -145,8 +145,8 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
         return run_episodes(rng_for_ego, env,
                             agent_0_policy=single_ego_policy, agent_0_param=single_ego_params,
                             agent_1_policy=heldout_policy, agent_1_param=heldout_params,
-                            max_episode_steps=config["MAX_EPISODE_STEPS"],
-                            num_eps=num_episodes, test_mode=config["EVAL_AGENT_TEST_MODE"])
+                            max_episode_steps=config["global_heldout_settings"]["MAX_EPISODE_STEPS"],
+                            num_eps=num_episodes, test_mode=config["global_heldout_settings"]["EVAL_AGENT_TEST_MODE"])
 
     # Outer Python loop over heterogeneous heldout partners
     all_metrics_for_partners = []
@@ -187,7 +187,7 @@ def run_heldout_evaluation(config, print_metrics=False):
     env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
     
-    rng = jax.random.PRNGKey(config["EVAL_SEED"])
+    rng = jax.random.PRNGKey(config["global_heldout_settings"]["EVAL_SEED"])
     rng, ego_init_rng, heldout_init_rng, eval_rng = jax.random.split(rng, 4)
     
     # load ego agents
@@ -204,7 +204,7 @@ def run_heldout_evaluation(config, print_metrics=False):
     
     # run evaluation
     eval_metrics = eval_egos_vs_heldouts(
-        config, env, eval_rng, config["NUM_EVAL_EPISODES"], 
+        config, env, eval_rng, config["global_heldout_settings"]["NUM_EVAL_EPISODES"], 
         ego_policy, flattened_ego_params, heldout_agent_list)
 
     if print_metrics:

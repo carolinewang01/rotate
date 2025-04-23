@@ -15,7 +15,7 @@ def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params):
     env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
     
-    rng = jax.random.PRNGKey(config["EVAL_SEED"])
+    rng = jax.random.PRNGKey(config["global_heldout_settings"]["EVAL_SEED"])
     rng, heldout_init_rng, eval_rng = jax.random.split(rng, 3)
     
     # flatten ego checkpoints and idx labels
@@ -30,7 +30,7 @@ def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params):
     heldout_names = list(heldout_agents.keys())
 
     # run evaluation
-    eval_metrics = eval_egos_vs_heldouts(config, env, eval_rng, config["NUM_EVAL_EPISODES"], 
+    eval_metrics = eval_egos_vs_heldouts(config, env, eval_rng, config["global_heldout_settings"]["NUM_EVAL_EPISODES"], 
                                         ego_policy, flattened_ego_params, heldout_agent_list)
     
     return eval_metrics, ego_names, heldout_names
@@ -42,10 +42,11 @@ def log_heldout_metrics(config, logger, eval_metrics,
     num_oel_iter, _, num_eval_episodes, _ = eval_metrics[metric_names[0]].shape
     table_data = []
     for metric_name in metric_names:
-        # shape of eval_metrics is (num_iter/num_seeds, num_heldout_agents, num_eval_episodes, 2)
-        metric_mean = eval_metrics[metric_name][..., 0].mean(axis=(-1)) # shape (num_iter/num_seeds, num_heldout_agents)
-        metric_std = eval_metrics[metric_name][..., 0].std(axis=(-1)) # shape (num_iter/num_seeds, num_heldout_agents)
-        metric_ci = 1.96 * metric_std / np.sqrt(num_eval_episodes) # shape (num_iter/num_seeds, num_heldout_agents)
+        # dim 0 could be the number of iterations, seeds, or checkpoints.
+        # shape of eval_metrics is (dim0, num_heldout_agents, num_eval_episodes, 2)
+        metric_mean = eval_metrics[metric_name][..., 0].mean(axis=(-1)) # shape (dim0, num_heldout_agents)
+        metric_std = eval_metrics[metric_name][..., 0].std(axis=(-1)) # shape (dim0, num_heldout_agents)
+        metric_ci = 1.96 * metric_std / np.sqrt(num_eval_episodes) # shape (dim0, num_heldout_agents)
         # log curve
         if log_dim0_as_curve:
             for i in range(num_oel_iter):

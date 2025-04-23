@@ -29,8 +29,8 @@ def run_training(cfg):
         out, ego_policy, init_ego_params = train_ego_agent(cfg["ego_train_algorithm"], wandb_logger, partner_params, partner_population)
         log_ego_metrics(cfg, out, wandb_logger, metric_names)
     
-    if cfg["heldout_eval"]:
-        eval_metrics, ego_names, heldout_names = run_heldout_evaluation(cfg, ego_policy, out['checkpoints'], init_ego_params)
+    if cfg["run_heldout_eval"]:
+        eval_metrics, ego_names, heldout_names = run_heldout_evaluation(cfg, ego_policy, out['final_params'], init_ego_params)
         log_heldout_metrics(cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
     wandb_logger.close()
 
