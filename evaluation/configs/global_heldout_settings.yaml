@@ -80,9 +80,15 @@ heldout_set:
     plate_agent_0:
       actor_type: plate_agent
       p_plate_on_counter: 0.0
-  overcooked-v1/counter_circuit:
-    ippo_mlp: 
+  overcooked-v1/counter_circuit: # DONE - DO NOT MODIFY
+    ippo_mlp_cc: # counterclockwise mmt 
       path: "eval_teammates/overcooked-v1/counter_circuit/ippo/2025-04-21_22-55-42/saved_train_run"
+      actor_type: mlp
+      ckpt_key: final_params
+      idx_list: [0, 1, 2]
+      test_mode: true
+    ippo_mlp_pass: # passes onions across counter
+      path: "eval_teammates/overcooked-v1/counter_circuit/ippo/2025-04-23_15-28-23/saved_train_run"
       actor_type: mlp
       ckpt_key: final_params
       idx_list: [0, 1, 2]
@@ -103,13 +109,25 @@ heldout_set:
     plate_agent_0.9:
       actor_type: plate_agent
       p_plate_on_counter: 0.9
-  overcooked-v1/coord_ring:
+  overcooked-v1/coord_ring: # DONE - DO NOT MODIFY
     ippo_mlp: 
       path: "eval_teammates/overcooked-v1/coord_ring/ippo/2025-04-21_22-58-26/saved_train_run"
       actor_type: mlp
       ckpt_key: final_params
       idx_list: [1, 2, 3]
       test_mode: true
+    brdiv-conf1:
+      path: "eval_teammates/overcooked-v1/coord_ring/brdiv/2025-04-23_15-00-27/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [1, 2]
+      ckpt_key: final_params_conf
+      POP_SIZE: 3
+    brdiv-conf2:
+      path: "eval_teammates/overcooked-v1/coord_ring/brdiv/2025_04-23_14-17-36/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0]
+      ckpt_key: final_params_conf
+      POP_SIZE: 3
     independent_agent_0:
       actor_type: independent_agent
       p_onion_on_counter: 0.0
