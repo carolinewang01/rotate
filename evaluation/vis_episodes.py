@@ -57,7 +57,7 @@ def save_video(env, env_name,
     elif env_name == 'overcooked-v1':
         viz = AdHocOvercookedVisualizer()
         # Get layout from env kwargs if available, otherwise use default
-        viz.animate_mp4(states, env.agent_view_size, 
+        viz.animate_mp4([s.env_state for s in states], env.agent_view_size, 
             highlight_agent_idx=0,
             filename=savepath, 
             pixels_per_tile=32, fps=25)
@@ -145,7 +145,7 @@ def run_episode_with_states(rng, env, agent_0_param, agent_0_policy,
 
 if __name__ == "__main__":
     from envs import make_env
-    from common.initialize_agents import initialize_mlp_agent
+    from agents.initialize_agents import initialize_mlp_agent
     from common.save_load_utils import load_checkpoints
 
     env = make_env("lbf", {})

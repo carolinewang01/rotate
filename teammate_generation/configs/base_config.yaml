@@ -1,0 +1,52 @@
+defaults:
+  - task: overcooked/cramped_room # task configs
+  - algorithm@algorithm: fcp/${task} # task-specific algorithm configs
+  - hydra: hydra_simple
+  - algorithm@ego_train_algorithm: ego_ppo/${task} # task-specific ego configs
+  - heldout_eval
+  - _self_
+
+ENV_NAME: ${task.ENV_NAME}
+ENV_KWARGS: ${task.ENV_KWARGS}
+ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
+
+# training settings
+train_ego: true # whether to train the ego agent
+heldout_eval: true # whether to run a heldout evaluation of the ego agent
+
+# teammate generation settings
+algorithm:
+  TOTAL_TIMESTEPS: 3e4
+  NUM_EVAL_EPISODES: 20 # used during training
+  TRAIN_SEED: 38410
+  ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
+  ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
+
+# ego training settings
+ego_train_algorithm:
+  TOTAL_TIMESTEPS: 3e4
+  NUM_EGO_TRAIN_SEEDS: 1
+  NUM_EVAL_EPISODES: 20
+  TRAIN_SEED: 204829
+  ENV_NAME: ${ENV_NAME}
+  ENV_KWARGS: ${ENV_KWARGS}
+  ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
+
+name: ${task.TASK_NAME}/${algorithm.ALG}
+
+# wandb settings
+logger: 
+  project: open-ended-aht
+  entity: aht-project
+  mode: offline # options: online, offline, disabled
+  verbose: true
+  log_train_out: false # whether to log the out dictionary
+  log_eval_out: false # whether to log the eval metrics
+
+# Local logger
+local_logger:
+  save_figures: false # unused
+  save_train_out: true
+  save_eval_out: true
+

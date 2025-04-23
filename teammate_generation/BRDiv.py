@@ -1,6 +1,8 @@
 import os
+import shutil
 import time
 import logging
+from typing import NamedTuple
 
 import hydra
 import jax
@@ -8,16 +10,15 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from flax.training.train_state import TrainState
-from jaxmarl.wrappers.baselines import LogWrapper
 import wandb
 
 from envs import make_env
-from ppo.ippo import unbatchify
-from common.mlp_actor_critic import ActorWithConditionalCritic
-from common.wandb_visualizations import Logger
+from envs.log_wrapper import LogWrapper
+from agents.agent_interface import ActorWithConditionalCriticPolicy, AgentPopulation
+from agents.mlp_actor_critic import ActorWithConditionalCritic
 from common.plot_utils import get_metric_names
+from common.ppo_utils import unbatchify
 from common.save_load_utils import save_train_run
-from typing import NamedTuple
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -35,21 +36,20 @@ class XPTransition(NamedTuple):
     avail_actions: jnp.ndarray
 
 def train_brdiv_partners(config, env, train_rng):
-    '''
-    Train regret-maximizing confederate/best-response pairs using the given ego agent policy and IPPO.
-    Return model checkpoints and metrics. 
-    '''
     num_agents = env.num_agents
     assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
-    config["NUM_ACTORS"] = num_agents * (config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"])
+
+    # Define different minibatch sizes for interactions with ego agent and one with BR agent
+    config["NUM_ENVS"] = config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"]
+    config["NUM_GAME_AGENTS"] = num_agents
+    config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
 
     # Right now assume control of both agent and its BR
     config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"]
 
-    config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"])// (config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"])
-    config["MINIBATCH_SIZE_EGO"] = ((config["NUM_ACTORS"]-1) * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-    config["MINIBATCH_SIZE_BR"] = (config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-
+    config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
+    config["MINIBATCH_SIZE_EGO"] = ((config["NUM_GAME_AGENTS"]-1) * config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
+    config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
     def gather_params(partner_params_pytree, idx_vec):
         """
@@ -70,21 +70,6 @@ def train_brdiv_partners(config, env, train_rng):
         return jax.tree.map(gather_leaf, partner_params_pytree)
 
     def make_brdiv_agents(config):
-        num_agents = env.num_agents
-        assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
-
-        # Define different minibatch sizes for interactions with ego agent and one with BR agent
-        config["NUM_ENVS"] = config["NUM_ENVS_XP"] + config["NUM_ENVS_SP"]
-        config["NUM_GAME_AGENTS"] = num_agents
-        config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
-
-        # Right now assume control of both agent and its BR
-        config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"]
-
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
-        config["MINIBATCH_SIZE_EGO"] = ((config["NUM_GAME_AGENTS"]-1) * config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-        config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
             return config["LR"] * frac
@@ -285,7 +270,6 @@ def train_brdiv_partners(config, env, train_rng):
                 
                 # Do one step to get a dummy info structure.
                 ep_rng, act_rng, part_rng, step_rng = jax.random.split(ep_rng, 4)
-
                 pi0, _ = conf_agent_net.apply(conf_param, (obs["agent_0"], br_id, avail_actions_0))
                 act0 = pi0.sample(seed=act_rng)
 
@@ -776,9 +760,30 @@ def train_brdiv_partners(config, env, train_rng):
     out = train_fn(train_rng)
     return out
 
-def run_brdiv(config):
+def get_brdiv_population(config, out, env):
+    '''
+    Get the flattened partner params and partner population for ego training.
+    '''
+    brdiv_pop_size = config["algorithm"]["PARTNER_POP_SIZE"]
+
+    partner_params = out['final_params_conf'] # shape is (brdiv_pop_size, ...)
+    partner_policy = ActorWithConditionalCriticPolicy(
+        action_dim=env.action_space(env.agents[1]).n,
+        obs_dim=env.observation_space(env.agents[1]).shape[0],
+        pop_size=brdiv_pop_size, # used to create onehot agent id
+        activation=config["algorithm"].get("ACTIVATION", "tanh")
+    )
+
+    # Create partner population
+    partner_population = AgentPopulation( 
+        pop_size=brdiv_pop_size,
+        policy_cls=partner_policy
+    )
+
+    return partner_params, partner_population
+
+def run_brdiv(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
 
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
@@ -792,6 +797,11 @@ def run_brdiv(config):
 
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, out, wandb_logger, metric_names)
+
+    partner_params, partner_population = get_brdiv_population(config, out, env)
+
+    return partner_params, partner_population
+
 
 def compute_sp_mask_and_ids(pop_size):
     cross_product = np.meshgrid(
@@ -859,7 +869,4 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     
     # Cleanup locally logged out files
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
-
-    # Cleanup
-    logger.close()
+        shutil.rmtree(out_savepath)

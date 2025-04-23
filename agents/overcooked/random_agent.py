@@ -10,8 +10,8 @@ from agents.overcooked.base_agent import BaseAgent, AgentState
 class RandomAgent(BaseAgent):
     """A random agent that takes random actions."""
     
-    def __init__(self, agent_name: str, layout: Dict[str, Any]):
-        super().__init__(agent_name, layout)
+    def __init__(self, agent_id: int, layout: Dict[str, Any]):
+        super().__init__(agent_id, layout)
 
     @partial(jax.jit, static_argnums=(0,))
     def _get_action(self, obs: jnp.ndarray, agent_state: AgentState) -> Tuple[int, AgentState]:
@@ -34,7 +34,7 @@ class RandomAgent(BaseAgent):
         updated_agent_state = AgentState(
             holding=agent_state.holding,
             goal=agent_state.goal,
-            onions_in_pot=agent_state.onions_in_pot,
+            nonfull_pots=agent_state.nonfull_pots,
             soup_ready=agent_state.soup_ready,
             rng_key=rng_key
         )
