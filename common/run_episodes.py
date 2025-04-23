@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 def run_single_episode(rng, env, agent_0_param, agent_0_policy, 
                        agent_1_param, agent_1_policy, 
-                       max_episode_steps, test_mode=True):
+                       max_episode_steps, test_mode=False):
     # Reset the env.
     rng, reset_rng = jax.random.split(rng)
     obs, env_state = env.reset(reset_rng)
@@ -143,7 +143,7 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
 
 def run_episodes(rng, env, agent_0_param, agent_0_policy, 
                  agent_1_param, agent_1_policy, 
-                 max_episode_steps, num_eps, test_mode=True):
+                 max_episode_steps, num_eps, test_mode=False):
     '''Given a single ego agent and a single partner agent, run num_eps episodes in parallel using vmap.'''
     # Create episode-specific RNGs
     rngs = jax.random.split(rng, num_eps + 1)
