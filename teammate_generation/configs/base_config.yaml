@@ -10,6 +10,7 @@ ENV_NAME: ${task.ENV_NAME}
 ENV_KWARGS: ${task.ENV_KWARGS}
 ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
 TASK_NAME: ${task.TASK_NAME}
+
 # training settings
 train_ego: true # whether to train the ego agent
 run_heldout_eval: true # whether to run a heldout evaluation of the ego agent

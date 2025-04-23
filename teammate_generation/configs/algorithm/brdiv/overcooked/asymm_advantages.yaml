@@ -2,7 +2,7 @@ defaults:
   - brdiv/_base_
   - _self_ # values from this file override the values from the base file
 
-TOTAL_TIMESTEPS: 2e7
+TOTAL_TIMESTEPS: 1e8
 LR: .0001
 UPDATE_EPOCHS: 15
 NUM_MINIBATCHES: 16

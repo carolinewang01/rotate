@@ -24,3 +24,4 @@ ego_agent:
   # path: results/lbf/fcp_s5/2025-04-13_18-42-46/saved_train_run
   # actor_type: s5
   # idx_list: [[0, -1]] # list of seed and checkpoint index to evaluate. If null, all checkpoints will be loaded.
+  # test_mode: true

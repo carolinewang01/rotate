@@ -13,6 +13,7 @@ ego_agent:
   path: "results/lbf/ppo_ego_s5/2025-04-13_11-43-33/saved_train_run" # results/lbf/fcp_s5/2025-04-13_18-42-46/saved_train_run
   actor_type: s5
   idx_list: [[0, -1]] # list of idxs to load from checkpoint for evaluation. If null, all checkpoints will be loaded.
+  test_mode: true
   # provide any necessary args to initialize the agent here
   # ex) S5_ACTOR_CRITIC_HIDDEN_DIM: 64 
   # defaults for each actor type will be used if no args are provided

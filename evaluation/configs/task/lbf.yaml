@@ -2,4 +2,3 @@ ENV_NAME: lbf
 ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
 TASK_NAME: lbf
-EVAL_AGENT_TEST_MODE: false # whether to run the agent in test mode during evaluation

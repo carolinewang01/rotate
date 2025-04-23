@@ -2,4 +2,3 @@ ENV_NAME: lbf
 ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
 TASK_NAME: lbf
-EVAL_AGENT_TEST_MODE: false # lbf agents do much better in train mode

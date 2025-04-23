@@ -4,4 +4,3 @@ ENV_KWARGS:
   layout: asymm_advantages
   random_obj_state: true
 TASK_NAME: overcooked-v1/asymm_advantages
-EVAL_AGENT_TEST_MODE: true # whether to run the agent in test mode during evaluation
