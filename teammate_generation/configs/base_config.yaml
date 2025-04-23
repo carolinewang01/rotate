@@ -1,9 +1,9 @@
 defaults:
   - task: overcooked/cramped_room # task configs
-  - algorithm@algorithm: fcp/${task} # task-specific algorithm configs
+  - algorithm@algorithm: brdiv/${task} # task-specific algorithm configs
   - hydra: hydra_simple
   - algorithm@ego_train_algorithm: ego_ppo/${task} # task-specific ego configs
-  - heldout_eval
+  - ../../evaluation/configs/global_heldout_settings # global settings for heldout evaluation
   - _self_
 
 ENV_NAME: ${task.ENV_NAME}
@@ -16,16 +16,14 @@ heldout_eval: true # whether to run a heldout evaluation of the ego agent
 
 # teammate generation settings
 algorithm:
-  TOTAL_TIMESTEPS: 3e4
   NUM_EVAL_EPISODES: 20 # used during training
-  TRAIN_SEED: 38410
+  TRAIN_SEED: 20374
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
 
 # ego training settings
 ego_train_algorithm:
-  TOTAL_TIMESTEPS: 3e4
   NUM_EGO_TRAIN_SEEDS: 1
   NUM_EVAL_EPISODES: 20
   TRAIN_SEED: 204829
@@ -39,10 +37,10 @@ name: ${TASK_NAME}/${algorithm.ALG}
 logger: 
   project: open-ended-aht
   entity: aht-project
-  mode: offline # options: online, offline, disabled
+  mode: online # options: online, offline, disabled
   verbose: true
-  log_train_out: false # whether to log the out dictionary
-  log_eval_out: false # whether to log the eval metrics
+  log_train_out: true # whether to log the out dictionary
+  log_eval_out: true # whether to log the eval metrics
 
 # Local logger
 local_logger:

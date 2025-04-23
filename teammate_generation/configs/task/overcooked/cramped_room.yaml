@@ -12,3 +12,4 @@ ENV_KWARGS:
     COUNTER_PICKUP_REWARD: 0
     COUNTER_DROP_REWARD: 0
 TASK_NAME: overcooked-v1/cramped_room
+EVAL_AGENT_TEST_MODE: true # whether to run the agent in test mode during evaluation

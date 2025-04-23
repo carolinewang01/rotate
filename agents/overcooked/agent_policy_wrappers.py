@@ -10,7 +10,7 @@ from agents.overcooked.random_agent import RandomAgent
 class OvercookedIndependentPolicyWrapper(AgentPolicy):
     """Policy wrapper for the Independent heuristic agent."""
     def __init__(self, layout, agent_id=0, using_log_wrapper=False, 
-                 p_onion_on_counter=0, p_plate_on_counter=0.5):
+                 p_onion_on_counter=0, p_plate_on_counter=0.0):
         super().__init__(action_dim=6, obs_dim=None)  # Action dim 6 for Overcooked
         self.policy = IndependentAgent(agent_id, layout, p_onion_on_counter, p_plate_on_counter)
         self.using_log_wrapper = using_log_wrapper
@@ -30,7 +30,7 @@ class OvercookedIndependentPolicyWrapper(AgentPolicy):
 
 class OvercookedOnionPolicyWrapper(AgentPolicy):
     """Policy wrapper for the Onion heuristic agent."""
-    def __init__(self, layout, agent_id=0, p_onion_on_counter=0.1, using_log_wrapper=False):
+    def __init__(self, layout, agent_id=0, p_onion_on_counter=0., using_log_wrapper=False):
         super().__init__(action_dim=6, obs_dim=None)
         self.policy = OnionAgent(agent_id, layout, p_onion_on_counter)
         self.using_log_wrapper = using_log_wrapper
@@ -48,7 +48,7 @@ class OvercookedOnionPolicyWrapper(AgentPolicy):
 
 class OvercookedPlatePolicyWrapper(AgentPolicy):
     """Policy wrapper for the Plate heuristic agent."""
-    def __init__(self, layout, agent_id=0, p_plate_on_counter=0.1, using_log_wrapper=False):
+    def __init__(self, layout, agent_id=0, p_plate_on_counter=0., using_log_wrapper=False):
         super().__init__(action_dim=6, obs_dim=None)
         self.policy = PlateAgent(agent_id, layout, p_plate_on_counter)
         self.using_log_wrapper = using_log_wrapper

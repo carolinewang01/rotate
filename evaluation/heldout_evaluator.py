@@ -102,11 +102,18 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs,rng):
             elif agent_config["actor_type"] == 'static_agent':
                 policy = OvercookedStaticPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
             elif agent_config["actor_type"] == 'independent_agent':
-                policy = OvercookedIndependentPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
+                policy = OvercookedIndependentPolicyWrapper(
+                    aug_layout_dict, using_log_wrapper=True, 
+                    p_onion_on_counter=agent_config.get("p_onion_on_counter", 0.0), 
+                    p_plate_on_counter=agent_config.get("p_plate_on_counter", 0.0))
             elif agent_config["actor_type"] == 'onion_agent':
-                policy = OvercookedOnionPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
+                policy = OvercookedOnionPolicyWrapper(
+                    aug_layout_dict, using_log_wrapper=True, 
+                    p_onion_on_counter=agent_config.get("p_onion_on_counter", 0.0))
             elif agent_config["actor_type"] == 'plate_agent':
-                policy = OvercookedPlatePolicyWrapper(aug_layout_dict, using_log_wrapper=True   )
+                policy = OvercookedPlatePolicyWrapper(
+                    aug_layout_dict, using_log_wrapper=True, 
+                    p_plate_on_counter=agent_config.get("p_plate_on_counter", 0.0))
         else:
             raise ValueError(f"Unknown task: {task_name}")
         
@@ -139,7 +146,7 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
                             agent_0_policy=single_ego_policy, agent_0_param=single_ego_params,
                             agent_1_policy=heldout_policy, agent_1_param=heldout_params,
                             max_episode_steps=config["MAX_EPISODE_STEPS"],
-                            num_eps=num_episodes, test_mode=True)
+                            num_eps=num_episodes, test_mode=config["EVAL_AGENT_TEST_MODE"])
 
     # Outer Python loop over heterogeneous heldout partners
     all_metrics_for_partners = []

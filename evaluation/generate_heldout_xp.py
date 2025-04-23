@@ -26,7 +26,7 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
                             agent_0_param=param1, agent_0_policy=policy1,
                             agent_1_param=param2, agent_1_policy=policy2,
                             max_episode_steps=config["MAX_EPISODE_STEPS"],
-                            num_eps=num_episodes)
+                            num_eps=num_episodes, test_mode=config["EVAL_AGENT_TEST_MODE"])
 
     # Initialize results array
     all_metrics = []
