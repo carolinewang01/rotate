@@ -10,21 +10,23 @@ heldout_set:
       path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
       actor_type: mlp
       idx_list: [[0, -1], [2, 0]]
-    brdiv: 
+    brdiv-conf: 
       path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
       actor_type: actor_with_conditional_critic
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: checkpoints_conf # key to load from checkpoint.
       POP_SIZE: 5 # for brdiv, we need to specify population size that the method was trained with
-    # ppo_ego_s5: 
-    #   path: "results/lbf/ppo_ego_s5/2025-04-13_11-43-33/saved_train_run"
-    #   actor_type: s5
-    #   idx_list: [[0, -1]]
   overcooked-v1/cramped_room:
     ippo_mlp: 
       path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"
       actor_type: mlp
       idx_list: [[0, -1], [1, -1], [2, -1]]
+    brdiv-conf:
+      path: "eval_teammates/overcooked-v1/cramped_room/brdiv/artifacts/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [[1, -1], [2, -1]]
+      ckpt_key: checkpoints_conf
+      POP_SIZE: 4
     independent_agent_0.4:
       actor_type: independent_agent
       p_onion_on_counter: 0.4
