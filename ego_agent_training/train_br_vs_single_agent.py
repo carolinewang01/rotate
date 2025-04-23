@@ -40,7 +40,6 @@ class DummyPolicyPopulation(AgentPopulation):
                                               aux_obs=aux_obs, 
                                               env_state=env_state, 
                                               test_mode=self.test_mode))
-        import pdb; pdb.set_trace()
         actions, new_hstate = vmapped_get_action(
             gathered_params, obs, done, avail_actions, hstate, 
             rngs_batched)
