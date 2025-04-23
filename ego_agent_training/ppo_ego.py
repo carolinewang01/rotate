@@ -21,6 +21,7 @@ from agents.agent_interface import AgentPopulation, MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
+from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -542,13 +543,11 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
         shutil.rmtree(out_savepath)
    
     
-def run_ego_training(config, wandb_logger, partner_params, pop_size: int):
+def run_ego_training(config, wandb_logger):
     '''Run ego agent training against the population of partner agents.
     
     Args:
         config: dict, config for the training
-        partner_params: partner parameters pytree with shape (pop_size, ...)
-        pop_size: int, number of partner agents in the population
     '''
     algorithm_config = dict(config["algorithm"])
 
@@ -559,11 +558,12 @@ def run_ego_training(config, wandb_logger, partner_params, pop_size: int):
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     
-    partner_policy = MLPActorCriticPolicy(
-        action_dim=env.action_space(env.agents[1]).n,
-        obs_dim=env.observation_space(env.agents[1]).shape[0],
-        activation="tanh"
-    )
+
+    partner_agent_config = dict(config["partner_agent"])
+    partner_policy, partner_params, init_partner_params, idx_labels = initialize_rl_agent_from_config(
+        partner_agent_config, partner_agent_config["name"], env, init_rng)
+    pop_size = len(np.array(idx_labels).flatten())
+    flattened_partner_params = jax.tree.map(lambda x, y: x.reshape((-1,) + y.shape), partner_params, init_partner_params)        
 
     # Create partner population
     partner_population = AgentPopulation(
@@ -593,7 +593,7 @@ def run_ego_training(config, wandb_logger, partner_params, pop_size: int):
         init_ego_params=init_ego_params,
         n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
         partner_population=partner_population,
-        partner_params=partner_params
+        partner_params=flattened_partner_params
     )
     
     log.info(f"Training completed in {time.time() - start_time:.2f} seconds")

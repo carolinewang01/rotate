@@ -1,10 +1,22 @@
 defaults:
+  - task: lbf # task configs
   - hydra: hydra_simple
   - _self_         # Ensures that values in this file override imported ones if needed
 
-ENV_NAME: lbf
-ROLLOUT_LENGTH: 128 # rollout length must be greater than episode length
-ENV_KWARGS: {}
+ENV_NAME: ${task.ENV_NAME}
+ENV_KWARGS: ${task.ENV_KWARGS}
+ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
+TASK_NAME: ${task.TASK_NAME}
+
+partner_agent:
+  name: ippo_mlp # lbf policy!
+  path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
+  actor_type: mlp
+  ckpt_key: final_params
+  idx_list: null # null to load all agents
+  # provide any necessary args to initialize the agent here
+  # ex) S5_ACTOR_CRITIC_HIDDEN_DIM: 64 
+  # defaults for each actor type will be used if no args are provided
 
 algorithm:
   EGO_ACTOR_TYPE: s5 # options: s5, mlp, rnn
@@ -41,9 +53,4 @@ local_logger:
   save_figures: true # currently unused
   save_train_out: true
 
-hydra:
-  job:
-    name: ppo_ego_${algorithm.EGO_ACTOR_TYPE}
-    chdir: true
-  run:
-    dir: results/${ENV_NAME}/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+name: ${TASK_NAME}/ppo_ego_${algorithm.EGO_ACTOR_TYPE}
