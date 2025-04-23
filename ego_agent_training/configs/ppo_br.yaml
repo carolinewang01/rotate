@@ -1,5 +1,5 @@
 defaults:
-  - task: lbf # task configs
+  - task: overcooked/cramped_room # task configs
   - hydra: hydra_simple
   - _self_         # Ensures that values in this file override imported ones if needed
 
@@ -9,15 +9,12 @@ ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
 TASK_NAME: ${task.TASK_NAME}
 
 partner_agent:
-  ippo_mlp: # lbf policy!
-    path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
+  ippo_mlp: 
+    path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"
     actor_type: mlp
     ckpt_key: final_params
-    idx_list: [0] # load in only a single policy checkpoint
+    idx_list: [0]
     test_mode: true
-    # provide any necessary args to initialize the agent here
-    # ex) S5_ACTOR_CRITIC_HIDDEN_DIM: 64 
-    # defaults for each actor type will be used if no args are provided
 
 algorithm:
   ALG: ppo_br

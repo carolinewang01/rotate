@@ -1,38 +1,34 @@
-import shutil
 import time
 import logging
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from functools import partial
-from agents.agent_interface import AgentPopulation, MLPActorCriticPolicy
+from agents.agent_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_stats, get_metric_names
-from common.save_load_utils import save_train_run
-from common.ppo_utils import Transition, unbatchify
-from common.run_episodes import run_episodes
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 from evaluation.heldout_evaluator import load_heldout_set
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-class TestAgentPopulation(AgentPopulation):
-    ''' The main difference from the AgentPopulation is that 
-    the test mode is a class attribute, so it remains static for the lifetime of the object
+class DummyPolicyPopulation(AgentPopulation):
+    '''A wrapper around the AgentPopulation class that allows for a single policy to be used.
+    The main difference from the AgentPopulation is that the test mode is a class attribute, 
+    so it remains static for the lifetime of the object
     '''
-    def __init__(self, pop_size, policy_cls, test_mode=False):
-        super().__init__(pop_size, policy_cls)
+    def __init__(self, policy_cls, test_mode=False):
+        super().__init__(pop_size=1, policy_cls=policy_cls)
         self.test_mode = test_mode
-
-    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng):
+    
+    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, 
+                    env_state=None, aux_obs=None):
         '''
         Get the actions of the agents specified by agent_indices. Does not support agents that 
-        require environment state or auxiliary observations.
+        require auxiliary observations.
         Returns:
             actions: actions with shape (num_envs,)
             new_hstate: new hidden state with shape (num_envs, ...) or None
@@ -41,14 +37,19 @@ class TestAgentPopulation(AgentPopulation):
         num_envs = agent_indices.squeeze().shape[0]
         rngs_batched = jax.random.split(rng, num_envs)
         vmapped_get_action = jax.vmap(partial(self.policy_cls.get_action, 
-                                              aux_obs=None, 
-                                              env_state=None, 
+                                              aux_obs=aux_obs, 
+                                              env_state=env_state, 
                                               test_mode=self.test_mode))
+        import pdb; pdb.set_trace()
         actions, new_hstate = vmapped_get_action(
             gathered_params, obs, done, avail_actions, hstate, 
             rngs_batched)
         return actions, new_hstate
 
+    def init_hstate(self, n: int):
+        '''Initialize the hidden state for n members of the population.'''
+        hstate = self.policy_cls.init_hstate(n)
+        return hstate
 
 def run_br_training(config, wandb_logger):
     '''Run ego agent training against the population of partner agents.
@@ -64,21 +65,7 @@ def run_br_training(config, wandb_logger):
 
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_rng, train_rng = jax.random.split(rng, 3)
-    
-    partner_agent_config = dict(config["partner_agent"])
-    heldout_agents = load_heldout_set(partner_agent_config, env, config["TASK_NAME"], config["ENV_KWARGS"], init_rng)
-    assert len(heldout_agents) == 1, "Only supports training against one partner agent for now."
 
-    partner_name = list(heldout_agents.keys())[0]
-    partner_policy, partner_params, partner_test_mode = list(heldout_agents.values())[0]
-    
-    # Create partner population
-    partner_population = AgentPopulation(
-        pop_size=1,
-        policy_cls=partner_policy,
-        test_mode=partner_test_mode
-    )
-    
     # Initialize ego agent
     if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
         ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
@@ -88,6 +75,28 @@ def run_br_training(config, wandb_logger):
         # WARNING: currently the RNN policy is not working. 
         # TODO: fix this!
         ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
+
+    # Initialize partner agent
+    partner_agent_config = dict(config["partner_agent"])
+    heldout_agents = load_heldout_set(partner_agent_config, env, config["TASK_NAME"], config["ENV_KWARGS"], init_rng)
+    assert len(heldout_agents) == 1, "Only supports training against one partner agent for now."
+
+    partner_policy, partner_params, partner_test_mode = list(heldout_agents.values())[0]
+
+    if "path" in partner_agent_config: # RL agent
+        partner_params = jax.tree.map(lambda x: x[jnp.newaxis, ...], partner_params)
+
+    else: # heuristic agent
+        raise NotImplementedError("Heuristic agent not supported for BR training.")
+        # Doesn't matter what we pass here, since the heuristic agent doesn't use params.
+        # We just need to pass something to vmap over.
+        # partner_params = jax.tree.map(lambda x: x[jnp.newaxis, ...], init_ego_params)
+    
+    # Create partner population
+    partner_population = DummyPolicyPopulation(
+        policy_cls=partner_policy,
+        test_mode=partner_test_mode
+    )
     
     log.info("Starting ego agent training...")
     start_time = time.time()

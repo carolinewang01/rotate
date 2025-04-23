@@ -15,7 +15,6 @@ from agents.rnn_actor_critic import RNNActorCritic, ScannedRNN
 class AgentPopulation:
     '''Base class for a population of identical agents
     TODO: develop more complex population classes that can handle heterogeneous agents
-    and agents that depend on auxiliary observations or environment state.
     '''
     def __init__(self, pop_size, policy_cls):
         '''
@@ -45,8 +44,7 @@ class AgentPopulation:
     def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, 
                     env_state=None, aux_obs=None, test_mode=False):
         '''
-        Get the actions of the agents specified by agent_indices. Does not support agents that 
-        require environment state or auxiliary observations.
+        Get the actions of the agents specified by agent_indices. 
         
         Args:
             pop_params: pytree of parameters for the population of agents of shape (pop_size, ...).
