@@ -1070,9 +1070,11 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     lm_horizontal = np.asarray(metrics["lms_horizontal"])
     lm_vertical = np.asarray(metrics["lms_vertical"])
     lagrange_multipliers = {
-        "Horizontal": np.reshape(lm_horizontal, (lm_horizontal.shape[0], -1)).transpose(),
-        "Vertical": np.reshape(lm_vertical, (lm_vertical.shape[0], -1)).transpose()
+        "Horizontal": np.reshape(lm_horizontal, (lm_horizontal.shape[0], -1)).transpose().tolist(),
+        "Vertical": np.reshape(lm_vertical, (lm_vertical.shape[0], -1)).transpose().tolist()
     }
+
+    jax.debug.breakpoint()
     
     xs = list(range(num_updates))
     keys = [f"pair {i}" for i in range(pop_size)]
