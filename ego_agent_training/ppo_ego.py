@@ -179,6 +179,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 # required by recurrent partner policies
                 obs_1_reshaped = obs_1.reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
                 done_1_reshaped = prev_done["agent_1"].reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
+                
 
                 act_1, new_partner_hstate = partner_population.get_actions(
                     partner_params,
@@ -187,7 +188,9 @@ def train_ppo_ego_agent(config, env, train_rng,
                     done_1_reshaped,
                     avail_actions_1,
                     partner_hstate,
-                    partner_rng
+                    partner_rng,
+                    env_state=env_state,
+                    aux_obs=None
                 )
                 act_1 = act_1.squeeze()
 

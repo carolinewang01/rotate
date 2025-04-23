@@ -4,8 +4,8 @@
 
 ### Evaluation
 - Create evaluation partners:
-    - Create BrDiv-based population on LBF
     - Create BRDiv-based population on Overcooked
+- Train best-response agents for heuristics
 
 - Metrics: 
     - Implement RLiable metrics to visualize results

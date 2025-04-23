@@ -145,6 +145,12 @@ heldout_set:
       ckpt_key: final_params
       idx_list: [0, 1, 2]
       test_mode: true
+    brdiv-conf1: 
+      path: "eval_teammates/overcooked-v1/forced_coord/brdiv/2025-04-23_14-07-41/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0, 1, 2, 3]
+      ckpt_key: final_params_conf
+      POP_SIZE: 4
     independent_agent_0.6:
       actor_type: independent_agent
       p_onion_on_counter: 0.6

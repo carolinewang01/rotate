@@ -2,6 +2,7 @@ import hydra
 from omegaconf import OmegaConf
 
 from ppo_ego import run_ego_training
+from train_br_vs_single_agent import run_br_training
 from common.wandb_visualizations import Logger
 
 @hydra.main(version_base=None, config_path="configs", config_name="default")
@@ -10,8 +11,10 @@ def run_training(cfg):
     mostly just used for debugging.'''
     print(OmegaConf.to_yaml(cfg, resolve=True))
     wandb_logger = Logger(cfg)
-
-    run_ego_training(cfg, wandb_logger)
+    if cfg["algorithm"]["ALG"] == "ppo_ego":
+        run_ego_training(cfg, wandb_logger)
+    elif cfg["algorithm"]["ALG"] == "ppo_br":
+        run_br_training(cfg, wandb_logger)
     # Cleanup
     wandb_logger.close()
 

@@ -45,8 +45,8 @@ def extract_params(params, init_params, idx_labels=None):
     flattened_idx_labels = []
     params_shape = jax.tree.leaves(params)[0].shape
     init_params_shape = jax.tree.leaves(init_params)[0].shape
-    
-    # only one model, no extraction needed
+
+    # already matches init_params_shape, no extraction needed
     if params_shape == init_params_shape:
         model_list = [params]
         n_models = 1

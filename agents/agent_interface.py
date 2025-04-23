@@ -42,7 +42,8 @@ class AgentPopulation:
             return jax.vmap(lambda idx: leaf[idx])(agent_indices)
         return jax.tree.map(gather_leaf, pop_params)
     
-    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, test_mode=False):
+    def get_actions(self, pop_params, agent_indices, obs, done, avail_actions, hstate, rng, 
+                    env_state=None, aux_obs=None, test_mode=False):
         '''
         Get the actions of the agents specified by agent_indices. Does not support agents that 
         require environment state or auxiliary observations.
@@ -65,8 +66,8 @@ class AgentPopulation:
         num_envs = agent_indices.squeeze().shape[0]
         rngs_batched = jax.random.split(rng, num_envs)
         vmapped_get_action = jax.vmap(partial(self.policy_cls.get_action, 
-                                              aux_obs=None, 
-                                              env_state=None, 
+                                              aux_obs=aux_obs, 
+                                              env_state=env_state, 
                                               test_mode=test_mode))
         actions, new_hstate = vmapped_get_action(
             gathered_params, obs, done, avail_actions, hstate, 
