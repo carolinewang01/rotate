@@ -153,12 +153,11 @@ def log_train_metrics(config, logger, outs,
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
     
-def run_fcp(config):
+def run_fcp(config, wandb_logger):
     '''
     Run the open-ended FCP training loop.
     '''
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
 

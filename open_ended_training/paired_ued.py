@@ -1005,9 +1005,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
 
-def run_paired_ued(config):
+def run_paired_ued(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
 
     # Create only one environment instance
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])

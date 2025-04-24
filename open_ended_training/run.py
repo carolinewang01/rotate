@@ -15,13 +15,13 @@ def run_training(cfg):
     wandb_logger = Logger(cfg)
 
     if cfg.algorithm["ALG"] == "open_ended_minimax":
-        ego_policy, final_ego_params, init_ego_params = run_minimax(cfg)
+        ego_policy, final_ego_params, init_ego_params = run_minimax(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "open_ended_paired":
-        ego_policy, final_ego_params, init_ego_params = run_paired(cfg)
+        ego_policy, final_ego_params, init_ego_params = run_paired(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "paired_ued":
-        ego_policy, final_ego_params, init_ego_params = run_paired_ued(cfg)
+        ego_policy, final_ego_params, init_ego_params = run_paired_ued(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "open_ended_fcp":
-        ego_policy, final_ego_params, init_ego_params = run_fcp(cfg)
+        ego_policy, final_ego_params, init_ego_params = run_fcp(cfg, wandb_logger)
     else:
         raise NotImplementedError("Selected method not implemented.")
 
