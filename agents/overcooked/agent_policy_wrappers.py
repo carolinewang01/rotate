@@ -5,7 +5,7 @@ from agents.overcooked.onion_agent import OnionAgent
 from agents.overcooked.plate_agent import PlateAgent
 from agents.overcooked.static_agent import StaticAgent
 from agents.overcooked.random_agent import RandomAgent
-import jax.numpy as jnp
+
 
 class OvercookedIndependentPolicyWrapper(AgentPolicy):
     """Policy wrapper for the Independent heuristic agent."""
@@ -25,7 +25,7 @@ class OvercookedIndependentPolicyWrapper(AgentPolicy):
         return action, new_hstate
 
     def init_hstate(self, batch_size):
-        return jnp.array([self.policy.initial_state] * batch_size)
+        return self.policy.initial_state
 
 
 class OvercookedOnionPolicyWrapper(AgentPolicy):

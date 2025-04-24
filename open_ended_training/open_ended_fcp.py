@@ -201,18 +201,19 @@ def run_fcp(config):
     end_time = time.time()
     log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
 
-    # Run heldout evaluation 
-    log.info("Running heldout evaluation...")
+    # Prepare return values for heldout evaluation
     _ , ego_outs = outs
     ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
-    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
+    # heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
     
     # Log metrics
     log.info("Logging metrics...")
     metric_names = get_metric_names(config["ENV_NAME"])
     log_train_metrics(config, wandb_logger, outs, metric_names, 
                       num_controlled_actors=algorithm_config["NUM_ENVS"])
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
+    # log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
     
     # Cleanup
-    wandb_logger.close()
+    # wandb_logger.close()
+
+    return ego_policy, ego_params, init_ego_params

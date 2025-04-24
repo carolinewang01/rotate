@@ -1025,17 +1025,17 @@ def run_paired_ued(config):
     end_time = time.time()
     log.info(f"PAIRED-UED training completed in {end_time - start_time} seconds.")
 
-    # Run heldout evaluation 
-    log.info("Running heldout evaluation...")
-    ego_params = outs["final_params_ego"]
+    # Prepare return values for heldout evaluation
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, eval_rng)
-    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
+    # heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, wandb_logger, outs, metric_names)
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
+    # log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
 
-    # Cleanup
-    wandb_logger.close()
+    # # Cleanup
+    # wandb_logger.close()
+
+    return ego_policy, outs["final_params_ego"], init_ego_params

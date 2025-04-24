@@ -8,7 +8,10 @@ from common.save_load_utils import save_train_run
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from evaluation.heldout_evaluator import eval_egos_vs_heldouts, load_heldout_set
+import logging
 
+log = logging.getLogger(__name__)   
+logging.basicConfig(level=logging.INFO)
 
 def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params, ego_test_mode=False):
     '''Run heldout evaluation given an ego policy, ego params, and init_ego_params.
@@ -20,6 +23,7 @@ def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params, ego_
         init_ego_params: Initial parameters for the ego agent
         ego_test_mode: Whether the ego agent should run in test mode (default: False)
     '''
+    log.info("Running heldout evaluation...")
     env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
     env = LogWrapper(env)
     
