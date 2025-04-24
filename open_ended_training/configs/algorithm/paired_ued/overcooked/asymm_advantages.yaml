@@ -2,6 +2,7 @@ defaults:
   - paired_ued/_base_
   - _self_ # values from this file override the values from the base file
 
+TOTAL_TIMESTEPS: 3e7
 LR: .0001
 NUM_MINIBATCHES: 8
 CLIP_EPS: 0.3

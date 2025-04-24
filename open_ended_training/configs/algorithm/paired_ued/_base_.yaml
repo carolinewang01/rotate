@@ -2,7 +2,7 @@
 # ^ tells hydra to place these value directly under algorithm key
 
 ALG: paired_ued
-TOTAL_TIMESTEPS: 1e8  # divided between conf, ego, and br training
+TOTAL_TIMESTEPS: 6e7  # divided between conf, ego, and br training
 NUM_SEEDS: 1 # number of seeds to train
 NUM_CHECKPOINTS: 10
 CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight

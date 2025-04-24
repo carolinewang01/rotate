@@ -22,10 +22,10 @@ log_file="results/logs/${algo}/${label}/experiment_${timestamp}.log"
 # Tasks to run
 tasks=(
     "overcooked/asymm_advantages"
-    # "overcooked/coord_ring"
-    # "overcooked/counter_circuit"
-    # "overcooked/cramped_room"
-    # "overcooked/forced_coord"
+    "overcooked/coord_ring"
+    "overcooked/counter_circuit"
+    "overcooked/cramped_room"
+    "overcooked/forced_coord"
 )
 
 # Function to log messages
