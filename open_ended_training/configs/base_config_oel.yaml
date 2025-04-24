@@ -1,6 +1,6 @@
 defaults:
   - task: overcooked/cramped_room # task configs
-  - algorithm@algorithm: fcp/${task} # task-specific algorithm configs
+  - algorithm@algorithm: open_ended_minimax/${task} # task-specific algorithm configs
   - hydra: hydra_simple
   - ../../evaluation/configs/global_heldout_settings
   - _self_
@@ -15,7 +15,7 @@ run_heldout_eval: true
 
 # teammate generation settings
 algorithm:
-  NUM_OPEN_ENDED_ITERS: 2 # DEBUG FLAG
+  # NUM_OPEN_ENDED_ITERS: 1 # DEBUG FLAG
   NUM_EVAL_EPISODES: 20 # used during training
   TRAIN_SEED: 20374
   ENV_NAME: ${ENV_NAME}
@@ -32,6 +32,8 @@ logger:
   tags: 
     - ${algorithm.ALG}
     - ${TASK_NAME}
+    - seed=${algorithm.TRAIN_SEED}
+    - ${label}
   mode: online # options: online, offline, disabled
   verbose: true
   log_train_out: true # whether to log the out dictionary

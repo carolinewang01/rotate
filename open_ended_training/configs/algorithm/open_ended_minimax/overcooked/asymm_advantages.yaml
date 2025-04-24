@@ -1,9 +1,10 @@
 defaults:
-  - minimax/_base_
+  - open_ended_minimax/_base_
   - _self_ # values from this file override the values from the base file
 
-TOTAL_TIMESTEPS: 1e6 # 5e5
+TOTAL_TIMESTEPS: 1e6
+NUM_OPEN_ENDED_ITERS: 30
 LR: .0001
 NUM_MINIBATCHES: 8
-CLIP_EPS: 0.2
+CLIP_EPS: 0.3
 ENT_COEF: 0.01

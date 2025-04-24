@@ -1,12 +1,11 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
 
-ALG: open_ended_paired
+ALG: open_ended_minimax
 TOTAL_TIMESTEPS: 1e6  # per iter of open-ended training
 NUM_CHECKPOINTS: 1 # per iter of open-ended training
-NUM_OPEN_ENDED_ITERS: 10
+NUM_OPEN_ENDED_ITERS: 20
 PARTNER_POP_SIZE: 5
-CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
 NUM_ENVS: 16
 LR: 1.e-4
 UPDATE_EPOCHS: 15

@@ -10,8 +10,8 @@ results_sweep/
 results_sweep/*
 eval_teammates/
 eval_teammates/*
-explore_results/
-explore_results/*
+results_explore/
+results_explore/*
 .vscode/
 .vscode/*
 

@@ -1,7 +1,0 @@
-defaults:
-  - minimax/_base_
-  - _self_ # values from this file override the values from the base file
-
-LR: .0001
-CLIP_EPS: 0.03
-ENT_COEF: 0.01
