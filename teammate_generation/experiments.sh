@@ -1,22 +1,20 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="paired_ued"
+algo="fcp"
 label="baselines-v0"
 
 # Create log directory if it doesn't exist
-mkdir -p results/oe_logs/${algo}/${label}
+mkdir -p results/teammate_generation_logs/${algo}/${label}
 
 # Get current timestamp for log file
 timestamp=$(date +"%Y%m%d_%H%M%S")
-log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
+log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Available algorithms (commented out for reference)
 # algorithms=(
-#     "open_ended_minimax"
-#     "open_ended_paired"
-#     "paired_ued"
-#     "open_ended_fcp"
+#     "brdiv"
+#     "fcp"
 # )
 
 # Tasks to run
@@ -26,6 +24,7 @@ tasks=(
     "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
+    # "lbf"
 )
 
 # Function to log messages
@@ -43,7 +42,7 @@ failure_count=0
 for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
-    if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" 2>> "${log_file}"; then
+    if python teammate_generation/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" 2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
     else
