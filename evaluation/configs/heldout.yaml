@@ -8,7 +8,8 @@ ENV_NAME: ${task.ENV_NAME}
 ENV_KWARGS: ${task.ENV_KWARGS}
 TASK_NAME: ${task.TASK_NAME}
 
-name: ${TASK_NAME}/heldout_ego_eval
+label: ""
+name: ${TASK_NAME}/heldout_ego_eval/${label}
 
 ego_agent:
   # provide any necessary args to initialize the agent here

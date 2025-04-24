@@ -8,4 +8,5 @@ ENV_NAME: ${task.ENV_NAME}
 ENV_KWARGS: ${task.ENV_KWARGS}
 TASK_NAME: ${task.TASK_NAME}
 
-name: ${TASK_NAME}/heldout_xp_eval
+label: ""
+name: ${TASK_NAME}/heldout_xp_eval/${label}

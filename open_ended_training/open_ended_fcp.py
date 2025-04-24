@@ -18,7 +18,6 @@ from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from ppo.ippo import make_train as make_ppo_train
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -204,16 +203,10 @@ def run_fcp(config):
     # Prepare return values for heldout evaluation
     _ , ego_outs = outs
     ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
-    # heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
     
     # Log metrics
     log.info("Logging metrics...")
     metric_names = get_metric_names(config["ENV_NAME"])
     log_train_metrics(config, wandb_logger, outs, metric_names, 
                       num_controlled_actors=algorithm_config["NUM_ENVS"])
-    # log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
-    
-    # Cleanup
-    # wandb_logger.close()
-
     return ego_policy, ego_params, init_ego_params

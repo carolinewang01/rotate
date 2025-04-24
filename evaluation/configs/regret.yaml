@@ -41,12 +41,16 @@ algorithm:
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: false
 
-name: ${TASK_NAME}/regret_maximizing
+label: ""
+name: ${TASK_NAME}/regret_maximizing/${label}
 
 # wandb settings
 logger: 
   project: open-ended-aht
   entity: aht-project
+  tags: 
+    - regret_maximizing
+    - ${TASK_NAME}
   mode: offline # options: online, offline, disabled
   verbose: true
   log_train_out: false # whether to log the out dictionary
