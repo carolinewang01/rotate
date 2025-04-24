@@ -117,7 +117,7 @@ heldout_set:
       idx_list: [1, 2, 3]
       test_mode: true
     brdiv-conf1:
-      path: "eval_teammates/overcooked-v1/coord_ring/brdiv/2025-04-23_15-00-27/saved_train_run"
+      path: "eval_teammates/overcooked-v1/coord_ring/brdiv/2025_04-23_15-00-27/saved_train_run"
       actor_type: actor_with_conditional_critic
       idx_list: [1, 2]
       ckpt_key: final_params_conf
