@@ -1,4 +1,4 @@
-import os
+import shutil
 import time
 import logging
 
@@ -9,25 +9,56 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 
-
-from common.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
-from common.initialize_agents import initialize_s5_agent
-from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
+from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
+from agents.initialize_agents import initialize_s5_agent
+from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
+from common.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from ppo.ippo import unbatchify, Transition
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+def _create_minibatches(traj_batch, advantages, targets, batch_size, num_minibatches, permutation_rng):
+    """Create minibatches for PPO updates, where each leaf has shape (num_minibatches, batch_size, ...) 
+    Note that the rollout dimension is combined with the num_actors dimension.
+    """
+    # Create batch containing trajectory, advantages, and targets
+    batch = (
+        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
+        advantages, # shape (rollout_len, num_agents) = (128, 16)
+        targets # shape (rollout_len, num_agents) = (128, 16)
+            )
+    # Reshape batch to expected dimensions
+    batch_reshaped = jax.tree.map(
+        lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
+    )
+    
+    # Shuffle using the provided RNG key
+    permutation = jax.random.permutation(permutation_rng, batch_size)
+    shuffled_batch = jax.tree.map(
+        lambda x: jnp.take(x, permutation, axis=0), batch_reshaped
+    )
+    
+    # Create minibatches for training
+    minibatches = jax.tree.map(
+        lambda x: jnp.reshape(
+            x, [num_minibatches, -1] + list(x.shape[1:])
+        ),
+        shuffled_batch,
+    )
+    
+    return minibatches
+
+
 def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
     '''
-    Train regret-maximizing confederate/best-response pairs using the given ego agent policy and IPPO.
+    Train confederate/best-response pairs that optimize regret within a certain range 
+    using the given ego agent policy and IPPO.
     Return model checkpoints and metrics. 
     '''
     def make_lagrange_partner_train(config):
@@ -41,9 +72,11 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] + config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
-        config["MINIBATCH_SIZE_EGO"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-        config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
+        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 2 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
+        config["MINIBATCH_SIZE"] = config["ROLLOUT_LENGTH"] * config["NUM_CONTROLLED_ACTORS"]
+
+        assert config["MINIBATCH_SIZE"] % config["NUM_MINIBATCHES"] == 0, "MINIBATCH_SIZE must be divisible by NUM_MINIBATCHES"
+        assert config["MINIBATCH_SIZE"] >= config["NUM_MINIBATCHES"], "MINIBATCH_SIZE must be >= NUM_MINIBATCHES"
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -473,60 +506,15 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
 
                 rng_ego, perm_rng_ego, perm_rng_br0, perm_rng_br1 = jax.random.split(rng_ego, 4)
 
-                # Divide batch size by TWO because we are only training on data of agent_0
-                batch_size_ego = config["MINIBATCH_SIZE_EGO"] * config["NUM_MINIBATCHES"] // 2 
-                batch_size_br = config["MINIBATCH_SIZE_BR"] * config["NUM_MINIBATCHES"] // 2 
-                assert (
-                    batch_size_ego == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"] // 2
-                ), "batch size must be equal to number of steps * number of actors"
-
-                permutation_ego = jax.random.permutation(perm_rng_ego, batch_size_ego)
-                permutation_br0 = jax.random.permutation(perm_rng_br0, batch_size_br)
-                permutation_br1 = jax.random.permutation(perm_rng_br1, batch_size_br)
-
-                batch_ego = (traj_batch_ego, advantages_conf_ego, targets_conf_ego)
-                batch_br0 = (traj_batch_br_0, advantages_conf_br, targets_conf_br)
-                batch_br1 = (traj_batch_br_1, advantages_br, targets_br)
-                
-                batch_ego_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_ego,) + x.shape[2:]), batch_ego
+                # Create minibatches for each agent and interaction type
+                minibatches_ego = _create_minibatches(
+                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_ego
                 )
-                batch_br0_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br0
+                minibatches_br0 = _create_minibatches(
+                    traj_batch_br_0, advantages_conf_br, targets_conf_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br0
                 )
-                batch_br1_reshaped = jax.tree.map(
-                    lambda x: x.reshape((batch_size_br,) + x.shape[2:]), batch_br1
-                )
-
-                shuffled_batch_ego = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_ego, axis=0), batch_ego_reshaped
-                )
-                shuffled_batch_br0 = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_br0, axis=0), batch_br0_reshaped
-                )
-                shuffled_batch_br1 = jax.tree.map(
-                    lambda x: jnp.take(x, permutation_br1, axis=0), batch_br1_reshaped
-                )
-
-                minibatches_ego = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_ego,
-                )
-
-                minibatches_br0 = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_br0,
-                )
-
-                minibatches_br1 = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch_br1,
+                minibatches_br1 = _create_minibatches(
+                    traj_batch_br_1, advantages_br, targets_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br1
                 )
 
                 old_train_state_conf, old_train_state_br = train_state_conf, train_state_br
@@ -742,7 +730,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     # conf vs br
                     last_ep_info_with_br = run_episodes(rng, env, 
                         agent_0_param=train_state_br.params, agent_0_policy=br_policy,
-                        agent_1_param=ego_params, agent_1_policy=ego_policy, 
+                        agent_1_param=train_state_conf.params, agent_1_policy=confederate_policy, 
                         max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]
                     )
                     
@@ -863,6 +851,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     )
     
     # Train ego agent using train_ppo_ego_agent
+    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
         config=config,
         env=env,
@@ -882,7 +871,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     return carry, (train_out, ego_out)
 
 
-def log_metrics(config, outs, logger, metric_names: tuple):
+def log_metrics(config, logger, outs, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
     
     Args:
@@ -901,8 +890,8 @@ def log_metrics(config, outs, logger, metric_names: tuple):
 
     # Process/extract PAIRED-specific losses    
     # shape (num_open_ended_iters, num_partner_seeds, num_updates, num_eval_episodes, num_agents_per_env)
-    avg_teammate_sp_returns = np.asarray(teammate_metrics["eval_ep_last_info_br"]["returned_episode_returns"])[..., 0].mean(axis=(1, 3))
-    avg_teammate_xp_returns = np.asarray(teammate_metrics["eval_ep_last_info_ego"]["returned_episode_returns"])[..., 0].mean(axis=(1, 3))
+    avg_teammate_sp_returns = np.asarray(teammate_metrics["eval_ep_last_info_br"]["returned_episode_returns"]).mean(axis=(1, 3, 4))
+    avg_teammate_xp_returns = np.asarray(teammate_metrics["eval_ep_last_info_ego"]["returned_episode_returns"]).mean(axis=(1, 3, 4))
 
     # Conf vs ego, conf vs br, br losses
     #  shape (num_open_ended_iters, num_partner_seeds, num_updates, update_epochs, num_minibatches)
@@ -924,7 +913,7 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     
     # Process ego-specific metrics
     # shape (num_open_ended_iters, num_ego_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
-    avg_ego_returns = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"])[..., 0].mean(axis=(1, 3, 4))
+    avg_ego_returns = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"]).mean(axis=(1, 3, 4, 5))
     # shape (num_open_ended_iters, num_ego_seeds, num_updates, update_epochs, num_minibatches)
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(1, 3, 4))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(1, 3, 4))
@@ -949,9 +938,9 @@ def log_metrics(config, outs, logger, metric_names: tuple):
             
             # Log paired-specific metrics
             # Eval metrics
-            logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], checkpoint=global_step)
-            logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], checkpoint=global_step)
-            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], checkpoint=global_step)
+            logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
+            logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
+            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], train_step=global_step)
             
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
@@ -1000,14 +989,10 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
-        os.remove(out_savepath)
-    
-    # Cleanup
-    logger.close()
-    
-def run_lagrange(config):
+        shutil.rmtree(out_savepath)
+        
+def run_lagrange(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
-    logger = Logger(config)
 
     # Create only one environment instance
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
@@ -1017,7 +1002,7 @@ def run_lagrange(config):
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     
     # Initialize ego agent using initialize_s5_agent from ppo_ego.py
-    ego_policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
     
     # Initialize partner policy once - reused for all iterations
     partner_policy = ActorWithDoubleCriticPolicy(
@@ -1035,9 +1020,9 @@ def run_lagrange(config):
     def open_ended_step_fn(carry, unused):
         return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
-    init_carry = (init_params, train_rng)
+    init_carry = (init_ego_params, train_rng)
     
-    log.info("Starting open-ended PAIRED training...")
+    log.info("Starting open-ended Lagrange training...")
     start_time = time.time()
 
     DEBUG = False
@@ -1050,7 +1035,14 @@ def run_lagrange(config):
         )
     
     end_time = time.time()
-    log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
+    log.info(f"Open-ended Lagrange training completed in {end_time - start_time} seconds.")
     
+    # Prepare return values for heldout evaluation
+    _ , ego_outs = outs
+    ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
+
+    # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    log_metrics(config, outs, logger, metric_names)
+    log_metrics(config, wandb_logger, outs, metric_names)
+
+    return ego_policy, ego_params, init_ego_params

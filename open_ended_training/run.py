@@ -4,6 +4,7 @@ from omegaconf import OmegaConf
 from open_ended_minimax import run_minimax
 from open_ended_paired import run_paired
 from open_ended_fcp import run_fcp
+from open_ended_lagrange import run_lagrange
 from paired_ued import run_paired_ued
 from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from common.plot_utils import get_metric_names
@@ -22,6 +23,8 @@ def run_training(cfg):
         ego_policy, final_ego_params, init_ego_params = run_paired_ued(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "open_ended_fcp":
         ego_policy, final_ego_params, init_ego_params = run_fcp(cfg, wandb_logger)
+    elif cfg.algorithm["ALG"] == "open_ended_lagrange":
+        ego_policy, final_ego_params, init_ego_params = run_lagrange(cfg, wandb_logger)
     else:
         raise NotImplementedError("Selected method not implemented.")
 

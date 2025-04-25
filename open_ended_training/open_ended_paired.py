@@ -13,13 +13,11 @@ from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy,
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
 from common.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -73,7 +71,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] + config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
+        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 2 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
         config["MINIBATCH_SIZE"] = config["ROLLOUT_LENGTH"] * config["NUM_CONTROLLED_ACTORS"]
 
         assert config["MINIBATCH_SIZE"] % config["NUM_MINIBATCHES"] == 0, "MINIBATCH_SIZE must be divisible by NUM_MINIBATCHES"
@@ -797,6 +795,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     )
     
     # Train ego agent using train_ppo_ego_agent
+    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
         config=config,
         env=env,
@@ -985,14 +984,9 @@ def run_paired(config, wandb_logger):
     # Prepare return values for heldout evaluation
     _ , ego_outs = outs
     ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
-    # heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, wandb_logger, outs, metric_names)
-    # log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
-
-    # Cleanup
-    # wandb_logger.close()
 
     return ego_policy, ego_params, init_ego_params

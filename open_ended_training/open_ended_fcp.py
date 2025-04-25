@@ -27,6 +27,7 @@ def train_partners_in_parallel(config, partner_rng, env):
     Train a pool of partners for FCP using IPPO w/parameter sharing. 
     Returns out, a dictionary of the model checkpoints, final parameters, and metrics.
     '''
+    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_PARTNER"] // config["PARTNER_POP_SIZE"]
     rngs = jax.random.split(partner_rng, config["PARTNER_POP_SIZE"])
     train_jit = jax.jit(jax.vmap(make_ppo_train(config, env)))
     out = train_jit(rngs)
@@ -50,6 +51,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     )
     
     # Train ego agent using train_ppo_ego_agent
+    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
         config=config,
         env=env,

@@ -10,18 +10,15 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 
-
 from agents.agent_interface import AgentPopulation, MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
 from common.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +39,7 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
-        config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // config["ROLLOUT_LENGTH"] // config["NUM_ENVS"]
+        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
         config["MINIBATCH_SIZE"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
         def linear_schedule(count):
@@ -494,6 +491,7 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     train_partner_params = train_out["final_params"]
     
     # Train ego agent using train_ppo_ego_agent
+    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
         config=config,
         env=env,
