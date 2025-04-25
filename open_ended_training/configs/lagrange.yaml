@@ -1,49 +1,59 @@
 defaults:
   - hydra: hydra_simple
-  - ../../evaluation/configs/global_heldout_settings
   - _self_
 
 ENV_NAME: lbf
 ROLLOUT_LENGTH: 128
 ENV_KWARGS: {}
-TASK_NAME: lbf
 
 algorithm:
-  ALG: paired_ued
-  TOTAL_TIMESTEPS: 1e7 # 1e6 # divided between conf, ego, and br training
-  NUM_SEEDS: 1 # number of seeds to train
-  CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
+  ALG: paired
+  NUM_OPEN_ENDED_ITERS: 5 # 300
+  PARTNER_POP_SIZE: 5 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
   TRAIN_SEED: 38410
   NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
+  TOTAL_TIMESTEPS: 1.6e7 # one step of open-ended training
+  LR: 1.e-4
   UPDATE_EPOCHS: 15
   NUM_MINIBATCHES: 4
   NUM_EVAL_EPISODES: 20
-  NUM_CHECKPOINTS: 10 # evaluation is conducted for every checkpoint
+  NUM_CHECKPOINTS: 5
   GAMMA: 0.99
   GAE_LAMBDA: 0.95
   CLIP_EPS: 0.05
-  ENT_COEF: 0.01
+  ENT_COEF: 0.001 # TODO: check if this should be larger?
   VF_COEF: 1.0
+  LOWER_REGRET_THRESHOLD: 0.15
+  UPPER_REGRET_THRESHOLD: 0.4
+  LAGRANGE_MULTIPLIER_LR: 0.05
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: false
+  S5_ACTOR_CRITIC_HIDDEN_DIM: 64
+  S5_D_MODEL: 16
+  S5_SSM_SIZE: 16
+  S5_N_LAYERS: 2
+  S5_BLOCKS: 1
+  S5_ACTIVATION: full_glu
+  S5_DO_NORM: true
+  S5_PRENORM: true
+  S5_DO_GTRXL_NORM: true
 
-name: paired_ued
+name: open_ended_paired
 
 # wandb settings
 logger: 
-  load_dir: paired_ued
+  load_dir: open_ended_paired
   project: open-ended-aht
   entity: aht-project
   mode: online # options: online, offline, disabled
   verbose: true
   log_train_out: false # whether to log the out dictionary
-  log_eval_out: false # whether to log the heldout eval metrics
 
 # Local logger
 local_logger:
   save_figures: true # currently unused
   save_train_out: true
-  save_eval_out: true
+  
