@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="fcp"
-label="baselines-v0"
+algo="brdiv"
+label="baselines-v1"
 
 # Create log directory if it doesn't exist
 mkdir -p results/teammate_generation_logs/${algo}/${label}
@@ -15,6 +15,7 @@ log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timesta
 # algorithms=(
 #     "brdiv"
 #     "fcp"
+#     "lbrdiv"
 # )
 
 # Tasks to run
@@ -24,7 +25,7 @@ tasks=(
     "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
-    # "lbf"
+    "lbf"
 )
 
 # Function to log messages
