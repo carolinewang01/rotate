@@ -103,12 +103,12 @@ def main(num_episodes,
         print(f"Total states in sequence after episode: {len(state_seq_all)}")
         
         # Calculate episode return
-        episode_return = sum(total_rewards.values())
+        episode_return = np.mean(list(total_rewards.values()))
         returns.append(episode_return)
         
         print(f"\nEpisode {episode + 1} finished:")
         print(f"Total steps: {num_steps}")
-        print(f"Episode return: {episode_return:.2f}")
+        print(f"Mean episode return: {episode_return:.2f}")
         print("Episode returns per agent:")
         for agent in env.agents:
             print(f" {agent}: {total_rewards[agent]:.2f}")
