@@ -4,9 +4,8 @@
 
 ### Evaluation
 - Create evaluation partners:
-    - Create heuristic population on LBF
-    - Create heuristic population on Overcooked
-
+    - Consider L-BRDiv partners? 
+    
 - Metrics: 
     - Implement RLiable metrics to visualize results
     - BRProx metric
@@ -23,7 +22,6 @@
 - Check if minimax return is better than minimax regret (Minimax AHT paper)
 
 ### Baselines 
-- Implement L-BRDiv - Arrasy
 - Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations)
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
@@ -31,6 +29,7 @@ If time permits:
 - Implement CoMeDi
 
 ### Clean Up Code: 
+- In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
     - Consider making ego and br nets the same 
@@ -49,7 +48,9 @@ Follow instructions at `install_instructions.md`
 - `envs/`: Environment implementations and wrappers
 - `evaluation/`: Evaluation and visualization scripts
 - `examples/`: Example usage scripts
-- `fcp/`: Fictitious Co-Play implementation
+- `ego_agent_training/`: all ego-agent implementations. Currently only PPO
+- `teammate_generation/`: teammate generation algorithms
+- `open_ended_training`: our open-ended learning methods
 - `ppo/`: IPPO algorithm implementation
 - `tests/`: Test scripts used during development.
 

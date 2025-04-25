@@ -14,12 +14,10 @@ from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPo
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
 from common.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -76,6 +74,8 @@ def train_paired_ued(config, env, partner_rng):
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
         config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (config["ROLLOUT_LENGTH"] *3)// config["NUM_ENVS"]
+        assert config["NUM_CONTROLLED_ACTORS"] % config["NUM_MINIBATCHES"] == 0, "NUM_CONTROLLED_ACTORS must be divisible by NUM_MINIBATCHES"
+        assert config["NUM_CONTROLLED_ACTORS"] >= config["NUM_MINIBATCHES"], "NUM_CONTROLLED_ACTORS must be >= NUM_MINIBATCHES"
 
         def linear_schedule(count):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
@@ -917,8 +917,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
 
     # Extract metrics for all agents
     # shape (num_seeds, num_updates, num_eval_episodes, num_agents_per_env)
-    avg_conf_returns_vs_ego = np.asarray(metrics["eval_ep_last_info_ego"]["returned_episode_returns"])[..., 0].mean(axis=(0, 2))
-    avg_conf_returns_vs_br = np.asarray(metrics["eval_ep_last_info_br"]["returned_episode_returns"])[..., 0].mean(axis=(0, 2))
+    avg_conf_returns_vs_ego = np.asarray(metrics["eval_ep_last_info_ego"]["returned_episode_returns"]).mean(axis=(0, 2, 3, 4))
+    avg_conf_returns_vs_br = np.asarray(metrics["eval_ep_last_info_br"]["returned_episode_returns"]).mean(axis=(0, 2, 3, 4))
     
     # Value losses
     # shape (num_seeds, num_updates, update_epochs, num_minibatches)
@@ -1003,9 +1003,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
 
-def run_paired_ued(config):
+def run_paired_ued(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
 
     # Create only one environment instance
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
@@ -1023,17 +1022,17 @@ def run_paired_ued(config):
     end_time = time.time()
     log.info(f"PAIRED-UED training completed in {end_time - start_time} seconds.")
 
-    # Run heldout evaluation 
-    log.info("Running heldout evaluation...")
-    ego_params = outs["final_params_ego"]
+    # Prepare return values for heldout evaluation
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, eval_rng)
-    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
+    # heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, wandb_logger, outs, metric_names)
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
+    # log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
 
-    # Cleanup
-    wandb_logger.close()
+    # # Cleanup
+    # wandb_logger.close()
+
+    return ego_policy, outs["final_params_ego"], init_ego_params

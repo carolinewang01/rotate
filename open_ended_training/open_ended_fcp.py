@@ -18,7 +18,6 @@ from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from ppo.ippo import make_train as make_ppo_train
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
-from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -125,8 +124,8 @@ def log_train_metrics(config, logger, outs,
         average_ego_entropy_losses = np.asarray(ego_metrics_iter["entropy_loss"]).mean(axis=(0, 2, 3))
                 
         # Process eval return metrics
-        all_ego_returns = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
-        average_ego_rets_per_iter = np.mean(all_ego_returns[..., 0], axis=(0, 2, 3))
+        all_ego_returns = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
+        average_ego_rets_per_iter = np.mean(all_ego_returns, axis=(0, 2, 3, 4))
                 
         # Log metrics for each ego update step
         for step in range(num_ego_updates):
@@ -154,12 +153,11 @@ def log_train_metrics(config, logger, outs,
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
     
-def run_fcp(config):
+def run_fcp(config, wandb_logger):
     '''
     Run the open-ended FCP training loop.
     '''
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
 
@@ -201,18 +199,13 @@ def run_fcp(config):
     end_time = time.time()
     log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
 
-    # Run heldout evaluation 
-    log.info("Running heldout evaluation...")
+    # Prepare return values for heldout evaluation
     _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
-    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
+    ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
     
     # Log metrics
     log.info("Logging metrics...")
     metric_names = get_metric_names(config["ENV_NAME"])
     log_train_metrics(config, wandb_logger, outs, metric_names, 
                       num_controlled_actors=algorithm_config["NUM_ENVS"])
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
-    
-    # Cleanup
-    wandb_logger.close()
+    return ego_policy, ego_params, init_ego_params

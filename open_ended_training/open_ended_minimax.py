@@ -532,7 +532,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
 
     # Process/extract minimax-specific losses    
     # shape (num_open_ended_iters, num_partner_seeds, num_updates, num_eval_episodes, num_agents_per_env)
-    avg_teammate_xp_returns = np.asarray(teammate_metrics["eval_ep_last_info_ego"]["returned_episode_returns"])[..., 0].mean(axis=(1, 3))
+    avg_teammate_xp_returns = np.asarray(teammate_metrics["eval_ep_last_info_ego"]["returned_episode_returns"]).mean(axis=(1, 3, 4))
 
     # Conf vs ego losses
     #  shape (num_open_ended_iters, num_partner_seeds, num_updates, update_epochs, num_minibatches)
@@ -545,7 +545,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     
     # Process ego-specific metrics
     # shape (num_open_ended_iters, num_ego_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
-    avg_ego_returns = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"])[..., 0].mean(axis=(1, 3, 4))
+    avg_ego_returns = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"]).mean(axis=(1, 3, 4, 5))
     # shape (num_open_ended_iters, num_ego_seeds, num_updates, update_epochs, num_minibatches)
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(1, 3, 4))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(1, 3, 4))
@@ -612,9 +612,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
         
-def run_minimax(config):
+def run_minimax(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
-    wandb_logger = Logger(config)
 
     # Create only one environment instance
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
@@ -659,16 +658,17 @@ def run_minimax(config):
     end_time = time.time()
     log.info(f"Open-ended minimax training completed in {end_time - start_time} seconds.")
 
-    # Run heldout evaluation 
-    log.info("Running heldout evaluation...")
+    # Prepare return values for heldout evaluation
     _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, 0, -1], ego_outs["checkpoints"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
-    heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
+    ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    # heldout_eval_metrics, ego_names, heldout_names = run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params)
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_metrics(config, wandb_logger, outs, metric_names)
-    log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
+    # log_heldout_metrics(config, wandb_logger, heldout_eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=True)
 
     # Cleanup
-    wandb_logger.close()
+    # wandb_logger.close()
+
+    return ego_policy, ego_params, init_ego_params

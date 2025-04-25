@@ -25,6 +25,9 @@ ANNEAL_LR: True
 logger: 
   project: open-ended-aht
   entity: aht-project
+  tags: 
+    - ippo
+    - "${ENV_NAME}"
   mode: offline # options: online, offline, disabled
   verbose: false
   log_train_out: false # whether to log the out dictionary

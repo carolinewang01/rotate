@@ -1,7 +1,7 @@
 # @package ego_train_algorithm
 # ^ tells hydra to place these value directly under ego_train_algorithm key
 EGO_ACTOR_TYPE: s5
-TOTAL_TIMESTEPS: 1e6
+TOTAL_TIMESTEPS: 1e7
 NUM_CHECKPOINTS: 5
 NUM_ENVS: 8
 LR: 1.e-4 

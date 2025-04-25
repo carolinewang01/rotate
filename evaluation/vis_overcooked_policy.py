@@ -2,19 +2,23 @@
 Script to rollout a policy for a given number of episodes on the overcooked environment.
 Differs from vis_lbf_policy.py in that it loads policies from ippo rather than fcp
 '''
+import os
+import re
+
 import jax
-from envs import make_env
-from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
 import jax.numpy as jnp
 
+from envs import make_env
 from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
+from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
+
 
 def rollout(ego_run_path, partner_run_path, 
             ego_seed_idx, partner_seed_idx,
             ego_checkpoint_idx, partner_checkpoint_idx,
             num_episodes, render,
-            savevideo, save_name, 
-            kwargs, verbose
+            kwargs, verbose,
+            savevideo, save_name, save_dir=None,
             ):
     env = make_env('overcooked-v1', env_kwargs=kwargs)
     action_dim = env.action_spaces['agent_0'].n
@@ -80,10 +84,14 @@ def rollout(ego_run_path, partner_run_path,
         
     if savevideo:
         print(f"\nSaving mp4 with {len(states)} frames...")
+        if save_dir is None: 
+            savepath = f"results/overcooked-v1/videos/{kwargs['layout']}/{save_name}.mp4"
+        else:
+            savepath = f"{save_dir}/{save_name}.mp4"
         viz = AdHocOvercookedVisualizer()
         viz.animate_mp4([s.env_state for s in states], env.agent_view_size, 
             highlight_agent_idx=0,
-            filename=f'results/overcooked-v1/videos/{kwargs["layout"]}_{save_name}.mp4', 
+            filename=savepath, 
             pixels_per_tile=32, fps=25)
         print("MP4 saved successfully!")
 
@@ -93,30 +101,39 @@ if __name__ == "__main__":
     SAVEVIDEO = True
     VERBOSE = False # whether or not we should print information at each step
     ENV_KWARGS = { # specify the layout for overcooked 
-        "layout": "counter_circuit",
-        "random_reset": False,
+        "layout": "coord_ring",
+        "random_reset": True,
+        "random_obj_state": True,
         "max_steps": 400
     }
 
-    ego_run_path = "eval_teammates/overcooked-v1/counter_circuit/ippo/2025-04-21_22-55-42/saved_train_run" # ippo agent, trained for 3e6 steps
+    ego_run_path = "eval_teammates/overcooked-v1/coord_ring/ippo/2025-04-21_22-58-26/saved_train_run"
     partner_run_path = ego_run_path # ippo training partner, trained for 3e6 steps
     
-    import re
     ego_name = re.findall("\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", ego_run_path)[0]
     partner_name = re.findall("\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", partner_run_path)[0]
 
-    save_name = f"ippo={ego_name}_partner={partner_name}"
-    
-    rollout(ego_run_path=ego_run_path, 
-            partner_run_path=partner_run_path,
-            ego_seed_idx=0,
-            partner_seed_idx=0,
-            ego_checkpoint_idx=-1, # use last checkpoint
-            partner_checkpoint_idx=-1, # use last checkpoint
-            num_episodes=NUM_EPISODES, 
-            render=RENDER, 
-            savevideo=SAVEVIDEO,
-            save_name=save_name,
-            kwargs=ENV_KWARGS,
-            verbose=VERBOSE
-            )
+    for ego_seed_idx in range(3):
+        # ego_seed_idx, ego_checkpoint_idx = 0, -1
+        # partner_seed_idx, partner_checkpoint_idx = 0, -1
+        ego_checkpoint_idx = -1
+        partner_seed_idx = ego_seed_idx
+        partner_checkpoint_idx = ego_checkpoint_idx
+
+        # save_name = f"ippo={ego_name}_partner={partner_name}"
+        save_name = f"seed={ego_seed_idx}_checkpoint={ego_checkpoint_idx}"
+
+        rollout(ego_run_path=ego_run_path, 
+                partner_run_path=partner_run_path,
+                ego_seed_idx=ego_seed_idx,
+                partner_seed_idx=partner_seed_idx,
+                ego_checkpoint_idx=ego_checkpoint_idx,
+                partner_checkpoint_idx=partner_checkpoint_idx,
+                num_episodes=NUM_EPISODES, 
+                render=RENDER, 
+                kwargs=ENV_KWARGS,
+                verbose=VERBOSE,
+                savevideo=SAVEVIDEO,
+                save_name=save_name,
+                save_dir=os.path.dirname(ego_run_path)
+                )
