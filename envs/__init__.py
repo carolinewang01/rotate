@@ -36,7 +36,7 @@ def make_env(env_name: str, env_kwargs: dict = {}):
                             **env_kwargs_copy,
                             viewer=AdHocLBFViewer(grid_size=generator_args["grid_size"],
                                                   **viewer_args))
-        env = JumanjiToJaxMARL(env)
+        env = JumanjiToJaxMARL(env, share_rewards=True)
         
     elif env_name == 'overcooked-v1':
         default_env_kwargs = {"random_reset": True, "random_obj_state": False, "max_steps": 400}
