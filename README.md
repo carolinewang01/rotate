@@ -31,6 +31,7 @@ If time permits:
 ### Clean Up Code: 
 - In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
 - Clean up (L)-BRDiv code
+    - Consider merging L-BRDiv and BRDiv implementations
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
 - Clean up IPPO: 
