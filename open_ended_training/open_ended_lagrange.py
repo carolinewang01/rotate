@@ -198,7 +198,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=-reward["agent_1"],
+                    reward=reward["agent_1"], # ego agent's return is negated in the loss function
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
