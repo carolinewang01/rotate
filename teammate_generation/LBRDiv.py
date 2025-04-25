@@ -559,7 +559,8 @@ def train_lbrdiv_partners(config, env, train_rng):
                 )
 
                 updated_train_states, total_loss = jax.lax.scan(
-                    _update_minbatch, (train_state_conf, train_state_br), (minibatches_conf, minibatches_br, repeated_lms_vertical, repeated_lms_horizontal)
+                    _update_minbatch, (train_state_conf, train_state_br), 
+                    (minibatches_conf, minibatches_br, repeated_lms_vertical, repeated_lms_horizontal)
                 )
 
                 pop_size = config["PARTNER_POP_SIZE"]
