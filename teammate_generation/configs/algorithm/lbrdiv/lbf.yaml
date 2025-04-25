@@ -2,9 +2,10 @@
     - lbrdiv/_base_
     - _self_ # values from this file override the values from the base file
 
-TOTAL_TIMESTEPS: 1e8
-LR: .0001
+TOTAL_TIMESTEPS: 3e7
+PARTNER_POP_SIZE: 3
+LR: 5e-4
 UPDATE_EPOCHS: 15
 NUM_MINIBATCHES: 4
-CLIP_EPS: 0.03
+CLIP_EPS: 0.05
 ENT_COEF: 0.01
