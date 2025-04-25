@@ -540,12 +540,6 @@ def train_brdiv_partners(config, env, train_rng):
                 return update_state, total_loss
 
             def _update_step(update_runner_state, unused):
-                """
-                1. Collect rollout for interactions against ego agent.
-                2. Collect rollout for interactions against br agent.
-                3. Compute advantages for ego-conf and conf-br interactions.
-                4. PPO updates for best response and confederate policies.
-                """
                 (
                     all_train_state_conf, all_train_state_br, rng, update_steps
                 ) = update_runner_state

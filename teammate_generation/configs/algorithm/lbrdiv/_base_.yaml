@@ -1,7 +1,7 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
 ALG: lbrdiv
-TOTAL_TIMESTEPS: 6e7  # divided among each pair of BR and Conf agents
+TOTAL_TIMESTEPS: 4.5e7  # divided among each pair of BR and Conf agents
 NUM_CHECKPOINTS: 5
 PARTNER_POP_SIZE: 4
 NUM_ENVS_SP: 32

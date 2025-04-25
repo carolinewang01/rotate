@@ -2,7 +2,7 @@ defaults:
   - lbrdiv/_base_
   - _self_ # values from this file override the values from the base file
 
-TOTAL_TIMESTEPS: 6e7
+TOTAL_TIMESTEPS: 9e7
 PARTNER_POP_SIZE: 3
 LR: 1e-3
 UPDATE_EPOCHS: 15

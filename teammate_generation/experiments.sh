@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="brdiv"
+algo="lbrdiv"
 label="baselines-v1"
 
 # Create log directory if it doesn't exist
