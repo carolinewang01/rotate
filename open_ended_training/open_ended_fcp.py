@@ -124,8 +124,8 @@ def log_train_metrics(config, logger, outs,
         average_ego_entropy_losses = np.asarray(ego_metrics_iter["entropy_loss"]).mean(axis=(0, 2, 3))
                 
         # Process eval return metrics
-        all_ego_returns = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
-        average_ego_rets_per_iter = np.mean(all_ego_returns[..., 0], axis=(0, 2, 3))
+        all_ego_returns = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
+        average_ego_rets_per_iter = np.mean(all_ego_returns, axis=(0, 2, 3, 4))
                 
         # Log metrics for each ego update step
         for step in range(num_ego_updates):

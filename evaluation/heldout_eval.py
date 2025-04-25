@@ -55,9 +55,9 @@ def log_heldout_metrics(config, logger, eval_metrics,
     table_data = []
     for metric_name in metric_names:
         # dim 0 could be the number of iterations, seeds, or checkpoints.
-        # shape of eval_metrics is (dim0, num_heldout_agents, num_eval_episodes, 2)
-        metric_mean = eval_metrics[metric_name][..., 0].mean(axis=(-1)) # shape (dim0, num_heldout_agents)
-        metric_std = eval_metrics[metric_name][..., 0].std(axis=(-1)) # shape (dim0, num_heldout_agents)
+        # shape of eval_metrics is (num_iter/num_seeds, num_heldout_agents, num_eval_episodes, 2)
+        metric_mean = eval_metrics[metric_name].mean(axis=(-2, -1)) # shape (num_iter/num_seeds, num_heldout_agents)
+        metric_std = eval_metrics[metric_name].std(axis=(-2, -1)) # shape (num_iter/num_seeds, num_heldout_agents)
         metric_ci = 1.96 * metric_std / np.sqrt(num_eval_episodes) # shape (dim0, num_heldout_agents)
         # log curve
         if log_dim0_as_curve:

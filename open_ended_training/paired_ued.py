@@ -917,8 +917,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
 
     # Extract metrics for all agents
     # shape (num_seeds, num_updates, num_eval_episodes, num_agents_per_env)
-    avg_conf_returns_vs_ego = np.asarray(metrics["eval_ep_last_info_ego"]["returned_episode_returns"])[..., 0].mean(axis=(0, 2))
-    avg_conf_returns_vs_br = np.asarray(metrics["eval_ep_last_info_br"]["returned_episode_returns"])[..., 0].mean(axis=(0, 2))
+    avg_conf_returns_vs_ego = np.asarray(metrics["eval_ep_last_info_ego"]["returned_episode_returns"]).mean(axis=(0, 2, 3, 4))
+    avg_conf_returns_vs_br = np.asarray(metrics["eval_ep_last_info_br"]["returned_episode_returns"]).mean(axis=(0, 2, 3, 4))
     
     # Value losses
     # shape (num_seeds, num_updates, update_epochs, num_minibatches)

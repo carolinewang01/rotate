@@ -100,7 +100,9 @@ def main(num_episodes,
     # agent0 = PlateAgent(layout=layout, p_plate_on_counter=0.) # red
     # agent1 = OnionAgent(layout=layout, p_onion_on_counter=0.) # blue
     agent0 = IndependentAgent(layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # red
-    agent1 = IndependentAgent(layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # blue
+    # agent1 = IndependentAgent(layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # blue
+
+    agent1 = StaticAgent(layout=layout) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())

@@ -509,10 +509,10 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     all_ego_actor_losses = np.asarray(train_metrics["actor_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
     all_ego_entropy_losses = np.asarray(train_metrics["entropy_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
 
-    #### Extract eval return metrics ####
-    # Process eval return metrics - average across ego seeds, eval episodes and training partners for each checkpoint
-    all_ego_returns = np.asarray(train_metrics["eval_ep_last_info"]["returned_episode_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, 1)
-    average_ego_rets_per_iter = np.mean(all_ego_returns[..., 0], axis=(0, 2, 3))
+    # Process eval return metrics - average across ego seeds, eval episodes,  training partners 
+    # and num_agents per game for each checkpoint
+    all_ego_returns = np.asarray(train_metrics["eval_ep_last_info"]["returned_episode_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, nuM_agents_per_game)
+    average_ego_rets_per_iter = np.mean(all_ego_returns, axis=(0, 2, 3, 4))
 
     # Process loss metrics - average across ego seeds, partners and minibatches dims
     # Loss metrics shape should be (n_ego_train_seeds, num_updates, ...)

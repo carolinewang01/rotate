@@ -234,9 +234,9 @@ def run_heldout_evaluation(config, print_metrics=False):
 
 def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names):
     '''Print a table of the mean and std of the metric for each ego agent and heldout agent.'''
-    num_eval_episodes = eval_metrics[metric_name][..., 0].shape[-1]
-    metric_data_mean = eval_metrics[metric_name][..., 0].mean(axis=-1) # shape (num_ego_agents, num_heldout_agents)
-    metric_data_std = eval_metrics[metric_name][..., 0].std(axis=-1) # shape (num_ego_agents, num_heldout_agents)
+    num_eval_episodes = eval_metrics[metric_name].shape[-2]
+    metric_data_mean = eval_metrics[metric_name].mean(axis=(-2, -1)) # shape (num_ego_agents, num_heldout_agents)
+    metric_data_std = eval_metrics[metric_name].std(axis=(-2, -1)) # shape (num_ego_agents, num_heldout_agents)
     metric_data_ci = 1.96 * metric_data_std / np.sqrt(num_eval_episodes) # shape (num_ego_agents, num_heldout_agents)
 
     table = PrettyTable()
