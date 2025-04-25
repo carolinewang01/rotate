@@ -198,7 +198,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=reward["agent_1"],
+                    reward=-reward["agent_1"],
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -457,7 +457,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     train_state_br = train_state_br.apply_gradients(grads=grads)
                     return train_state_br, (loss_val, aux_vals)
 
-                def _update_lagrange(train_state, minibatches_ego, 
+                def _update_lagrange(conf_train_state, minibatches_ego, 
                                      minibatches_0_br, lower_lm, upper_lm):
                     
                     traj_batches1, _, _ = minibatches_ego
@@ -465,7 +465,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
 
                     init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     _, (value_ego1, value_br1), _, _ = confederate_policy.get_action_value_policy(
-                            params=train_state.params, 
+                            params=conf_train_state.params, 
                             obs=traj_batches1.obs, 
                             done=traj_batches1.done,
                             avail_actions=traj_batches1.avail_actions,
@@ -474,7 +474,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                         )
                     
                     _, (value_ego2, value_br2), _, _ = confederate_policy.get_action_value_policy(
-                            params=train_state.params, 
+                            params=conf_train_state.params, 
                             obs=traj_batches2.obs, 
                             done=traj_batches2.done,
                             avail_actions=traj_batches2.avail_actions,
@@ -532,7 +532,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 )
 
                 lower_lm, upper_lm = _update_lagrange(
-                    old_train_state_conf, old_train_state_br, minibatches_ego, minibatches_br0, lower_lm, upper_lm
+                    old_train_state_conf, minibatches_ego, minibatches_br0, lower_lm, upper_lm
                 )
 
                 update_state = (train_state_conf, train_state_br, 

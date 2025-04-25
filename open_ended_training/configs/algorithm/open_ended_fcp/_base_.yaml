@@ -2,9 +2,9 @@
 # ^ tells hydra to place these value directly under algorithm key
 
 ALG: open_ended_fcp
-TIMESTEPS_PER_ITER_PARTNER: 1e6 # per iter of open-ended training, divided between all partner seeds
+TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
-NUM_OPEN_ENDED_ITERS: 20
+NUM_OPEN_ENDED_ITERS: 30
 NUM_CHECKPOINTS: 5 # per iter of open-ended training
 PARTNER_POP_SIZE: 3 # Since FCP is trained against all checkpoints of partners, true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
 NUM_ENVS: 16
