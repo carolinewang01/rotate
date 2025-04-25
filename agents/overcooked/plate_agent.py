@@ -16,8 +16,8 @@ class PlateAgent(BaseAgent):
     Currently, only the "nearest" preference works. 
     """
     
-    def __init__(self, agent_id: int, layout: Dict[str, Any], p_plate_on_counter: float = 0.1, pref: str="nearest"):
-        super().__init__(agent_id, layout)
+    def __init__(self, layout: Dict[str, Any], p_plate_on_counter: float = 0.1, pref: str="nearest"):
+        super().__init__(layout)
         self.p_plate_on_counter = p_plate_on_counter
         self.pref = pref
         
@@ -99,6 +99,7 @@ class PlateAgent(BaseAgent):
         
         # Create new state with updated key and goal, preserving other state values
         updated_agent_state = AgentState(
+            agent_id=agent_state.agent_id,
             holding=agent_state.holding,
             goal=new_goal,
             nonfull_pots=agent_state.nonfull_pots,

@@ -72,9 +72,9 @@ class AgentPopulation:
             rngs_batched)
         return actions, new_hstate
     
-    def init_hstate(self, n: int):
+    def init_hstate(self, n: int, aux_info: dict=None):
         '''Initialize the hidden state for n members of the population.'''
-        return self.policy_cls.init_hstate(n)
+        return self.policy_cls.init_hstate(n, aux_info)
 
 
 class AgentPolicy(abc.ABC):
@@ -131,8 +131,15 @@ class AgentPolicy(abc.ABC):
         """
         pass
 
-    def init_hstate(self, batch_size) -> chex.Array:
-        """Initialize the hidden state for the policy."""
+    def init_hstate(self, batch_size, aux_info: dict=None) -> chex.Array:
+        """Initialize the hidden state for the policy.
+        Args:
+            batch_size: int, the batch size of the hidden state
+            aux_info: any auxiliary information needed to initialize the hidden state at the 
+            start of an episode (e.g. the agent id). 
+        Returns:
+            chex.Array: the initialized hidden state
+        """
         return None
     
     def init_params(self, rng) -> Dict:
@@ -313,7 +320,7 @@ class RNNActorCriticPolicy(AgentPolicy):
         action = pi.sample(seed=rng)
         return action, val, pi, new_hstate
     
-    def init_hstate(self, batch_size):
+    def init_hstate(self, batch_size, aux_info=None):
         """Initialize hidden state for the RNN policy."""
         return ScannedRNN.initialize_carry(batch_size, self.gru_hidden_dim)
     
@@ -423,7 +430,7 @@ class S5ActorCriticPolicy(AgentPolicy):
         action = pi.sample(seed=rng)
         return action, val, pi, new_hstate
     
-    def init_hstate(self, batch_size):
+    def init_hstate(self, batch_size, aux_info=None):
         """Initialize hidden state for the S5 policy."""
         return StackedEncoderModel.initialize_carry(batch_size, self.ssm_size // 2, self.n_layers)
     

@@ -31,6 +31,7 @@ class Goal:
 @struct.dataclass
 class AgentState:
     """Agent state for the heuristic agent."""
+    agent_id: int
     holding: int
     goal: int
     nonfull_pots: jnp.ndarray  # Boolean array of length num_pots indicating which pots are not full
@@ -39,16 +40,8 @@ class AgentState:
 
 class BaseAgent:
     """A base heuristic agent for the Overcooked environment.
-    
-    Agent ideas: 
-    - Agent that simply tries to stay out of way of other agent
-    - Agent that gets onions and places them in pot
-    - Agent that gets plate and attempts to deliver soup when ready.
-    - Agent that create and deliver soups.
     """
-    
-    def __init__(self, agent_id: int, layout: Dict[str, Any]):
-        self.agent_id = agent_id
+    def __init__(self, layout: Dict[str, Any]):
         self.map_width = layout["width"]
         self.map_height = layout["height"]
 
@@ -59,13 +52,14 @@ class BaseAgent:
         
         self.obs_shape = (self.map_height, self.map_width, 26)  # Overcooked uses 26 channels
 
-        # Initial state - will be passed into and returned from get_action
-        self.initial_state = AgentState(
+    def init_agent_state(self, agent_id: int) -> AgentState:
+        return AgentState(
+            agent_id=agent_id,
             holding=Holding.nothing,
             goal=Goal.get_onion,
             nonfull_pots=jnp.ones(self.num_pots, dtype=bool),  # Initially all pots are non-full
             soup_ready=False,
-            rng_key=jax.random.PRNGKey(self.agent_id)
+            rng_key=jax.random.PRNGKey(agent_id)
         )
 
     def get_name(self):
@@ -109,7 +103,7 @@ class BaseAgent:
         soup_ready = jnp.any(soup_ready_layer > 0)
 
         # Update holding based on agent inventory information
-        inv_idx = env_state.agent_inv[self.agent_id] # an integer coding the object in the agent's inventory
+        inv_idx = env_state.agent_inv[agent_state.agent_id] # an integer coding the object in the agent's inventory
         
         # Map inventory values (1, 3, 5, 9) to Holding enum values (0, 1, 2, 3)
         holding = lax.cond(
@@ -132,6 +126,7 @@ class BaseAgent:
                     
         # Create updated state
         updated_agent_state = AgentState(
+            agent_id=agent_state.agent_id,
             holding=holding,
             goal=agent_state.goal,
             nonfull_pots=nonfull_pots,

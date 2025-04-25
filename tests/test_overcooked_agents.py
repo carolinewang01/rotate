@@ -31,8 +31,8 @@ def run_episode(env, agent0, agent1, key) -> Tuple[Dict[str, float], int]:
     num_steps = 0
     
     # Initialize agent states
-    agent0_state = agent0.initial_state
-    agent1_state = agent1.initial_state
+    agent0_state = agent0.init_agent_state(0)
+    agent1_state = agent1.init_agent_state(1)
 
     agent0_name = agent0.get_name()
     agent1_name = agent1.get_name()
@@ -97,8 +97,10 @@ def main(num_episodes,
     
     # Initialize agents
     print("Initializing agents...")
-    agent0 = IndependentAgent(agent_id=0, layout=layout, p_onion_on_counter=0.6, p_plate_on_counter=0.6) # red
-    agent1 = IndependentAgent(agent_id=1, layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # blue
+    # agent0 = PlateAgent(layout=layout, p_plate_on_counter=0.) # red
+    # agent1 = OnionAgent(layout=layout, p_onion_on_counter=0.) # blue
+    agent0 = IndependentAgent(layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # red
+    agent1 = IndependentAgent(layout=layout, p_onion_on_counter=0., p_plate_on_counter=0.) # blue
     print("Agents initialized")
     
     print("Agent 0:", agent0.get_name())
@@ -107,30 +109,39 @@ def main(num_episodes,
     # Run multiple episodes
     key = jax.random.PRNGKey(0)
     
-    # Initialize returns list
-    base_returns = []
+    # Initialize returns lists for each agent
+    base_returns_agent0 = []
+    base_returns_agent1 = []
     
     state_seq_all = []
     for episode in range(num_episodes):
         print(f"\nEpisode {episode + 1}/{num_episodes}")
         key, subkey = jax.random.split(key)
         total_shaped_rewards, total_base_rewards, num_steps, ep_states = run_episode(env, agent0, agent1, subkey)
-        state_seq_all.extend(ep_states)  # Changed from += to extend for better list handling
+        state_seq_all.extend(ep_states)
         print(f"Total states in sequence after episode: {len(state_seq_all)}")
         
-        # Calculate episode return
-        episode_base_return = total_base_rewards["agent_0"]
-        base_returns.append(episode_base_return)
+        # Track returns for each agent separately
+        episode_base_return_agent0 = total_base_rewards["agent_0"]
+        episode_base_return_agent1 = total_base_rewards["agent_1"]
+        base_returns_agent0.append(episode_base_return_agent0)
+        base_returns_agent1.append(episode_base_return_agent1)
         
         print(f"\nEpisode {episode + 1} finished:")
         print(f"Total steps: {num_steps}")
-        print(f"Avg base return: {episode_base_return:.2f}")
+        print(f"Agent 0 base return: {episode_base_return_agent0:.2f}")
+        print(f"Agent 1 base return: {episode_base_return_agent1:.2f}")
     
-    # Print statistics
-    mean_return = np.mean(episode_base_return)
-    std_return = np.std(episode_base_return)
+    # Print statistics for each agent
+    mean_return_agent0 = np.mean(base_returns_agent0)
+    std_return_agent0 = np.std(base_returns_agent0)
+    mean_return_agent1 = np.mean(base_returns_agent1)
+    std_return_agent1 = np.std(base_returns_agent1)
+    
     print(f"\nStatistics across {num_episodes} episodes:")
-    print(f"Mean return: {mean_return:.2f} ± {std_return:.2f}")
+    print(f"Agent 0 - Mean return: {mean_return_agent0:.2f} ± {std_return_agent0:.2f}")
+    print(f"Agent 1 - Mean return: {mean_return_agent1:.2f} ± {std_return_agent1:.2f}")
+    print(f"Total mean return: {(mean_return_agent0 + mean_return_agent1):.2f} ± {np.sqrt(std_return_agent0**2 + std_return_agent1**2):.2f}")
 
     # Visualize state sequences
     if visualize:
@@ -156,10 +167,10 @@ if __name__ == "__main__":
 
     layout_names = [
         # "cramped_room", 
-        # "asymm_advantages", 
+        "asymm_advantages", 
         # "coord_ring", 
         # "counter_circuit", 
-        "forced_coord"
+        # "forced_coord"
                     ]
 
 

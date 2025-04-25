@@ -7,7 +7,7 @@ from prettytable import PrettyTable
 from functools import partial
 import time
 
-from agents.lbf.agent_policy_wrappers import LBFRandomPolicyWrapper
+from agents.lbf.agent_policy_wrappers import LBFRandomPolicyWrapper, LBFSequentialFruitPolicyWrapper
 from agents.overcooked.agent_policy_wrappers import (OvercookedIndependentPolicyWrapper, 
     OvercookedOnionPolicyWrapper,
     OvercookedPlatePolicyWrapper,
@@ -74,7 +74,7 @@ def extract_params(params, init_params, idx_labels=None):
     
     return model_list, flattened_idx_labels
 
-def load_heldout_set(heldout_config, env, task_name, env_kwargs,rng):
+def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
     '''Load heldout evaluation agents from config.
     Returns a dictionary of agents with keys as agent names and values as tuples of (policy, params, test_mode).
     '''
@@ -94,7 +94,18 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs,rng):
         # Load non-RL-based heuristic agents
         elif task_name == 'lbf':
             if agent_config["actor_type"] == 'random_agent':
-                policy = LBFRandomPolicyWrapper()
+                policy = LBFRandomPolicyWrapper(using_log_wrapper=True)
+            elif agent_config["actor_type"] == 'seq_agent':
+                # Get grid size and num fruits from environment
+                grid_size = env_kwargs.get("grid_size", 7)
+                num_fruits = env_kwargs.get("num_fruits", 3)
+                ordering_strategy = agent_config.get("ordering_strategy", "lexicographic")
+                policy = LBFSequentialFruitPolicyWrapper(
+                    grid_size=grid_size,
+                    num_fruits=num_fruits,
+                    ordering_strategy=ordering_strategy,
+                    using_log_wrapper=True
+                )
 
         elif 'overcooked-v1' in task_name:
             aug_layout_dict = augmented_layouts[env_kwargs["layout"]]

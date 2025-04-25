@@ -30,6 +30,24 @@ heldout_set:
       idx_list: [0, 1]
       ckpt_key: final_params_conf
       POP_SIZE: 3
+    seq_agent_lexi:
+      actor_type: seq_agent
+      ordering_strategy: lexicographic
+    seq_agent_rlexi:
+      actor_type: seq_agent
+      ordering_strategy: reverse_lexicographic
+    seq_agent_col:
+      actor_type: seq_agent
+      ordering_strategy: column_major
+    seq_agent_rcol:
+      actor_type: seq_agent
+      ordering_strategy: reverse_column_major
+    seq_agent_nearest:
+      actor_type: seq_agent
+      ordering_strategy: nearest_agent
+    seq_agent_farthest:
+      actor_type: seq_agent
+      ordering_strategy: farthest_agent
   overcooked-v1/cramped_room: # DONE - DO NOT MODIFY
     ippo_mlp: 
       path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"

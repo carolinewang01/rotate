@@ -15,8 +15,8 @@ def run_single_episode(rng, env, agent_0_param, agent_0_policy,
     init_done = {k: jnp.zeros((1), dtype=bool) for k in env.agents + ["__all__"]}
     
     # Initialize hidden states
-    init_hstate_0 = agent_0_policy.init_hstate(1)
-    init_hstate_1 = agent_1_policy.init_hstate(1)
+    init_hstate_0 = agent_0_policy.init_hstate(1, aux_info={"agent_id": 0})
+    init_hstate_1 = agent_1_policy.init_hstate(1, aux_info={"agent_id": 1})
 
     # Get agent obses
     obs_0 = obs["agent_0"]
