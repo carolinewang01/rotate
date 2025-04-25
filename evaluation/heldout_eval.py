@@ -70,9 +70,15 @@ def log_heldout_metrics(config, logger, eval_metrics,
         
     # log table where the columns are the metric names and the rows are the heldout agents vs the last ego agent
     table_data = np.array(table_data) # shape (num_metrics, num_heldout_agents)
-    logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data, 
-                         columns=list(heldout_names), rows=list(metric_names))
-    logger.commit()
+    # Add metric names as first column
+    # logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data, 
+    #                      columns=list(heldout_names), rows=list(metric_names))
+    # logger.commit()
+
+    metric_names_array = np.array(metric_names).reshape(-1, 1)  # Convert to column vector
+    table_data_with_names = np.hstack((metric_names_array, table_data))
+    logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data_with_names, 
+                         columns=["Metric"] + list(heldout_names), commit=True)
 
     # Saving artifacts
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir

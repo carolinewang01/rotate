@@ -11,7 +11,7 @@ def get_metric_names(env_name):
     elif env_name == "overcooked-v1":
         return ("base_return", "returned_episode_returns")
     else:
-        return ("returned_episode_returns", "returned_episode_lengths")
+        return ("returned_episode_returns",)
 
 @partial(jax.jit, static_argnames=['stats'])
 def get_stats(metrics, stats: tuple):
