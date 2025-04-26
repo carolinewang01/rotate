@@ -15,7 +15,7 @@
     Would it be comparable between different training runs? 
 
 ### Method Exploration: 
-- Add regret bounds to open-ended PAIRED (Arrasy)
+- OE-Minimax, OE-PAIRED and OE-Lagrange: do we want to train multiple seeds of partners? Do we want to train against the last checkpoint or the first?
 - Allow population size to expand between open-ended iterations
 - Try initializing open-ended learning from BRDiv ego agent
 - Try initializing confederate/br agents to the ego agent; try NOT re-initializing the conf/br agents

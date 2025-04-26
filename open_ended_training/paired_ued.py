@@ -965,6 +965,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
         # Log returns for different agent interactions
         logger.log_item("Eval/ConfReturn-Against-Ego", avg_conf_returns_vs_ego[step], train_step=step)
         logger.log_item("Eval/ConfReturn-Against-BR", avg_conf_returns_vs_br[step], train_step=step)
+        logger.log_item("Eval/EgoRegret", avg_conf_returns_vs_br[step] - avg_conf_returns_vs_ego[step], train_step=step)
         
         # Confederate losses
         logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_conf_vs_ego[step], train_step=step)

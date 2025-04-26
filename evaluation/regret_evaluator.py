@@ -906,6 +906,7 @@ def log_metrics(config, env, logger, train_out, metric_names: tuple):
         # Eval metrics
         logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[step], train_step=step)
         logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[step], train_step=step)
+        logger.log_item("Eval/EgoRegret", avg_teammate_sp_returns[step] - avg_teammate_xp_returns[step], train_step=step)
         
         # Confederate losses
         logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[step], train_step=step)

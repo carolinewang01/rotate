@@ -526,7 +526,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
         for stat_name, stat_data in train_stats.items():
             # second dimension contains the mean and std of the metric
             stat_mean = stat_data[step, 0]
-            logger.log_item(f"Train/{stat_name}", stat_mean, train_step=step, commit=True)
+            logger.log_item(f"Train/Ego{stat_name}", stat_mean, train_step=step, commit=True)
 
         logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], train_step=step, commit=True)
         logger.log_item("Train/EgoValueLoss", average_ego_value_losses[step], train_step=step, commit=True)
