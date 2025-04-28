@@ -1,6 +1,5 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
-
 ALG: open_ended_lagrange
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
