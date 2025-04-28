@@ -201,9 +201,6 @@ def train_lbrdiv_partners(train_rng, env, config):
                 indiv_ego_rew_compute = lambda conf_id, br_id, agent0_rew: jax.lax.cond(jnp.equal(
                     jnp.argmax(conf_id, axis=-1), jnp.argmax(br_id, axis=-1)
                 ), lambda x: x, lambda x: -x, agent0_rew)
-
-                agent_0_rews = jax.vmap(indiv_conf_rew_compute)(conf_agent_id, br_agent_id, reward["agent_1"])
-                agent_1_rews = jax.vmap(indiv_ego_rew_compute)(conf_agent_id, br_agent_id, reward["agent_0"])
                 
                 # Store agent_0 data in transition
                 transition_0 = XPTransition(
@@ -212,7 +209,7 @@ def train_lbrdiv_partners(train_rng, env, config):
                     value=val_0,
                     self_id=conf_agent_id,
                     oppo_id=br_agent_id,
-                    reward=agent_0_rews,
+                    reward=reward["agent_1"],
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -225,7 +222,7 @@ def train_lbrdiv_partners(train_rng, env, config):
                     value=val_1,
                     self_id=br_agent_id,
                     oppo_id=conf_agent_id,
-                    reward=agent_1_rews,
+                    reward=reward["agent_1"],
                     log_prob=logp_1,
                     obs=obs_1,
                     info=info_1,
