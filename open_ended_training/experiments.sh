@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_fcp"
-label="baselines-v1"
+algo="open_ended_minimax"
+label="paper-v0"
 num_seeds=3
 
 # Create log directory if it doesn't exist
