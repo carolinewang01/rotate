@@ -1,8 +1,8 @@
-import os
 import shutil
 import time
 import logging
 from typing import NamedTuple
+from functools import partial
 
 import hydra
 import jax
@@ -35,7 +35,7 @@ class XPTransition(NamedTuple):
     info: jnp.ndarray
     avail_actions: jnp.ndarray
 
-def train_brdiv_partners(config, env, train_rng):
+def train_brdiv_partners(train_rng, env, config):
     num_agents = env.num_agents
     assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
 
@@ -756,11 +756,13 @@ def train_brdiv_partners(config, env, train_rng):
 
 def get_brdiv_population(config, out, env):
     '''
-    Get the flattened partner params and partner population for ego training.
+    Get the partner params and partner population for ego training.
     '''
     brdiv_pop_size = config["algorithm"]["PARTNER_POP_SIZE"]
 
-    partner_params = out['final_params_conf'] # shape is (brdiv_pop_size, ...)
+    # partner_params has shape (num_seeds, brdiv_pop_size, ...)
+    partner_params = out['final_params_conf']
+    
     partner_policy = ActorWithConditionalCriticPolicy(
         action_dim=env.action_space(env.agents[1]).n,
         obs_dim=env.observation_space(env.agents[1]).shape[0],
@@ -784,8 +786,20 @@ def run_brdiv(config, wandb_logger):
 
     log.info("Starting BRDiv training...")
     start = time.time()
-    train_rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
-    out = train_brdiv_partners(algorithm_config, env, train_rng)
+    
+    # Generate multiple random seeds from the base seed
+    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
+    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
+    
+    # Create a vmapped version of train_brdiv_partners
+    with jax.disable_jit(False):
+        vmapped_train_fn = jax.jit(
+            jax.vmap(
+                partial(train_brdiv_partners, env=env, config=algorithm_config)
+            )
+        )
+        out = vmapped_train_fn(rngs)
+    
     end = time.time()
     log.info(f"BRDiv training complete in {end - start} seconds")
 
@@ -810,40 +824,43 @@ def compute_sp_mask_and_ids(pop_size):
 
 def log_metrics(config, outs, logger, metric_names: tuple):
     metrics = outs["metrics"]
-    num_updates, _, _, pop_size = metrics["pg_loss_conf_agent"].shape # number of trained pairs
+    # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
+    num_seeds, num_updates, _, _, pop_size = metrics["pg_loss_conf_agent"].shape # number of trained pairs
 
     ### Log evaluation metrics
     # we plot XP return curves separately from SP return curves 
-    # shape (num_updates, (pop_size)^2, num_eval_episodes, 1)
+    # shape (num_seeds, num_updates, (pop_size)^2, num_eval_episodes, 1)
     all_returns = np.asarray(metrics["eval_ep_last_info"])
     xs = list(range(num_updates))
     
     sp_mask, agent_id_cartesian_product = compute_sp_mask_and_ids(pop_size)
-    sp_returns = all_returns[:, sp_mask]
-    xp_returns = all_returns[:, ~sp_mask]
+    sp_returns = all_returns[:, :, sp_mask]
+    xp_returns = all_returns[:, :, ~sp_mask]
     
-    sp_return_curve = sp_returns.mean(axis=(1, 2, 3))
-    xp_return_curve = xp_returns.mean(axis=(1, 2, 3))
+    # Average over seeds, then over agent pairs and episodes
+    sp_return_curve = sp_returns.mean(axis=(0, 2, 3, 4))
+    xp_return_curve = xp_returns.mean(axis=(0, 2, 3, 4))
 
     for step in range(num_updates):
         logger.log_item("Eval/AvgSPReturnCurve", sp_return_curve[step], train_step=step)
         logger.log_item("Eval/AvgXPReturnCurve", xp_return_curve[step], train_step=step)
     logger.commit()
 
-    # log final XP matrix to wandb
-    last_returns_array = all_returns[-1].mean(axis=(1, 2))
+    # log final XP matrix to wandb - average over seeds
+    last_returns_array = all_returns[:, -1].mean(axis=(0, 2, 3))
     last_returns_array = np.reshape(last_returns_array, (pop_size, pop_size))
     logger.log_xp_matrix("Eval/LastXPMatrix", last_returns_array)
 
     ### Log population loss as multi-line plots, where each line is a different population member
-    # shape (num_updates, update_epochs, num_minibatches, pop_size)
+    # shape (num_seeds, num_updates, update_epochs, num_minibatches, pop_size)
+    # Average over seeds
     processed_losses = {
-        "ConfPGLoss": np.asarray(metrics["pg_loss_conf_agent"]).mean(axis=(1, 2)).transpose(),
-        "BRPGLoss": np.asarray(metrics["pg_loss_br_agent"]).mean(axis=(1, 2)).transpose(),
-        "ConfValLoss": np.asarray(metrics["value_loss_conf_agent"]).mean(axis=(1, 2)).transpose(),
-        "BRValLoss": np.asarray(metrics["value_loss_br_agent"]).mean(axis=(1, 2)).transpose(),
-        "ConfEntropy": np.asarray(metrics["entropy_conf"]).mean(axis=(1, 2)).transpose(),
-        "BREntropy": np.asarray(metrics["entropy_br"]).mean(axis=(1, 2)).transpose(),
+        "ConfPGLoss": np.asarray(metrics["pg_loss_conf_agent"]).mean(axis=(0, 2, 3)).transpose(),
+        "BRPGLoss": np.asarray(metrics["pg_loss_br_agent"]).mean(axis=(0, 2, 3)).transpose(),
+        "ConfValLoss": np.asarray(metrics["value_loss_conf_agent"]).mean(axis=(0, 2, 3)).transpose(),
+        "BRValLoss": np.asarray(metrics["value_loss_br_agent"]).mean(axis=(0, 2, 3)).transpose(),
+        "ConfEntropy": np.asarray(metrics["entropy_conf"]).mean(axis=(0, 2, 3)).transpose(),
+        "BREntropy": np.asarray(metrics["entropy_br"]).mean(axis=(0, 2, 3)).transpose(),
     }
     
     xs = list(range(num_updates))

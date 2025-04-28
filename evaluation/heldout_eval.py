@@ -87,7 +87,8 @@ def eval_2d_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_par
     final_metrics = jax.tree.map(lambda x: x.transpose(1, 2, 0, 3, 4), final_metrics)
     return final_metrics
 
-def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params, ego_as_2d: bool, ego_test_mode=False):
+def run_heldout_evaluation(config, ego_policy, ego_params, init_ego_params, 
+                           ego_as_2d: bool, ego_test_mode=False):
     '''Run heldout evaluation given an ego policy, ego params, and init_ego_params.
     Ego_params can be a pytree of shape (num_seeds, num_oel_iters, ...) or (num_seeds, ...).
     Args:

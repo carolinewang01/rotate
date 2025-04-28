@@ -225,7 +225,7 @@ def run_heldout_evaluation(config, print_metrics=False):
     eval_metrics = eval_egos_vs_heldouts(
         config, env, eval_rng, config["global_heldout_settings"]["NUM_EVAL_EPISODES"], 
         ego_policy, flattened_ego_params, heldout_agent_list, ego_test_mode)
-    import pdb; pdb.set_trace()
+
     if print_metrics:
         # each leaf of eval_metrics has shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
         metric_names = get_metric_names(config["ENV_NAME"])
