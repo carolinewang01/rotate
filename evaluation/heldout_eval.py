@@ -147,7 +147,8 @@ def log_heldout_metrics(config, logger, eval_metrics,
     algo_name_array = np.full_like(metric_names_array, algo_name)
     # Add algo name column to the table data
     table_data_with_names = np.hstack((algo_name_array, metric_names_array, table_data))
-    logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data_with_names, 
+    aggregate_stat = config["global_heldout_settings"]["AGGREGATE_STAT"]
+    logger.log_xp_matrix(f"HeldoutEval/FinalEgoVsHeldout-{aggregate_stat.capitalize()}-CI", table_data_with_names, 
                          columns=["Algorithm", "Metric"] + list(heldout_names), commit=True)
 
     # Saving artifacts

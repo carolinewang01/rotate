@@ -33,17 +33,19 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
     all_metrics = []
     
     # Split RNG for each heldout agent
-    rngs = jax.random.split(rng, num_heldout_agents)
+    rng, sub_rng = jax.random.split(rng)
+    outer_heldout_rngs = jax.random.split(sub_rng, num_heldout_agents)
     
     # Double for loop implementation is necessary because the heldout agents have heterogeneous policy and 
     # param structures. 
     for i in range(num_heldout_agents):
         heldout_agent1 = heldout_agent_list[i]
         policy1, param1, test_mode1 = heldout_agent1
-        rng1 = rngs[i]
+        rng1 = outer_heldout_rngs[i]
         
         # Split RNG for each heldout partner
-        partner_rngs = jax.random.split(rng1, num_heldout_agents)
+        rng1, sub_rng1 = jax.random.split(rng1)
+        partner_rngs = jax.random.split(sub_rng1, num_heldout_agents)
         
         partner_i_metrics = []
         for j in range(num_heldout_agents):

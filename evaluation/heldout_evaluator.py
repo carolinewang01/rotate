@@ -167,7 +167,8 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
 
     # Outer Python loop over heterogeneous heldout partners
     all_metrics_for_partners = []
-    partner_rngs = jax.random.split(rng, num_partner_total)
+    rng, sub_rng = jax.random.split(rng)
+    partner_rngs = jax.random.split(sub_rng, num_partner_total)
     start_time = time.time()
 
     for partner_idx in range(num_partner_total):
@@ -240,7 +241,7 @@ def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, agg
     '''Generate a table of the aggregate stat and CI of the metric for each ego agent and heldout agent.'''
     # eval_metrics[metric_name] shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
     # we first take the mean over the num_agents_per_env dimension
-    eval_metric_data = np.array(eval_metrics[metric_name]).mean(axis=-1) # shape (num_ego_agents, num_heldout_agents, num_eval_episodes)
+    eval_metric_data = np.array(eval_metrics[metric_name]).mean(axis=-1) # shape (num_ego_agents, num_heldout_agents, num_eval_episodes, 2)
     table = PrettyTable()
     table.field_names = ["---", *heldout_names]
 
