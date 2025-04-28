@@ -2,8 +2,8 @@
 
 # Algorithm to run
 algo="open_ended_paired"
-label="baselines-v1" # "paper-v0"
-num_seeds=1
+label="paper-v0"
+num_seeds=3
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}

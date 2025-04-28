@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="fcp"
-label="baselines-v1" # paper-v0
-num_seeds=1
+algo="brdiv"
+label="paper-v0"
+num_seeds=3
 
 # Create log directory if it doesn't exist
 mkdir -p results/teammate_generation_logs/${algo}/${label}
