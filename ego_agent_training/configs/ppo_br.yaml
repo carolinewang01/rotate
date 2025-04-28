@@ -9,12 +9,15 @@ ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
 TASK_NAME: ${task.TASK_NAME}
 
 partner_agent:
-  ippo_mlp: 
-    path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"
-    actor_type: mlp
-    ckpt_key: final_params
-    idx_list: [0]
-    test_mode: true
+  onion_agent_0.1:  
+    actor_type: onion_agent
+    p_onion_on_counter: 0.1
+  # ippo_mlp: 
+  #   path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"
+  #   actor_type: mlp
+  #   ckpt_key: final_params
+  #   idx_list: [0]
+  #   test_mode: true
 
 algorithm:
   ALG: ppo_br
