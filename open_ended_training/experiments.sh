@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="paired_ued"
-label="baselines-v0"
+algo="open_ended_lagrange"
+label="baselines-v1"
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}
@@ -13,6 +13,7 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Available algorithms (commented out for reference)
 # algorithms=(
+#     "open_ended_lagrange"
 #     "open_ended_minimax"
 #     "open_ended_paired"
 #     "paired_ued"
@@ -26,6 +27,7 @@ tasks=(
     "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
+    "lbf"
 )
 
 # Function to log messages

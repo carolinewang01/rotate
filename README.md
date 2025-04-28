@@ -3,12 +3,12 @@
 ## TODOs
 
 ### Evaluation
-- Create evaluation partners:
-    - Consider L-BRDiv partners? 
-    
+- Compute BR's to all generated population members    
 - Metrics: 
-    - Implement RLiable metrics to visualize results
+    - Implement RLiable IQM + bootstrapped CI's
     - BRProx metric
+    - Convert main log_metrics() function to log IQMs instead of means (current issue is the get_stats function, which manually
+    computes the mean and std)
     
 - Regret-based evaluator: 
     - The learning procedure been implemented, but can we compute/plot the actual regret number? 

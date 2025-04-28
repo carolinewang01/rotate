@@ -18,6 +18,7 @@ from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 from common.run_episodes import run_episodes
 from common.tree_utils import tree_stack
 from common.plot_utils import get_metric_names
+from common.stat_utils import compute_aggregate_stat_and_ci_per_task
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from envs.overcooked.augmented_layouts import augmented_layouts
@@ -143,16 +144,18 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
     return heldout_agents
 
 
-def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params, heldout_agent_list, ego_test_mode=False):
-    '''Evaluate all ego agents against all heldout partners using vmap over egos.'''
-    
+def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params, 
+                          heldout_agent_list, ego_test_mode=False):
+    '''Evaluate all ego agents against all heldout partners using vmap over egos.
+    Ego_params must be a pytree of shape (num_ego_agents, ...)
+    '''
     num_agents = env.num_agents
     assert num_agents == 2, "This eval code assumes exactly 2 agents."
 
     num_ego_agents = jax.tree.leaves(ego_params)[0].shape[0]
     num_partner_total = len(heldout_agent_list)
 
-    def _eval_one_ego_vs_one_partner(single_ego_policy, single_ego_params, rng_for_ego,
+    def _eval_ego_vs_one_partner(single_ego_policy, single_ego_params, rng_for_ego,
                                      heldout_policy, heldout_params, heldout_test_mode):
         return run_episodes(rng_for_ego, env,
                             agent_0_policy=single_ego_policy, agent_0_param=single_ego_params,
@@ -172,7 +175,7 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
         ego_rngs = jax.random.split(partner_rngs[partner_idx], num_ego_agents)
 
         # Use partial to fix the heldout agent for the function being vmapped
-        func_to_vmap = partial(_eval_one_ego_vs_one_partner,
+        func_to_vmap = partial(_eval_ego_vs_one_partner,
                                heldout_policy=heldout_policy,
                                heldout_params=heldout_params,
                                heldout_test_mode=heldout_test_mode)
@@ -222,27 +225,31 @@ def run_heldout_evaluation(config, print_metrics=False):
     eval_metrics = eval_egos_vs_heldouts(
         config, env, eval_rng, config["global_heldout_settings"]["NUM_EVAL_EPISODES"], 
         ego_policy, flattened_ego_params, heldout_agent_list, ego_test_mode)
-
+    import pdb; pdb.set_trace()
     if print_metrics:
         # each leaf of eval_metrics has shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
         metric_names = get_metric_names(config["ENV_NAME"])
+        aggregate_stat = config["global_heldout_settings"]["AGGREGATE_STAT"]
         ego_names = [f"ego ({label})" for label in ego_idx_labels]
         heldout_names = list(heldout_agents.keys())
         for metric_name in metric_names:
-            print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names)
+            print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, aggregate_stat)
     return eval_metrics
 
-def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names):
-    '''Print a table of the mean and std of the metric for each ego agent and heldout agent.'''
-    num_eval_episodes = eval_metrics[metric_name].shape[-2]
-    metric_data_mean = eval_metrics[metric_name].mean(axis=(-2, -1)) # shape (num_ego_agents, num_heldout_agents)
-    metric_data_std = eval_metrics[metric_name].std(axis=(-2, -1)) # shape (num_ego_agents, num_heldout_agents)
-    metric_data_ci = 1.96 * metric_data_std / np.sqrt(num_eval_episodes) # shape (num_ego_agents, num_heldout_agents)
-
+def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, aggregate_stat: str):
+    '''Generate a table of the aggregate stat and CI of the metric for each ego agent and heldout agent.'''
+    # eval_metrics[metric_name] shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
+    # we first take the mean over the num_agents_per_env dimension
+    eval_metric_data = np.array(eval_metrics[metric_name]).mean(axis=-1) # shape (num_ego_agents, num_heldout_agents, num_eval_episodes)
     table = PrettyTable()
     table.field_names = ["---", *heldout_names]
+
     for i, ego_name in enumerate(ego_names):
-        row = [ego_name] + [f"{metric_data_mean[i, j]:.2f} ± {metric_data_ci[i, j]:.2f}" for j in range(len(heldout_names))]
+        data = eval_metric_data[i].transpose(1, 0) # shape (num_eval_episodes, num_heldout_agents)
+        point_est_all, interval_ests_all = compute_aggregate_stat_and_ci_per_task(data, aggregate_stat, return_interval_est=True)
+        lower_ci = interval_ests_all[:, 0]
+        upper_ci = interval_ests_all[:, 1]
+        row = [ego_name] + [f"{point_est_all[j]:.2f} ({lower_ci[j]:.2f}, {upper_ci[j]:.2f})" for j in range(len(heldout_names))]
         table.add_row(row)
-    print(f"\n{metric_name} (mean ± CI):")
+    print(f"\n{metric_name} ({aggregate_stat} ± CI):")
     print(table)

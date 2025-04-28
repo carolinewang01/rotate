@@ -30,8 +30,13 @@ def run_training(cfg):
 
     if cfg["run_heldout_eval"]:
         metric_names = get_metric_names(cfg["task"]["ENV_NAME"])
-        eval_metrics, ego_names, heldout_names = run_heldout_evaluation(cfg, ego_policy, final_ego_params, init_ego_params)
-        log_heldout_metrics(cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names, log_dim0_as_curve=False)
+        ego_as_2d = False if cfg.algorithm["ALG"] in ["paired_ued"] else True
+        eval_metrics, ego_names, heldout_names = run_heldout_evaluation(
+            cfg, ego_policy, final_ego_params, init_ego_params, ego_as_2d=ego_as_2d
+        )
+        log_heldout_metrics(
+            cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names, ego_as_2d=ego_as_2d
+        )
 
     wandb_logger.close()
 

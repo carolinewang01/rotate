@@ -4,6 +4,15 @@ import jax
 rng = jax.random.PRNGKey(38410)
 print("initial rng: ", rng)
 
+rngs = jax.random.split(rng, 4)
+print("rngs: ", rngs)
+
+# try to reshape rngs into a 2D array
+rngs = rngs.reshape(2, 2, 2)
+print("rngs reshaped into 2x2 array: ", rngs)
+import sys; sys.exit(0)
+
+###################
 # split rng into two
 _, rng1 = jax.random.split(rng)
 print("rng1, split from initial rng: ", rng1)

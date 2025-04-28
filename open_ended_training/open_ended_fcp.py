@@ -8,6 +8,7 @@ import logging
 import jax
 import numpy as np
 import hydra
+from functools import partial
 from envs.log_wrapper import LogWrapper
 
 from envs import make_env
@@ -71,6 +72,24 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     carry = (updated_ego_parameters, rng)
     return carry, (train_partner_out, ego_out)
 
+def train_fcp(rng, env, algorithm_config, partner_policy, partner_population):
+    rng, init_rng, train_rng = jax.random.split(rng, 3)
+    
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    
+    @jax.jit
+    def open_ended_step_fn(carry, unused):
+        return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
+    
+    init_carry = (init_ego_params, rng)
+    final_carry, outs = jax.lax.scan(
+        open_ended_step_fn, 
+        init_carry, 
+        xs=None,
+        length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
+    )
+    return outs
+
 def log_train_metrics(config, logger, outs, 
                       metric_names: tuple, num_controlled_actors: int
                       ):
@@ -83,9 +102,9 @@ def log_train_metrics(config, logger, outs,
         metric_names: tuple, names of metrics to extract from training logs
     """
     # partner metrics is a pytree where each leaf has shape 
-    # (n_oel_updates, n_partners_seeds, n_updates, rollout_length, agents_per_env * num_envs)
+    # (num_seeds, n_oel_updates, n_partners_seeds, num_partner_updates, rollout_length, agents_per_env * num_envs)
     # ego metrics is a pytree where each leaf has shape 
-    # (n_oel_updates, 1, n_updates, rollout_length, num_envs)
+    # (num_seeds, n_oel_updates, 1, num_ego_updates, rollout_length, num_envs)
 
     # The discrepancy in the last dim is because the partner training process 
     # logs metrics for both agents in the environment, but the ego training process only logs
@@ -94,54 +113,53 @@ def log_train_metrics(config, logger, outs,
     partner_metrics = partner_outs["metrics"]
     ego_metrics = ego_outs["metrics"]
     
-    num_open_ended_iters = ego_metrics["returned_episode_returns"].shape[0]
-    num_partner_updates = partner_metrics["returned_episode_returns"].shape[2]
-    num_ego_updates = ego_metrics["returned_episode_returns"].shape[2]
+    num_seeds = partner_metrics["returned_episode_returns"].shape[0]
+    num_open_ended_iters = ego_metrics["returned_episode_returns"].shape[1]
+    num_partner_updates = partner_metrics["returned_episode_returns"].shape[3]
+    num_ego_updates = ego_metrics["returned_episode_returns"].shape[3]
+
+    # Extract partner train stats
+    partner_metrics = jax.tree.map(lambda x: x[..., :num_controlled_actors], partner_metrics)
+    partner_stats = get_stats(partner_metrics, metric_names) # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates, 2)
+    partner_stat_means = jax.tree.map(lambda x: np.mean(x, axis=(0, 2))[..., 0], partner_stats) # shape (num_open_ended_iters, num_partner_updates)
+
+    # Extract ego train stats
+    ego_stats = get_stats(ego_metrics, metric_names) # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_ego_updates, 2)
+    ego_stat_means = jax.tree.map(lambda x: np.mean(x, axis=(0, 2))[..., 0], ego_stats) # shape (num_open_ended_iters, num_ego_updates)
+
+    # Average ego metrics
+    ego_metrics_iter = jax.tree.map(lambda x: x[:, iter_idx], ego_metrics)
+
+    # Process value, actor, and entropy losses
+    # shape (num_seeds, num_open_ended_iters, n_ego_train_seeds, num_updates, num_partners, num_minibatches)
+    avg_ego_value_losses = np.asarray(ego_metrics_iter["value_loss"]).mean(axis=(0, 2, 4, 5))
+    avg_ego_actor_losses = np.asarray(ego_metrics_iter["actor_loss"]).mean(axis=(0, 2, 4, 5))
+    avg_ego_entropy_losses = np.asarray(ego_metrics_iter["entropy_loss"]).mean(axis=(0, 2, 4, 5))
+            
+    # Process eval return metrics
+    # shape (num_seeds, num_open_ended_iters, n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
+    avg_ego_rets_per_iter = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5, 6))
 
     for iter_idx in range(num_open_ended_iters):
-        ### partner metrics
-        # Extract partner train stats
-        partner_metrics_iter = jax.tree.map(lambda x: x[iter_idx, ..., :num_controlled_actors], partner_metrics)
-        # get_stats expects a pytree of shape (n_seeds, n_updates, n_rollouts, n_envs)
-        partner_stats = get_stats(partner_metrics_iter, metric_names)
-        partner_stats = {k: np.mean(np.array(v), axis=0) for k, v in partner_stats.items()}
-        
+        # Log partner train stats
         for step in range(num_partner_updates):
-            for stat_name, stat_data in partner_stats.items():
-                stat_mean = stat_data[step, 0]
-                # Include iteration in the step calculation
-                global_step = iter_idx * num_partner_updates + step
-                logger.log_item(f"Train/Partner_{stat_name}", stat_mean, train_step=global_step)
+            global_step = iter_idx * num_partner_updates + step
+            for stat_name, stat_data in partner_stat_means.items():
+                logger.log_item(f"Train/Partner_{stat_name}", stat_data[iter_idx, step], train_step=global_step)
         
         ### ego metrics
-        # Extract ego train stats
-        ego_metrics_iter = jax.tree.map(lambda x: x[iter_idx], ego_metrics)
-        ego_stats = get_stats(ego_metrics_iter, metric_names)
-        ego_stats = {k: np.mean(np.array(v), axis=0) for k, v in ego_stats.items()}
-
-        # Process value, actor, and entropy losses
-        # initial shape is   # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-        average_ego_value_losses = np.asarray(ego_metrics_iter["value_loss"]).mean(axis=(0, 2, 3))
-        average_ego_actor_losses = np.asarray(ego_metrics_iter["actor_loss"]).mean(axis=(0, 2, 3))
-        average_ego_entropy_losses = np.asarray(ego_metrics_iter["entropy_loss"]).mean(axis=(0, 2, 3))
-                
-        # Process eval return metrics
-        all_ego_returns = np.asarray(ego_metrics_iter["eval_ep_last_info"]["returned_episode_returns"])  # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
-        average_ego_rets_per_iter = np.mean(all_ego_returns, axis=(0, 2, 3, 4))
                 
         # Log metrics for each ego update step
         for step in range(num_ego_updates):
             # Include iteration in the step calculation
             global_step = iter_idx * num_ego_updates + step
-            for stat_name, stat_data in ego_stats.items():
-                if stat_data.shape[0] > step:  # Check if we have data for this step
-                    stat_mean = stat_data[step, 0]
-                    logger.log_item(f"Train/Ego_{stat_name}", stat_mean, train_step=global_step)
+            for stat_name, stat_data in ego_stat_means.items():
+                logger.log_item(f"Train/Ego_{stat_name}", stat_data[iter_idx, step], train_step=global_step)
             
-            logger.log_item("Eval/EgoReturn", average_ego_rets_per_iter[step], train_step=global_step)
-            logger.log_item("Losses/EgoValueLoss", average_ego_value_losses[step], train_step=global_step)
-            logger.log_item("Losses/EgoActorLoss", average_ego_actor_losses[step], train_step=global_step)
-            logger.log_item("Losses/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=global_step)
+            logger.log_item("Eval/EgoReturn", avg_ego_rets_per_iter[iter_idx, step], train_step=global_step)
+            logger.log_item("Losses/EgoValueLoss", avg_ego_value_losses[iter_idx, step], train_step=global_step)
+            logger.log_item("Losses/EgoActorLoss", avg_ego_actor_losses[iter_idx, step], train_step=global_step)
+            logger.log_item("Losses/EgoEntropyLoss", avg_ego_entropy_losses[iter_idx, step], train_step=global_step)
                 
     logger.commit()
     
@@ -164,11 +182,9 @@ def run_fcp(config, wandb_logger):
     env = LogWrapper(env)
 
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
-    rng, ego_init_rng, train_rng = jax.random.split(rng, 3)
+    rng, init_ego_rng = jax.random.split(rng)
+    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
 
-    # Initialize ego agent
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, ego_init_rng)
-    
     # Initialize partner policy once - reused for all iterations
     partner_policy = MLPActorCriticPolicy(
         action_dim=env.action_space(env.agents[1]).n,
@@ -181,33 +197,31 @@ def run_fcp(config, wandb_logger):
         policy_cls=partner_policy
     )
 
-    @jax.jit
-    def open_ended_step_fn(carry, unused):
-        return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
-    
-    # Define initial carry with policies included
-    init_carry = (init_ego_params, train_rng)
-
     log.info("Starting open-ended FCP training...")
     start_time = time.time()
-    with jax.disable_jit(False):
-        final_carry, outs = jax.lax.scan(
-            open_ended_step_fn, 
-            init_carry, 
-            xs=None,
-            length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
+    
+    DEBUG = False
+    with jax.disable_jit(DEBUG):
+        train_fn = jax.jit(jax.vmap(partial(train_fcp, 
+                env=env, algorithm_config=algorithm_config, 
+                partner_policy=partner_policy, 
+                partner_population=partner_population
+                )
+            )
         )
+        outs = train_fn(rngs)
     
     end_time = time.time()
     log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
 
     # Prepare return values for heldout evaluation
     _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, 0], ego_outs["final_params"]) # shape (num_open_ended_iters, num_ego_seeds, num_ckpts, leaf_dim)
+    ego_params = jax.tree.map(lambda x: x[:, :, 0], ego_outs["final_params"]) # shape (num_seeds, num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
     
     # Log metrics
     log.info("Logging metrics...")
-    metric_names = get_metric_names(config["ENV_NAME"])
+    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_train_metrics(config, wandb_logger, outs, metric_names, 
                       num_controlled_actors=algorithm_config["NUM_ENVS"])
     return ego_policy, ego_params, init_ego_params

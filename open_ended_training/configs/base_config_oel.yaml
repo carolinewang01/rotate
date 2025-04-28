@@ -17,6 +17,7 @@ run_heldout_eval: true
 algorithm:
   # NUM_OPEN_ENDED_ITERS: 1 # DEBUG FLAG
   NUM_EVAL_EPISODES: 20 # used during training
+  NUM_SEEDS: 1
   TRAIN_SEED: 20374
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}

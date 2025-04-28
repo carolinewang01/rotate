@@ -1,6 +1,7 @@
 '''This script generates a XP matrix for the heldout set.
 '''
 import jax
+
 from common.run_episodes import run_episodes
 from common.tree_utils import tree_stack
 from common.plot_utils import get_metric_names
@@ -82,5 +83,6 @@ def run_heldout_xp_evaluation(config, print_metrics=False):
         metric_names = get_metric_names(config["ENV_NAME"])
         heldout_names = list(heldout_agents.keys())
         for metric_name in metric_names:
-            print_metrics_table(eval_metrics, metric_name, heldout_names, heldout_names)
+            print_metrics_table(eval_metrics, metric_name, heldout_names, heldout_names, 
+            config["global_heldout_settings"]["AGGREGATE_STAT"])
     return eval_metrics

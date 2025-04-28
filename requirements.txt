@@ -14,7 +14,7 @@ safetensors
 moviepy
 ffmpeg
 prettytable
-
+rliable
 matplotlib
 wandb
 omegaconf
