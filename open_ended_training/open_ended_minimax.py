@@ -528,6 +528,55 @@ def train_minimax(rng, env, algorithm_config, partner_population):
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
     return outs
+        
+def run_minimax(config, wandb_logger):
+    algorithm_config = dict(config["algorithm"])
+
+    # Create only one environment instance
+    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    env = LogWrapper(env)
+    
+    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
+    rng, init_ego_rng = jax.random.split(rng)
+    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
+    
+    # Initialize partner policy once - reused for all iterations
+    partner_policy = MLPActorCriticPolicy(
+        action_dim=env.action_space(env.agents[1]).n,
+        obs_dim=env.observation_space(env.agents[1]).shape[0]
+    )
+    
+    # Create partner population
+    partner_population = AgentPopulation(
+        pop_size=algorithm_config["PARTNER_POP_SIZE"],
+        policy_cls=partner_policy
+    )
+
+    log.info("Starting open-ended minimax training...")
+    start_time = time.time()
+
+    DEBUG = False
+    with jax.disable_jit(DEBUG):
+        train_fn = jax.jit(jax.vmap(partial(train_minimax, 
+                env=env, algorithm_config=algorithm_config, 
+                partner_population=partner_population
+                )
+            )
+        )
+        outs = train_fn(rngs)
+    
+    end_time = time.time()
+    log.info(f"Open-ended minimax training completed in {end_time - start_time} seconds.")
+
+    # Prepare return values for heldout evaluation
+    _ , ego_outs = outs
+    ego_params = jax.tree.map(lambda x: x[:, :, 0], ego_outs["final_params"]) # shape (num_seeds, num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
+
+    # Log metrics
+    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
+    log_metrics(config, wandb_logger, outs, metric_names)
+    return ego_policy, ego_params, init_ego_params
 
 def log_metrics(config, logger, outs, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
@@ -622,52 +671,3 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
-        
-def run_minimax(config, wandb_logger):
-    algorithm_config = dict(config["algorithm"])
-
-    # Create only one environment instance
-    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
-    env = LogWrapper(env)
-    
-    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
-    rng, init_ego_rng = jax.random.split(rng)
-    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
-    
-    # Initialize partner policy once - reused for all iterations
-    partner_policy = MLPActorCriticPolicy(
-        action_dim=env.action_space(env.agents[1]).n,
-        obs_dim=env.observation_space(env.agents[1]).shape[0]
-    )
-    
-    # Create partner population
-    partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"],
-        policy_cls=partner_policy
-    )
-
-    log.info("Starting open-ended minimax training...")
-    start_time = time.time()
-
-    DEBUG = False
-    with jax.disable_jit(DEBUG):
-        train_fn = jax.jit(jax.vmap(partial(train_minimax, 
-                env=env, algorithm_config=algorithm_config, 
-                partner_population=partner_population
-                )
-            )
-        )
-        outs = train_fn(rngs)
-    
-    end_time = time.time()
-    log.info(f"Open-ended minimax training completed in {end_time - start_time} seconds.")
-
-    # Prepare return values for heldout evaluation
-    _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, :, 0], ego_outs["final_params"]) # shape (num_seeds, num_open_ended_iters, 1, num_ckpts, leaf_dim)
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
-
-    # Log metrics
-    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    log_metrics(config, wandb_logger, outs, metric_names)
-    return ego_policy, ego_params, init_ego_params

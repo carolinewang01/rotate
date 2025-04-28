@@ -12,7 +12,6 @@ from functools import partial
 from envs.log_wrapper import LogWrapper
 
 from envs import make_env
-from common.wandb_visualizations import Logger
 from agents.agent_interface import MLPActorCriticPolicy, AgentPopulation
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
@@ -89,6 +88,59 @@ def train_fcp(rng, env, algorithm_config, partner_policy, partner_population):
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
     return outs
+    
+def run_fcp(config, wandb_logger):
+    '''
+    Run the open-ended FCP training loop.
+    '''
+    algorithm_config = dict(config["algorithm"])
+    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    env = LogWrapper(env)
+
+    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
+    rng, init_ego_rng = jax.random.split(rng)
+    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
+
+    # Initialize partner policy once - reused for all iterations
+    partner_policy = MLPActorCriticPolicy(
+        action_dim=env.action_space(env.agents[1]).n,
+        obs_dim=env.observation_space(env.agents[1]).shape[0],
+    )
+
+    # Create partner population using the provided partner policy
+    partner_population = AgentPopulation(
+        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        policy_cls=partner_policy
+    )
+
+    log.info("Starting open-ended FCP training...")
+    start_time = time.time()
+    
+    DEBUG = False
+    with jax.disable_jit(DEBUG):
+        train_fn = jax.jit(jax.vmap(partial(train_fcp, 
+                env=env, algorithm_config=algorithm_config, 
+                partner_policy=partner_policy, 
+                partner_population=partner_population
+                )
+            )
+        )
+        outs = train_fn(rngs)
+    
+    end_time = time.time()
+    log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
+
+    # Prepare return values for heldout evaluation
+    _ , ego_outs = outs
+    ego_params = jax.tree.map(lambda x: x[:, :, 0], ego_outs["final_params"]) # shape (num_seeds, num_open_ended_iters, 1, num_ckpts, leaf_dim)
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
+    
+    # Log metrics
+    log.info("Logging metrics...")
+    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
+    log_train_metrics(config, wandb_logger, outs, metric_names, 
+                      num_controlled_actors=algorithm_config["NUM_ENVS"])
+    return ego_policy, ego_params, init_ego_params
 
 def log_train_metrics(config, logger, outs, 
                       metric_names: tuple, num_controlled_actors: int
@@ -166,56 +218,3 @@ def log_train_metrics(config, logger, outs,
     # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
-    
-def run_fcp(config, wandb_logger):
-    '''
-    Run the open-ended FCP training loop.
-    '''
-    algorithm_config = dict(config["algorithm"])
-    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
-    env = LogWrapper(env)
-
-    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
-    rng, init_ego_rng = jax.random.split(rng)
-    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
-
-    # Initialize partner policy once - reused for all iterations
-    partner_policy = MLPActorCriticPolicy(
-        action_dim=env.action_space(env.agents[1]).n,
-        obs_dim=env.observation_space(env.agents[1]).shape[0],
-    )
-
-    # Create partner population using the provided partner policy
-    partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
-        policy_cls=partner_policy
-    )
-
-    log.info("Starting open-ended FCP training...")
-    start_time = time.time()
-    
-    DEBUG = False
-    with jax.disable_jit(DEBUG):
-        train_fn = jax.jit(jax.vmap(partial(train_fcp, 
-                env=env, algorithm_config=algorithm_config, 
-                partner_policy=partner_policy, 
-                partner_population=partner_population
-                )
-            )
-        )
-        outs = train_fn(rngs)
-    
-    end_time = time.time()
-    log.info(f"Open-ended FCP training completed in {end_time - start_time} seconds.")
-
-    # Prepare return values for heldout evaluation
-    _ , ego_outs = outs
-    ego_params = jax.tree.map(lambda x: x[:, :, 0], ego_outs["final_params"]) # shape (num_seeds, num_open_ended_iters, 1, num_ckpts, leaf_dim)
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
-    
-    # Log metrics
-    log.info("Logging metrics...")
-    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    log_train_metrics(config, wandb_logger, outs, metric_names, 
-                      num_controlled_actors=algorithm_config["NUM_ENVS"])
-    return ego_policy, ego_params, init_ego_params
