@@ -1,4 +1,6 @@
-'''Wrap heuristic agent policies in AgentPolicy interface.'''
+'''Wrap heuristic agent policies in AgentPolicy interface.
+TODO: clean up logic by vectorizing init_hstate. See HeuristicPolicyPopulation.
+'''
 from agents.agent_interface import AgentPolicy
 from agents.lbf.random_agent import RandomAgent
 from agents.lbf.sequential_fruit_agent import SequentialFruitAgent
@@ -34,5 +36,5 @@ class LBFSequentialFruitPolicyWrapper(AgentPolicy):
         action, new_hstate = self.policy.get_action(obs, env_state, hstate, rng)
         return action, new_hstate
 
-    def init_hstate(self, batch_size: int, aux_info=None):
+    def init_hstate(self, batch_size: int, aux_info):
         return self.policy.init_agent_state(aux_info["agent_id"])

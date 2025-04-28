@@ -9,20 +9,21 @@ ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
 TASK_NAME: ${task.TASK_NAME}
 
 partner_agent:
-  onion_agent_0.1:  
-    actor_type: onion_agent
-    p_onion_on_counter: 0.1
-  # ippo_mlp: 
-  #   path: "eval_teammates/overcooked-v1/cramped_room/ippo/2025-04-21_22-53-04/saved_train_run"
-  #   actor_type: mlp
-  #   ckpt_key: final_params
-  #   idx_list: [0]
-  #   test_mode: true
+  independent_agent_0.6:
+    actor_type: independent_agent
+    p_onion_on_counter: 0.6
+    p_plate_on_counter: 0.6
+  # onion_agent_0:  
+  #   actor_type: onion_agent
+  #   p_onion_on_counter: 0.
+  # plate_agent_0:
+  #   actor_type: plate_agent
+  #   p_plate_on_counter: 0.
 
 algorithm:
   ALG: ppo_br
   EGO_ACTOR_TYPE: s5 # options: s5, mlp, rnn
-  TOTAL_TIMESTEPS: 3e5
+  TOTAL_TIMESTEPS: 3e6
   TRAIN_SEED: 12345
   NUM_EGO_TRAIN_SEEDS: 1
   NUM_EVAL_EPISODES: 20
@@ -42,6 +43,9 @@ algorithm:
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: true
 
+label: "best-response"
+name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}
+
 # WandB Params
 logger: 
   project: open-ended-aht
@@ -49,7 +53,8 @@ logger:
   tags: 
     - ${algorithm.ALG}
     - ${TASK_NAME}
-  mode: offline # options: online, offline, disabled
+    - ${label}
+  mode: online # options: online, offline, disabled
   verbose: true
   log_train_out: false # whether to log the out dictionary
 
@@ -57,6 +62,3 @@ logger:
 local_logger:
   save_figures: true # currently unused
   save_train_out: true
-
-label: ""
-name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}

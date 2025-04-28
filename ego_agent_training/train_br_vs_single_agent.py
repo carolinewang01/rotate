@@ -126,7 +126,7 @@ def run_br_training(config, wandb_logger):
     heldout_agents = load_heldout_set(partner_agent_config, env, config["TASK_NAME"], config["ENV_KWARGS"], init_rng)
     assert len(heldout_agents) == 1, "Only supports training against one partner agent for now."
 
-    partner_policy, partner_params, partner_test_mode = list(heldout_agents.values())[0]
+    partner_policy, partner_params, partner_test_mode, _ = list(heldout_agents.values())[0]
 
     if partner_params is not None: # RL agent
         partner_params = jax.tree.map(lambda x: x[jnp.newaxis, ...], partner_params)

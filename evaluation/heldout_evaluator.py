@@ -75,9 +75,27 @@ def extract_params(params, init_params, idx_labels=None):
     
     return model_list, flattened_idx_labels
 
+def extract_performance_bounds(agent_config, n_models):
+    '''Flatten performance bounds dictionary into n_models dictionaries. 
+    Each leaf has the same structure as idx_list. 
+    '''
+    performance_bounds = agent_config.get("performance_bounds", None)
+    if performance_bounds is None:
+        return [None for _ in range(n_models)]
+    else:
+        ret_list = []
+        for i in range(n_models):
+            perf_i = {}
+            for stat_name, bound_list in performance_bounds.items():
+                assert len(bound_list[i]) == 2, "Performance bounds must be a list of two values (upper and lower bounds)."
+                perf_i[stat_name] = bound_list[i]
+            ret_list.append(perf_i)
+        return ret_list
+
 def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
     '''Load heldout evaluation agents from config.
-    Returns a dictionary of agents with keys as agent names and values as tuples of (policy, params, test_mode).
+    Returns a dictionary of agents with keys as agent names and values as tuples of 
+    (policy, params, test_mode).
     '''
     heldout_agents = {}
     for agent_name, agent_config in heldout_config.items():
@@ -91,9 +109,11 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
             policy, params, init_params, idx_labels = initialize_rl_agent_from_config(agent_config, agent_name, env, init_rng)
             # params contains multiple model checkpoints, so we need to extract each one
             params_list, idx_labels = extract_params(params, init_params, idx_labels)
+            performance_bounds_list = extract_performance_bounds(agent_config, len(params_list))
 
         # Load non-RL-based heuristic agents
         elif task_name == 'lbf':
+            performance_bounds = agent_config.get("performance_bounds", None)
             if agent_config["actor_type"] == 'random_agent':
                 policy = LBFRandomPolicyWrapper(using_log_wrapper=True)
             elif agent_config["actor_type"] == 'seq_agent':
@@ -109,6 +129,7 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
                 )
 
         elif 'overcooked-v1' in task_name:
+            performance_bounds = agent_config.get("performance_bounds", None)
             aug_layout_dict = augmented_layouts[env_kwargs["layout"]]
             if agent_config["actor_type"] == 'random_agent':
                 policy = OvercookedRandomPolicyWrapper(aug_layout_dict, using_log_wrapper=True)
@@ -132,16 +153,23 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
         
         # Generate agent labels
         if params_list is None: # heuristic agent
-            heldout_agents[agent_name] = (policy, None, test_mode)
+            heldout_agents[agent_name] = (policy, None, test_mode, performance_bounds)
         else: # rl agent
             for i, params_i in enumerate(params_list):
                 if idx_labels is None:
                     agent_label = f'{agent_name} ({i})'
                 else:
                     agent_label = f'{agent_name} ({idx_labels[i]})'
-                heldout_agents[agent_label] = (policy, params_i, test_mode)
-
+                heldout_agents[agent_label] = (policy, params_i, test_mode, performance_bounds_list[i])
     return heldout_agents
+
+def normalize_metrics(metrics, performance_bounds):
+    '''For the metrics in performance_bounds, normalize the metrics in eval_metrics
+    using the performance bounds.'''
+    for k, v in performance_bounds.items():
+        lower, upper = v[0], v[1]
+        metrics[k] = (metrics[k] - lower) / (upper - lower)
+    return metrics
 
 
 def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params, 
@@ -172,7 +200,7 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
     start_time = time.time()
 
     for partner_idx in range(num_partner_total):
-        heldout_policy, heldout_params, heldout_test_mode = heldout_agent_list[partner_idx]
+        heldout_policy, heldout_params, heldout_test_mode, heldout_performance_bounds = heldout_agent_list[partner_idx]
         ego_rngs = jax.random.split(partner_rngs[partner_idx], num_ego_agents)
 
         # Use partial to fix the heldout agent for the function being vmapped
@@ -188,6 +216,11 @@ def eval_egos_vs_heldouts(config, env, rng, num_episodes, ego_policy, ego_params
         )(ego_policy, ego_params, ego_rngs)
 
         # results_for_this_partner shape: (num_ego_agents, num_episodes, ...)
+        if config["global_heldout_settings"]["NORMALIZE_RETURNS"]:
+            if heldout_performance_bounds is not None:
+                results_for_this_partner = normalize_metrics(results_for_this_partner, heldout_performance_bounds)
+            else:
+                print(f"Warning: no performance bounds provided for {heldout_agent_list[partner_idx]}. Skipping normalization.")
         all_metrics_for_partners.append(results_for_this_partner)
 
     end_time = time.time()
@@ -234,10 +267,12 @@ def run_heldout_evaluation(config, print_metrics=False):
         ego_names = [f"ego ({label})" for label in ego_idx_labels]
         heldout_names = list(heldout_agents.keys())
         for metric_name in metric_names:
-            print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, aggregate_stat)
+            print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, 
+                aggregate_stat, config["global_heldout_settings"]["NORMALIZE_RETURNS"])
     return eval_metrics
 
-def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, aggregate_stat: str):
+def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, 
+                        aggregate_stat: str, normalized_metrics: bool):
     '''Generate a table of the aggregate stat and CI of the metric for each ego agent and heldout agent.'''
     # eval_metrics[metric_name] shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
     # we first take the mean over the num_agents_per_env dimension
@@ -252,5 +287,8 @@ def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, agg
         upper_ci = interval_ests_all[:, 1]
         row = [ego_name] + [f"{point_est_all[j]:.2f} ({lower_ci[j]:.2f}, {upper_ci[j]:.2f})" for j in range(len(heldout_names))]
         table.add_row(row)
+    
     print(f"\n{metric_name} ({aggregate_stat} ± CI):")
+    if normalized_metrics:
+        print("Metrics are normalized to [lower_bound, upper_bound].")
     print(table)

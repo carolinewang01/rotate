@@ -3,16 +3,13 @@
 ## TODOs
 
 ### Evaluation
-- Compute BR's to all generated population members    
 - Metrics: 
-    - Implement RLiable IQM + bootstrapped CI's
     - BRProx metric
     - Convert main log_metrics() function to log IQMs instead of means (current issue is the get_stats function, which manually
     computes the mean and std)
     
 - Regret-based evaluator: 
-    - The learning procedure been implemented, but can we compute/plot the actual regret number? 
-    Would it be comparable between different training runs? 
+    - Figure out how to return regret-maximizing teammates that don't sabotage
 
 ### Method Exploration: 
 - OE-Minimax, OE-PAIRED and OE-Lagrange: do we want to train multiple seeds of partners? Do we want to train against the last checkpoint or the first?
@@ -29,6 +26,8 @@ If time permits:
 - Implement CoMeDi
 
 ### Clean Up Code: 
+- Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because 
+ it displays the shaped return in Overcooked. We need to fix this.
 - In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations

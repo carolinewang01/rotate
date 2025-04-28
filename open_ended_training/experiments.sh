@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_minimax"
-label="paper-v0"
-num_seeds=3
+algo="open_ended_paired"
+label="baselines-v1" # "paper-v0"
+num_seeds=1
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}

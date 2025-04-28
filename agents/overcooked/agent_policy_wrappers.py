@@ -1,4 +1,6 @@
-'''Wrap heuristic agent policies in AgentPolicy interface.'''
+'''Wrap heuristic agent policies in AgentPolicy interface.
+TODO: clean up logic by vectorizing init_hstate. See HeuristicPolicyPopulation.
+'''
 from agents.agent_interface import AgentPolicy
 from agents.overcooked.independent_agent import IndependentAgent
 from agents.overcooked.onion_agent import OnionAgent
@@ -17,7 +19,7 @@ class OvercookedIndependentPolicyWrapper(AgentPolicy):
 
     
     def get_action(self, params, obs, done, avail_actions, hstate, rng, 
-                   aux_obs=None, env_state=None, test_mode=False):
+                   env_state, aux_obs=None, test_mode=False):
         if self.using_log_wrapper:
             env_state = env_state.env_state
         # hstate represents the agent state
@@ -25,9 +27,7 @@ class OvercookedIndependentPolicyWrapper(AgentPolicy):
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
-        """Initialize the hidden state for the random agent."""
         return self.policy.init_agent_state(aux_info["agent_id"])
-
 
 class OvercookedOnionPolicyWrapper(AgentPolicy):
     """Policy wrapper for the Onion heuristic agent."""
@@ -37,16 +37,14 @@ class OvercookedOnionPolicyWrapper(AgentPolicy):
         self.using_log_wrapper = using_log_wrapper
 
     def get_action(self, params, obs, done, avail_actions, hstate, rng, 
-                   aux_obs=None, env_state=None, test_mode=False):
+                   env_state, aux_obs=None, test_mode=False):
         if self.using_log_wrapper:
             env_state = env_state.env_state
         action, new_hstate = self.policy.get_action(obs, env_state, hstate)
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
-        """Initialize the hidden state for the random agent."""
         return self.policy.init_agent_state(aux_info["agent_id"])
-
 
 class OvercookedPlatePolicyWrapper(AgentPolicy):
     """Policy wrapper for the Plate heuristic agent."""
@@ -56,16 +54,14 @@ class OvercookedPlatePolicyWrapper(AgentPolicy):
         self.using_log_wrapper = using_log_wrapper
 
     def get_action(self, params, obs, done, avail_actions, hstate, rng, 
-                   aux_obs=None, env_state=None, test_mode=False):
+                   env_state, aux_obs=None, test_mode=False):
         if self.using_log_wrapper:
             env_state = env_state.env_state
         action, new_hstate = self.policy.get_action(obs, env_state, hstate)
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
-        """Initialize the hidden state for the random agent."""
         return self.policy.init_agent_state(aux_info["agent_id"])
-
 
 class OvercookedStaticPolicyWrapper(AgentPolicy):
     """Policy wrapper for the Static heuristic agent."""
@@ -75,16 +71,14 @@ class OvercookedStaticPolicyWrapper(AgentPolicy):
         self.using_log_wrapper = using_log_wrapper
 
     def get_action(self, params, obs, done, avail_actions, hstate, rng, 
-                   aux_obs=None, env_state=None, test_mode=False):
+                   env_state, aux_obs=None, test_mode=False):
         if self.using_log_wrapper:
             env_state = env_state.env_state
         action, new_hstate = self.policy.get_action(obs, env_state, hstate)
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
-        """Initialize the hidden state for the random agent."""
         return self.policy.init_agent_state(aux_info["agent_id"])
-
 
 class OvercookedRandomPolicyWrapper(AgentPolicy):
     """Policy wrapper for the Random heuristic agent."""
@@ -101,5 +95,4 @@ class OvercookedRandomPolicyWrapper(AgentPolicy):
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
-        """Initialize the hidden state for the random agent."""
         return self.policy.init_agent_state(aux_info["agent_id"])

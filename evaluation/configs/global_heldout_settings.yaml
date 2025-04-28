@@ -4,7 +4,8 @@ global_heldout_settings:
   EVAL_SEED: 34957
   MAX_EPISODE_STEPS: ${task.ROLLOUT_LENGTH}
   NUM_EVAL_EPISODES: 64
-  AGGREGATE_STAT: iqm # choices: mean, iqm. both are computed with the bootstrapped CI using rliable.
+  AGGREGATE_STAT: mean # choices: mean, iqm. both are computed with the bootstrapped CI using rliable.
+  NORMALIZE_RETURNS: true # if true, use performance bounds to normalize returns
 
 heldout_set:
   lbf: # DONE - DO NOT MODIFY. In LBF, results are much better with test mode = false.
@@ -15,16 +16,16 @@ heldout_set:
       idx_list: [0] # load in seed 0 only
       test_mode: false
       performance_bounds:
-        percent_eaten: [0.0, 100.0]
-        returned_episode_returns: [0.0, 0.5]
+        percent_eaten: [[0.0, 100.0]]
+        returned_episode_returns: [[0.0, 0.5]]
     ippo_mlp_s2c0:
       path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
       actor_type: mlp
       idx_list: [[2, 0]] # load in seed 2 ckpt 0
       test_mode: false
       performance_bounds:
-        percent_eaten: [0.0, 69.27]
-        returned_episode_returns: [0.0, 0.35]
+        percent_eaten: [[0.0, 69.27]]
+        returned_episode_returns: [[0.0, 0.35]]
     brdiv-conf1: 
       path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
       actor_type: actor_with_conditional_critic

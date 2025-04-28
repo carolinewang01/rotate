@@ -7,7 +7,7 @@ from common.tree_utils import tree_stack
 from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from evaluation.heldout_evaluator import load_heldout_set, print_metrics_table
+from evaluation.heldout_evaluator import load_heldout_set, print_metrics_table, normalize_metrics
 
 def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
     '''Evaluate all heldout agents against each other
@@ -40,7 +40,7 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
     # param structures. 
     for i in range(num_heldout_agents):
         heldout_agent1 = heldout_agent_list[i]
-        policy1, param1, test_mode1 = heldout_agent1
+        policy1, param1, test_mode1, performance_bounds1 = heldout_agent1
         rng1 = outer_heldout_rngs[i]
         
         # Split RNG for each heldout partner
@@ -50,16 +50,34 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
         partner_i_metrics = []
         for j in range(num_heldout_agents):
             heldout_agent2 = heldout_agent_list[j]
-            policy2, param2, test_mode2 = heldout_agent2
+            policy2, param2, test_mode2, performance_bounds2 = heldout_agent2
             rng2 = partner_rngs[j]
             
             # Evaluate the pair
             eval_metrics = eval_pair_fn(rng2, policy1, param1, test_mode1, policy2, param2, test_mode2)
+
+            if config["global_heldout_settings"]["NORMALIZE_RETURNS"]:
+                if performance_bounds1 is not None and performance_bounds2 is not None:
+                    merged_perf_bounds = merge_performance_bounds(performance_bounds1, performance_bounds2)
+                    eval_metrics = normalize_metrics(eval_metrics, merged_perf_bounds)
+                else:
+                    print(f"Warning: no performance bounds provided for {heldout_agent1} and {heldout_agent2}. Skipping normalization.")
+
             partner_i_metrics.append(eval_metrics)
 
         all_metrics.append(tree_stack(partner_i_metrics))    
     return tree_stack(all_metrics)
 
+def merge_performance_bounds(perf_bounds1, perf_bounds2):
+    '''Merge two performance bounds dictionaries.
+    We take the min of the lower bounds and the min of the upper bounds.
+    '''
+    merged_perf_bounds = {}
+    for k, v in perf_bounds1.items():
+        lower1, upper1 = v[0], v[1]
+        lower2, upper2 = perf_bounds2[k][0], perf_bounds2[k][1]
+        merged_perf_bounds[k] = [min(lower1, lower2), min(upper1, upper2)]
+    return merged_perf_bounds
 
 def run_heldout_xp_evaluation(config, print_metrics=False):
     '''Run heldout evaluation'''
@@ -86,5 +104,6 @@ def run_heldout_xp_evaluation(config, print_metrics=False):
         heldout_names = list(heldout_agents.keys())
         for metric_name in metric_names:
             print_metrics_table(eval_metrics, metric_name, heldout_names, heldout_names, 
-            config["global_heldout_settings"]["AGGREGATE_STAT"])
+            config["global_heldout_settings"]["AGGREGATE_STAT"], 
+            config["global_heldout_settings"]["NORMALIZE_RETURNS"])
     return eval_metrics
