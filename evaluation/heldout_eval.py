@@ -141,10 +141,14 @@ def log_heldout_metrics(config, logger, eval_metrics,
         table_data = heldout_metrics_1d(config, logger, eval_metrics, ego_names, heldout_names, metric_names)
 
     # table_data shape (num_metrics, num_heldout_agents)
+    algo_name = config["algorithm"]["ALG"]
     metric_names_array = np.array(metric_names).reshape(-1, 1)  # Convert to column vector
-    table_data_with_names = np.hstack((metric_names_array, table_data))
+    # Create algorithm name column with same shape as metric_names_array
+    algo_name_array = np.full_like(metric_names_array, algo_name)
+    # Add algo name column to the table data
+    table_data_with_names = np.hstack((algo_name_array, metric_names_array, table_data))
     logger.log_xp_matrix("HeldoutEval/FinalEgoVsHeldout-Mean-CI", table_data_with_names, 
-                         columns=["Metric"] + list(heldout_names), commit=True)
+                         columns=["Algorithm", "Metric"] + list(heldout_names), commit=True)
 
     # Saving artifacts
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir

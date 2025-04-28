@@ -3,6 +3,7 @@
 # Algorithm to run
 algo="lbrdiv"
 label="baselines-v1"
+num_seeds=3
 
 # Create log directory if it doesn't exist
 mkdir -p results/teammate_generation_logs/${algo}/${label}
@@ -43,7 +44,7 @@ failure_count=0
 for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
-    if python teammate_generation/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" 2>> "${log_file}"; then
+    if python teammate_generation/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" 2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
     else

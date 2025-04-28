@@ -36,11 +36,11 @@ def train_ego_agent(config, logger, partner_params, partner_population):
     train_rngs = jax.random.split(rng, num_seeds)
     
     # Initialize ego agent
-    if config["EGO_ACTOR_TYPE"] == "s5":
+    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
         ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif config["EGO_ACTOR_TYPE"] == "mlp":
+    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
         ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    elif config["EGO_ACTOR_TYPE"] == "rnn":
+    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
         # WARNING: currently the RNN policy is not working. 
         # TODO: fix this!
         ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
@@ -55,7 +55,7 @@ def train_ego_agent(config, logger, partner_params, partner_population):
             train_rng=train_rng,
             ego_policy=ego_policy,
             init_ego_params=init_ego_params,
-            n_ego_train_seeds=config["NUM_EGO_TRAIN_SEEDS"],
+            n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
             partner_population=partner_population,
             partner_params=partner_params
         )

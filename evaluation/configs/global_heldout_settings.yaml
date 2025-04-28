@@ -8,44 +8,44 @@ global_heldout_settings:
 
 heldout_set:
   lbf: # DONE - DO NOT MODIFY
-    # ippo_mlp: 
-    #   path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
-    #   actor_type: mlp
-    #   ckpt_key: final_params
-    #   idx_list: [0] # load in seed 0 only
-    #   test_mode: true
-    # ippo_mlp_s2c1:
-    #   path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
-    #   actor_type: mlp
-    #   idx_list: [[2, 1]] # load in seed 2 ckpt 1
-    #   test_mode: true
-    # brdiv-conf1: 
-    #   path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
-    #   actor_type: actor_with_conditional_critic
-    #   idx_list: [0, 1, 2] # load in population members 0, 1, 2
-    #   ckpt_key: final_params_conf # key to load from checkpoint.
-    #   POP_SIZE: 5 # for brdiv, we need to specify population size that the method was trained with
-    # brdiv-conf2:
-    #   path: "eval_teammates/lbf/brdiv/2025-04-23/13-48-47/saved_train_run"
-    #   actor_type: actor_with_conditional_critic
-    #   idx_list: [0, 1]
-    #   ckpt_key: final_params_conf
-    #   POP_SIZE: 3
-    # seq_agent_lexi:
-    #   actor_type: seq_agent
-    #   ordering_strategy: lexicographic
-    # seq_agent_rlexi:
-    #   actor_type: seq_agent
-    #   ordering_strategy: reverse_lexicographic
-    # seq_agent_col:
-    #   actor_type: seq_agent
-    #   ordering_strategy: column_major
-    # seq_agent_rcol:
-    #   actor_type: seq_agent
-    #   ordering_strategy: reverse_column_major
-    # seq_agent_nearest:
-    #   actor_type: seq_agent
-    #   ordering_strategy: nearest_agent
+    ippo_mlp: 
+      path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
+      actor_type: mlp
+      ckpt_key: final_params
+      idx_list: [0] # load in seed 0 only
+      test_mode: true
+    ippo_mlp_s2c1:
+      path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
+      actor_type: mlp
+      idx_list: [[2, 1]] # load in seed 2 ckpt 1
+      test_mode: true
+    brdiv-conf1: 
+      path: "eval_teammates/lbf/brdiv/2025-04-16/11-32-07/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0, 1, 2] # load in population members 0, 1, 2
+      ckpt_key: final_params_conf # key to load from checkpoint.
+      POP_SIZE: 5 # for brdiv, we need to specify population size that the method was trained with
+    brdiv-conf2:
+      path: "eval_teammates/lbf/brdiv/2025-04-23/13-48-47/saved_train_run"
+      actor_type: actor_with_conditional_critic
+      idx_list: [0, 1]
+      ckpt_key: final_params_conf
+      POP_SIZE: 3
+    seq_agent_lexi:
+      actor_type: seq_agent
+      ordering_strategy: lexicographic
+    seq_agent_rlexi:
+      actor_type: seq_agent
+      ordering_strategy: reverse_lexicographic
+    seq_agent_col:
+      actor_type: seq_agent
+      ordering_strategy: column_major
+    seq_agent_rcol:
+      actor_type: seq_agent
+      ordering_strategy: reverse_column_major
+    seq_agent_nearest:
+      actor_type: seq_agent
+      ordering_strategy: nearest_agent
     seq_agent_farthest:
       actor_type: seq_agent
       ordering_strategy: farthest_agent

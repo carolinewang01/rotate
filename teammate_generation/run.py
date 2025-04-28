@@ -31,9 +31,8 @@ def run_training(cfg):
         ego_params, ego_policy, init_ego_params = train_ego_agent(cfg, wandb_logger, partner_params, partner_population)
     
     if cfg["run_heldout_eval"]:
-        # TODO: decide if we want ego_as_2d to be true or false
-        eval_metrics, ego_names, heldout_names = run_heldout_evaluation(cfg, ego_policy, ego_params, init_ego_params, ego_as_2d=True)
-        log_heldout_metrics(cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names, ego_as_2d=True)
+        eval_metrics, ego_names, heldout_names = run_heldout_evaluation(cfg, ego_policy, ego_params, init_ego_params, ego_as_2d=False)
+        log_heldout_metrics(cfg, wandb_logger, eval_metrics, ego_names, heldout_names, metric_names, ego_as_2d=False)
     wandb_logger.close()
 
 if __name__ == '__main__':

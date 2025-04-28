@@ -5,7 +5,6 @@ ALG: open_ended_paired
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
-NUM_SEEDS: 2
 NUM_CHECKPOINTS: 5 # per iter of open-ended training
 PARTNER_POP_SIZE: 3 # true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS per iter of open-ended training
 CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
