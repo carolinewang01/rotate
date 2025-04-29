@@ -113,10 +113,10 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
             reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
             obsv, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
 
-            # Use the buffered population to sample partner indices
+            # Use the buffered population to sample partner indices for each environment
             rng, partner_rng = jax.random.split(rng)
             partner_indices, current_buffer = partner_population.sample_agent_indices(
-                population_buffer, config["NUM_CONTROLLED_ACTORS"], partner_rng
+                population_buffer, config["NUM_UNCONTROLLED_ACTORS"], partner_rng
             )
             
             def _env_step(runner_state, unused):
@@ -126,8 +126,8 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 2. Step environment using sampled actions
                 3. Return state, reward, ...
                 """
-                train_state, env_state, prev_obs, prev_done, hstate_0, partner_hstate, pop_buffer, partner_indices, rng = runner_state
-                rng, actor_rng, partner_rng, step_rng, resample_rng = jax.random.split(rng, 5)
+                train_state, env_state, prev_obs, prev_done, hstate_0, partner_hstate, population_buffer, partner_indices, rng = runner_state
+                rng, actor_rng, partner_rng, partner_sample_rng, step_rng = jax.random.split(rng, 5)
 
                 obs_0 = prev_obs["agent_0"]
                 obs_1 = prev_obs["agent_1"]
@@ -141,8 +141,6 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 # Reshape inputs for S5 (sequence_length, batch_size, features)
                 obs_0_reshaped = obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1)
                 done_0_reshaped = prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"])
-                # TODO: review the partner resampling logic! Does it need to be before the 
-                # ego agent samples actions? 
                 
                 # Agent_0 (ego) action, value, log_prob
                 act_0, val_0, pi_0, hstate_0 = ego_policy.get_action_value_policy(
@@ -160,38 +158,56 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 val_0 = val_0.squeeze()
 
                 # Agent_1 (partner) action using the BufferedPopulation interface
-                # Only resample partners for environments that are done
-                # This ensures partner identity remains stable within an episode
-                needs_resample = prev_done["__all__"]
+                # Conditionally resample partners based on prev_done["__all__"]
                 
-                # Sample new partners for done environments
-                def resample_partners():
-                    new_indices, new_buffer = partner_population.sample_agent_indices(
-                        pop_buffer, jnp.sum(needs_resample), partner_rng
-                    )
-                    # Update only the partner indices for done environments
-                    updated_indices = partner_indices.at[jnp.where(needs_resample)[0]].set(new_indices)
-                    return updated_indices, new_buffer
                 
-                # If any environment is done, resample partners for those envs
-                partner_indices_updated, new_buffer = jax.lax.cond(
-                    jnp.any(needs_resample),
-                    lambda: resample_partners(),
-                    lambda: (partner_indices, pop_buffer)
+                needs_resample = prev_done["__all__"] # shape (NUM_ENVS,) bool
+                
+                # # Sample new partners for done environments
+                # def resample_partners():
+                #     new_indices, new_buffer = partner_population.sample_agent_indices(
+                #         population_buffer, jnp.sum(needs_resample), partner_rng
+                #     )
+                #     # Update only the partner indices for done environments
+                #     updated_indices = partner_indices.at[jnp.where(needs_resample)[0]].set(new_indices)
+                #     return updated_indices, new_buffer
+                
+                # # If any environment is done, resample partners for those envs
+                # partner_indices_updated, new_buffer = jax.lax.cond(
+                #     jnp.any(needs_resample),
+                #     lambda: resample_partners(),
+                #     lambda: (partner_indices, population_buffer)
+                # )
+
+                # Sample potential new indices for all envs & get buffer with updated ages
+                # Pass the needs_resample mask to correctly update ages
+                sampled_indices_all, buffer_updated_ages = partner_population.sample_agent_indices(
+                    population_buffer, # Buffer from previous step
+                    config["NUM_UNCONTROLLED_ACTORS"], # Static n = num_envs
+                    partner_sample_rng,
+                    needs_resample_mask=needs_resample
+                )
+
+                # Determine final indices based on whether resampling was needed for each env
+                final_partner_indices = jnp.where(
+                    needs_resample,         # Mask shape (NUM_ENVS,)
+                    sampled_indices_all,    # Use newly sampled index if True
+                    partner_indices         # Else, keep index from previous step
                 )
                 
                 # reshape inputs as necessary for partner
-                obs_1_reshaped = obs_1.reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
-                done_1_reshaped = prev_done["agent_1"].reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
+                obs_1_reshaped = obs_1.reshape(config["NUM_UNCONTROLLED_ACTORS"], 1, -1)
+                done_1_reshaped = prev_done["agent_1"].reshape(config["NUM_UNCONTROLLED_ACTORS"], 1, -1)
 
+                # Get actions using the final indices and the updated buffer
                 act_1, new_partner_hstate = partner_population.get_actions(
-                    new_buffer,
-                    partner_indices_updated,
+                    buffer_updated_ages,    # Use buffer with correct ages
+                    final_partner_indices,  # Use the final selected indices
                     obs_1_reshaped,
                     done_1_reshaped,
                     avail_actions_1,
                     partner_hstate,
-                    partner_rng,
+                    partner_rng, # Note: partner_rng was already used for sampling, consider splitting if needed inside get_actions
                     env_state=env_state,
                     aux_obs=None
                 )
@@ -208,7 +224,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     step_rngs, env_state, env_act
                 )
                 # note that num_actors = num_envs * num_agents
-                info_0 = jax.tree.map(lambda x: x[:, 0], info)
+                info_0 = jax.tree.map(lambda x: x[:, 0], info) # Assuming agent_0 is the first agent
 
                 # Store agent_0 data in transition
                 transition = Transition(
@@ -221,7 +237,9 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
-                new_runner_state = (train_state, env_state_next, obs_next, done, hstate_0, new_partner_hstate, new_buffer, partner_indices_updated, rng)
+                # The new runner state for the next iteration includes the updated buffer and final indices
+                # TODO: consider renaming the buffer and indices
+                new_runner_state = (train_state, env_state_next, obs_next, done, hstate_0, new_partner_hstate, buffer_updated_ages, final_partner_indices, rng)
                 return new_runner_state, transition
 
             # GAE & update step
@@ -384,7 +402,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
             
             def _update_step_with_ckpt(state_with_ckpt, unused):
                 ((train_state, env_state, last_obs, partner_idx, buffer, rng, update_steps),
-                 checkpoint_array, ckpt_idx, last_ep_info) = state_with_ckpt
+                 checkpoint_array, ckpt_idx, init_eval_last_info) = state_with_ckpt
 
                 # Single PPO update
                 (new_runner_state, metric) = _update_step(
@@ -395,18 +413,12 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
 
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
-                
                 def store_and_eval_ckpt(args):
-                    ckpt_arr_and_info, rng, cidx = args
-                    ckpt_arr, prev_info = ckpt_arr_and_info
-                    
-                    # Store parameters in checkpoint array
+                    ckpt_arr, cidx, rng, prev_eval_ret_info = args
                     new_ckpt_arr = jax.tree.map(
                         lambda c_arr, p: c_arr.at[cidx].set(p),
                         ckpt_arr, train_state.params
                     )
-                    
-                    # Run evaluation episodes
                     rng, eval_rng, partner_rng = jax.random.split(rng, 3)
                     
                     # Sample partners from buffer for evaluation
@@ -415,43 +427,36 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     )
                     
                     # Gather parameters for sampled partners
-                    partner_params = partner_population.gather_agent_params(
-                        eval_buffer.params, partner_indices
+                    gathered_params = partner_population.gather_agent_params(
+                        eval_buffer, partner_indices
                     )
                     
                     # Run evaluation with sampled partners
-                    last_info = run_episodes(
-                        eval_rng, env, 
-                        agent_0_param=train_state.params, agent_0_policy=ego_policy,
-                        agent_1_param=partner_params, agent_1_policy=partner_population.policy_cls,
+                    eval_eps_last_infos = jax.vmap(lambda x: run_episodes(
+                        eval_rng, env, agent_0_param=train_state.params, agent_0_policy=ego_policy, 
+                        agent_1_param=x, agent_1_policy=partner_population.policy_cls, 
                         max_episode_steps=max_episode_steps, 
-                        num_eps=config["NUM_EVAL_EPISODES"]
-                    )
-                    
-                    return (new_ckpt_arr, last_info), rng, cidx + 1
+                        num_eps=config["NUM_EVAL_EPISODES"]))(gathered_params)
+                    return (new_ckpt_arr, cidx + 1, rng, eval_eps_last_infos)
                 
                 def skip_ckpt(args):
                     return args
 
-                (checkpoint_array_and_info, rng, ckpt_idx) = jax.lax.cond(
-                    to_store, store_and_eval_ckpt, skip_ckpt, 
-                    ((checkpoint_array, last_ep_info), rng, ckpt_idx)
+                (checkpoint_array, ckpt_idx, rng, eval_last_infos) = jax.lax.cond(
+                    to_store, store_and_eval_ckpt, skip_ckpt, (checkpoint_array, ckpt_idx, rng, init_eval_last_info)
                 )
-                
-                checkpoint_array, eval_info = checkpoint_array_and_info
-                
                 # Add evaluation info to metrics
-                metric["eval_ep_last_info"] = eval_info
+                metric["eval_ep_last_info"] = eval_last_infos
 
                 return ((train_state, env_state, last_obs, partner_idx, buffer, rng, update_steps),
-                        checkpoint_array, ckpt_idx, eval_info), metric
+                        checkpoint_array, ckpt_idx, eval_last_infos), metric
 
             # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
 
-            # Init evaluation metrics
-            rng, eval_rng, partner_rng = jax.random.split(rng, 3)
+            # Init eval return infos
+            rng, rng_eval, partner_rng, rng_train = jax.random.split(rng, 4)
             
             # Sample partners for initial evaluation
             eval_partner_indices, eval_buffer = partner_population.sample_agent_indices(
@@ -459,20 +464,18 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
             )
             
             # Gather parameters for partners
-            eval_partner_params = partner_population.gather_agent_params(
-                eval_buffer.params, eval_partner_indices
+            gathered_params = partner_population.gather_agent_params(
+                eval_buffer, eval_partner_indices
             )
             
-            # Run initial evaluation
-            init_eval_info = run_episodes(
-                eval_rng, env, 
-                agent_0_param=train_state.params, agent_0_policy=ego_policy, 
-                agent_1_param=eval_partner_params, agent_1_policy=partner_population.policy_cls, 
-                max_episode_steps=max_episode_steps, 
-                num_eps=config["NUM_EVAL_EPISODES"]
-            )
+            eval_eps_last_infos = jax.vmap(lambda x: run_episodes(
+                        rng_eval, env, 
+                        agent_0_param=train_state.params, agent_0_policy=ego_policy, 
+                        agent_1_param=x, agent_1_policy=partner_population.policy_cls, 
+                        max_episode_steps=max_episode_steps, 
+                        num_eps=config["NUM_EVAL_EPISODES"]))(gathered_params)
 
-            # Init training state
+            # initial runner state for scanning
             update_steps = 0
             update_runner_state = (
                 train_state,
@@ -480,10 +483,10 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 obsv,
                 partner_indices,
                 current_buffer,
-                rng,
+                rng_train,
                 update_steps
             )
-            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, init_eval_info)
+            state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_eps_last_infos)
             
             # run training
             state_with_ckpt, metrics = jax.lax.scan(
@@ -492,7 +495,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 xs=None,
                 length=config["NUM_UPDATES"]
             )
-            (final_runner_state, checkpoint_array, final_ckpt_idx, final_eval_info) = state_with_ckpt
+            (final_runner_state, checkpoint_array, final_ckpt_idx, eval_eps_last_infos) = state_with_ckpt
             out = {
                 "final_params": final_runner_state[0].params,
                 "metrics": metrics,  # shape (NUM_UPDATES, ...)

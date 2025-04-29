@@ -157,55 +157,84 @@ class BufferedPopulation(AgentPopulation):
             ages=new_ages
         )
     
-    @partial(jax.jit, static_argnums=(0,))
-    def sample_agent_indices(self, buffer, n, rng):
+    @partial(jax.jit, static_argnums=(0, 2))
+    def sample_agent_indices(self, buffer, n, rng, needs_resample_mask=None):
         """Sample n agent indices from the buffer based on scores and staleness.
-        
+           Optionally takes a mask to indicate which samples are actually used,
+           for correct age updates.
+
         Args:
             buffer: The population buffer
-            n: Number of indices to sample
+            n: Number of indices to sample (must be static, typically num_envs)
             rng: Random key
-            
+            needs_resample_mask: Optional boolean mask of shape (n,) indicating
+                                 which sampled indices are actually used.
+                                 If None, assumes all n are used.
+
         Returns:
-            indices: Indices of sampled agents
-            new_buffer: Updated buffer with incremented ages
+            indices: Indices of sampled agents (shape (n,))
+            new_buffer: Updated buffer with correctly incremented ages
         """
         rng, sample_rng = jax.random.split(rng, 2)
-        
-        # Check if buffer has any agents
+
         buffer_has_agents = jnp.greater(buffer.filled.sum(), 0)
-        
-        # Get sampling distribution
         sampling_dist = self._get_sampling_dist(buffer)
-        
-        # If buffer is empty, return random indices and unchanged buffer
+
         def handle_empty_buffer():
+            # If buffer is empty, return random indices and unchanged buffer
             rand_indices = jax.random.randint(sample_rng, (n,), 0, buffer.buffer_size)
             return rand_indices, buffer
-        
-        # If buffer has agents, sample and update ages
+
         def handle_filled_buffer():
-            # Sample indices
+            # Always sample n indices
             indices = jax.random.choice(
-                sample_rng, jnp.arange(buffer.buffer_size), 
+                sample_rng, jnp.arange(buffer.buffer_size),
                 shape=(n,), p=sampling_dist, replace=True
             )
-            
-            # Update ages - increment age for all filled agents
-            new_ages = (buffer.ages + 1) * buffer.filled
+
+            # --- Correct Age Update Logic ---
+            # Initialize reset mask for buffer entries
+            reset_mask = jnp.zeros(buffer.buffer_size, dtype=bool)
+
+            # Default to assuming all samples are used if mask is not provided
+            actual_needs_resample_mask = needs_resample_mask if needs_resample_mask is not None else jnp.ones(n, dtype=bool)
+
+            # Loop through samples to build the reset_mask without dynamic slicing
+            def update_reset_mask(i, current_reset_mask):
+                buffer_idx = indices[i]
+                is_needed = actual_needs_resample_mask[i]
+                # Set reset_mask[buffer_idx] = True only if this sample was needed
+                new_reset_mask = jax.lax.cond(
+                    is_needed,
+                    lambda mask: mask.at[buffer_idx].set(True),
+                    lambda mask: mask,
+                    current_reset_mask
+                )
+                return new_reset_mask
+
+            reset_mask = jax.lax.fori_loop(0, n, update_reset_mask, reset_mask)
+
+            # Now compute final ages using the statically constructed reset_mask
+            increment_mask = buffer.filled & (~reset_mask) # Increment only if filled AND not reset
+
+            # Apply updates
+            new_ages = buffer.ages
+            new_ages = jnp.where(increment_mask, new_ages + 1, new_ages)
+            new_ages = jnp.where(reset_mask, 0, new_ages) # Reset age if it was sampled and needed
+            # --- End Age Update Logic ---
+
             new_buffer = buffer.replace(ages=new_ages)
-            
             return indices, new_buffer
-        
+
         indices, new_buffer = jax.lax.cond(
             buffer_has_agents,
             handle_filled_buffer,
             handle_empty_buffer
         )
-        
+
         return indices, new_buffer
     
-    def gather_agent_params(self, buffer, agent_indices):
+    def gather_agent_params(self, buffer: PopulationBuffer, agent_indices):
         """Gather the parameters of agents specified by agent_indices.
         
         Args:
