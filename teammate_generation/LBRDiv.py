@@ -895,9 +895,19 @@ def train_lbrdiv_partners(train_rng, env, config):
                     lms_vertical - config["LAGRANGE_LR"] * averaged_grad_vertical,
                     0.5 * jnp.eye(config["PARTNER_POP_SIZE"])
                 )
+                lms_vertical_new = jnp.fill_diagonal(
+                    lms_vertical_new, 0.5 * jnp.ones((config["PARTNER_POP_SIZE"]), dtype=jnp.float32),
+                    inplace=False
+                )
+
                 lms_horizontal_new = jnp.maximum(
                     lms_horizontal - config["LAGRANGE_LR"] * averaged_grad_horizontal,
-                    0.5 * jnp.eye(config["PARTNER_POP_SIZE"])
+                    0.5 * jnp.eye(config["PARTNER_POP_SIZE"]),
+                )
+
+                lms_horizontal_new = jnp.fill_diagonal(
+                    lms_horizontal_new, 0.5 * jnp.ones((config["PARTNER_POP_SIZE"]), dtype=jnp.float32),
+                    inplace=False
                 )
                 
                 update_state = (train_state_conf, train_state_br, 
