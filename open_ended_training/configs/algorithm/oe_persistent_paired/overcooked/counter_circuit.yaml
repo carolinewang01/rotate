@@ -1,0 +1,11 @@
+defaults:
+  - oe_persistent_paired/_base_
+  - _self_ # values from this file override the values from the base file
+
+TIMESTEPS_PER_ITER_PARTNER: 4.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partners
+TIMESTEPS_PER_ITER_EGO: 3e6
+NUM_OPEN_ENDED_ITERS: 20
+LR: 1e-3
+NUM_MINIBATCHES: 8
+CLIP_EPS: 0.1
+ENT_COEF: 0.05

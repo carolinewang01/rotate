@@ -38,6 +38,10 @@ If time permits:
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
 - Clean up multiple copies of log_heldout_metrics
 
+### Code Assumptions
+While cleaning up the code, we should re-examine these assumptions for the benchmark. 
+- Agent policies are assumed to handle "done" signals and reset internally. 
+
 ## Installation Guide
 Follow instructions at `install_instructions.md`
 
