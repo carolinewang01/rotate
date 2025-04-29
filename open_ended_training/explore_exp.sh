@@ -1,28 +1,35 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="brdiv"
-label="paper-v0"
-num_seeds=3
+algo="oe_paired_reset"
+label="method-explore:no-reset:pop-size-3"
+partner_pop_size=3
+num_seeds=1
+
+# DEBUG COMMAND
+# python open_ended_training/run.py algorithm=open_ended_lagrange/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=8e4 algorithm.TIMESTEPS_PER_ITER_EGO=8e4 label=debug algorithm.NUM_SEEDS=1
 
 # Create log directory if it doesn't exist
-mkdir -p results/teammate_generation_logs/${algo}/${label}
+mkdir -p results/oe_logs/${algo}/${label}
 
 # Get current timestamp for log file
 timestamp=$(date +"%Y%m%d_%H%M%S")
-log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timestamp}.log"
+log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Available algorithms (commented out for reference)
 # algorithms=(
-#     "brdiv"
-#     "fcp"
-#     "lbrdiv"
+#     "open_ended_lagrange"
+#     "open_ended_minimax"
+#     "open_ended_paired"
+#     "oe_paired_reset"
+#     "paired_ued"
+#     "open_ended_fcp"
 # )
 
 # Tasks to run
 tasks=(
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
+    # "overcooked/asymm_advantages"
+    # "overcooked/coord_ring"
     "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
@@ -44,7 +51,7 @@ failure_count=0
 for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
-    if python teammate_generation/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" 2>> "${log_file}"; then
+    if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" algorithm.PARTNER_POP_SIZE="${partner_pop_size}" 2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
     else

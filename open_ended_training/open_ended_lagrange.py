@@ -199,7 +199,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=reward["agent_1"], # TODO: check with arrasy if this is correct
+                    reward=reward["agent_1"], # we don't negate the ego reward because we're optimizing the lagrange dual objective
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -461,8 +461,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 def _update_lagrange(conf_train_state, minibatches_ego, 
                                      minibatches_0_br, lower_lm, upper_lm):
                     
-                    traj_batches1, _, _ = minibatches_ego
-                    traj_batches2, _, _ = minibatches_0_br
+                    traj_batches1, _, targets_batch_1 = minibatches_ego
+                    traj_batches2, _, targets_batch_2 = minibatches_0_br
 
                     init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     _, (value_ego1, value_br1), _, _ = confederate_policy.get_action_value_policy(
@@ -483,8 +483,11 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                     
-                    combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
-                    combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
+                    # combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
+                    # combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
+
+                    combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
+                    combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
 
                     lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"]
                     upper_diff = combined_ego + config["UPPER_REGRET_THRESHOLD"] - combined_value_br
@@ -976,7 +979,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     avg_teammate_xp_returns = np.asarray(teammate_metrics["eval_ep_last_info_ego"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5))
 
     # Conf vs ego, conf vs br, br losses
-    #  shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates, update_epochs, num_minibatches)
+    #  shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates, update_epochs, num_minibatches)
     avg_value_losses_teammate_against_ego = np.asarray(teammate_metrics["value_loss_conf_against_ego"]).mean(axis=(0, 2, 4, 5))
     avg_value_losses_teammate_against_br = np.asarray(teammate_metrics["value_loss_conf_against_br"]).mean(axis=(0, 2, 4, 5)) 
     avg_value_losses_br = np.asarray(teammate_metrics["value_loss_br"]).mean(axis=(0, 2, 4, 5))
@@ -992,14 +995,14 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     avg_lagrange_lower = np.asarray(teammate_metrics["upper_lm"]).mean(axis=(0, 2, 4))
     avg_lagrange_upper = np.asarray(teammate_metrics["lower_lm"]).mean(axis=(0, 2, 4))
 
-    # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates)
+    # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates)
     avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br"]).mean(axis=(0, 2))
     avg_rewards_teammate_against_ego = np.asarray(teammate_metrics["average_rewards_ego"]).mean(axis=(0, 2))
     
     # Process ego-specific metrics
-    # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
+    # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_ego_updates, num_partners, num_eval_episodes, num_agents_per_env)
     avg_ego_returns = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5, 6))
-    # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_updates, update_epochs, num_minibatches)
+    # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_ego_updates, update_epochs, num_minibatches)
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_entropy_losses = np.asarray(ego_metrics["entropy_loss"]).mean(axis=(0, 2, 4, 5))
@@ -1017,7 +1020,6 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             # Eval metrics
             logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
-            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/EgoRegret", avg_teammate_sp_returns[iter_idx][step] - avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
@@ -1046,6 +1048,9 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             # Standard ego stats from get_stats
             for stat_name, stat_data in ego_stat_means.items():
                 logger.log_item(f"Train/Ego_{stat_name}", stat_data[iter_idx, step], train_step=global_step)
+
+            # Ego eval metrics
+            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], train_step=global_step)
 
             # Ego agent losses
             logger.log_item("Losses/EgoValueLoss", avg_ego_value_losses[iter_idx][step], train_step=global_step)

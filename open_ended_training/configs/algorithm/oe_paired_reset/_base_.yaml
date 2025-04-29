@@ -1,7 +1,6 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
-
-ALG: open_ended_paired
+ALG: oe_paired_reset
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
