@@ -17,7 +17,8 @@ from envs import make_env
 from envs.log_wrapper import LogWrapper
 from common.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
-from agents.agent_interface import AgentPopulation, MLPActorCriticPolicy
+from agents.population_interface import AgentPopulation
+from agents.agent_interface import MLPActorCriticPolicy
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run

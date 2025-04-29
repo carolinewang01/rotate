@@ -11,7 +11,7 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 
-from agents.agent_interface import AgentPopulation
+from agents.population_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_actor_with_double_critic
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
