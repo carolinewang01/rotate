@@ -738,12 +738,16 @@ def train_lbrdiv_partners(train_rng, env, config):
                         batch.self_id, (-1, jnp.shape(batch.self_id)[-1])
                     )
 
-                    all_oppo_id = np.reshape(
+                    all_oppo_id = jnp.reshape(
                         batch.oppo_id, (-1, jnp.shape(batch.oppo_id)[-1])
                     )
 
-                    all_avail_actions = np.reshape(
+                    all_avail_actions = jnp.reshape(
                         batch.avail_actions, (-1, jnp.shape(batch.avail_actions)[-1])
+                    )
+
+                    target_value = jnp.reshape(
+                        target_value, (-1, 1)
                     )
 
                     _, value_sp = br_agent_net.apply(
@@ -832,6 +836,10 @@ def train_lbrdiv_partners(train_rng, env, config):
 
                     all_avail_actions = np.reshape(
                         batch.avail_actions, (-1, jnp.shape(batch.avail_actions)[-1])
+                    )
+
+                    target_returns = jnp.reshape(
+                        target_returns, (-1, 1)
                     )
 
                     # Compute data weights based on whether selected ID
