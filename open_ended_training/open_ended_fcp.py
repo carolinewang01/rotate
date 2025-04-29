@@ -180,12 +180,12 @@ def log_train_metrics(config, logger, outs,
     ego_stat_means = jax.tree.map(lambda x: np.mean(x, axis=(0, 2))[..., 0], ego_stats) # shape (num_open_ended_iters, num_ego_updates)
 
     # Average ego metrics
-    # shape (num_seeds, num_open_ended_iters, n_ego_train_seeds, num_updates, num_partners, num_minibatches)
+    # shape (num_seeds, num_open_ended_iters, n_ego_train_seeds, num_ego_updates, num_partners, num_minibatches)
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_entropy_losses = np.asarray(ego_metrics["entropy_loss"]).mean(axis=(0, 2, 4, 5))
     # Process ego eval return metrics
-    # shape (num_seeds, num_open_ended_iters, n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
+    # shape (num_seeds, num_open_ended_iters, n_ego_train_seeds, num_ego_updates, num_partners, num_eval_episodes, num_agents_per_env)
     avg_ego_rets_per_iter = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5, 6))
 
     for iter_idx in range(num_open_ended_iters):

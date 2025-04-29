@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_paired"
+algo="open_ended_minimax"
 label="paper-v0"
 num_seeds=3
 

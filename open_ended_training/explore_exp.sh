@@ -1,10 +1,13 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_lagrange"
-label="method-explore:popsize-3"
+algo="oe_paired_reset"
+label="method-explore:no-reset:pop-size-3"
 partner_pop_size=3
 num_seeds=1
+
+# DEBUG COMMAND
+# python open_ended_training/run.py algorithm=open_ended_lagrange/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=8e4 algorithm.TIMESTEPS_PER_ITER_EGO=8e4 label=debug algorithm.NUM_SEEDS=1
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}
@@ -18,6 +21,7 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 #     "open_ended_lagrange"
 #     "open_ended_minimax"
 #     "open_ended_paired"
+#     "oe_paired_reset"
 #     "paired_ued"
 #     "open_ended_fcp"
 # )
