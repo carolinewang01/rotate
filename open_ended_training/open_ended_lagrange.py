@@ -461,8 +461,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 def _update_lagrange(conf_train_state, minibatches_ego, 
                                      minibatches_0_br, lower_lm, upper_lm):
                     
-                    traj_batches1, _, _ = minibatches_ego
-                    traj_batches2, _, _ = minibatches_0_br
+                    traj_batches1, _, targets_batch_1 = minibatches_ego
+                    traj_batches2, _, targets_batch_2 = minibatches_0_br
 
                     init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     _, (value_ego1, value_br1), _, _ = confederate_policy.get_action_value_policy(
@@ -483,8 +483,11 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                     
-                    combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
-                    combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
+                    # combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
+                    # combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
+
+                    combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
+                    combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
 
                     lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"]
                     upper_diff = combined_ego + config["UPPER_REGRET_THRESHOLD"] - combined_value_br
