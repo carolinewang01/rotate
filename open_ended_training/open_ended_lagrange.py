@@ -199,7 +199,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=-reward["agent_1"], # TODO: check with arrasy if this is correct
+                    reward=reward["agent_1"], # TODO: check with arrasy if this is correct
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -492,8 +492,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     lower_diff_mean, upper_diff_mean = lower_diff.mean(), upper_diff.mean()
                     new_lower_lm = lower_lm - (config["LAGRANGE_MULTIPLIER_LR"] * lower_diff_mean)
                     new_upper_lm = upper_lm - (config["LAGRANGE_MULTIPLIER_LR"] * upper_diff_mean)
-                    new_lower_lm = jnp.max(new_lower_lm, 0)
-                    new_upper_lm = jnp.max(new_upper_lm, 0)
+                    new_lower_lm = jnp.maximum(new_lower_lm, jnp.zeros_like(new_lower_lm))
+                    new_upper_lm = jnp.maximum(new_upper_lm, jnp.zeros_like(new_upper_lm))
 
                     return jnp.reshape(new_lower_lm, (1,)), jnp.reshape(new_upper_lm, (1,))
                 
@@ -646,6 +646,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 # Metrics
                 metric = traj_batch_ego.info
                 metric["update_steps"] = update_steps
+                metric["upper_lm"] = upper_lm
+                metric["lower_lm"] = lower_lm
                 metric["value_loss_conf_against_ego"] = all_losses[0][1][0]
                 metric["value_loss_conf_against_br"] = all_losses[0][1][1]
                 metric["pg_loss_conf_against_ego"] = all_losses[0][1][2]
@@ -987,6 +989,9 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     avg_entropy_losses_teammate_against_br = np.asarray(teammate_metrics["entropy_conf_against_br"]).mean(axis=(0, 2, 4, 5))
     avg_entropy_losses_br = np.asarray(teammate_metrics["entropy_loss_br"]).mean(axis=(0, 2, 4, 5))
     
+    avg_lagrange_lower = np.asarray(teammate_metrics["upper_lm"]).mean(axis=(0, 2, 4))
+    avg_lagrange_upper = np.asarray(teammate_metrics["lower_lm"]).mean(axis=(0, 2, 4))
+
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates)
     avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br"]).mean(axis=(0, 2))
     avg_rewards_teammate_against_ego = np.asarray(teammate_metrics["average_rewards_ego"]).mean(axis=(0, 2))
@@ -1027,6 +1032,9 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             logger.log_item("Losses/BRValLoss", avg_value_losses_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/BRActorLoss", avg_actor_losses_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/BREntropyLoss", avg_entropy_losses_br[iter_idx][step], train_step=global_step)
+
+            logger.log_item("Losses/LowerLagrangeMagnitude", avg_lagrange_lower[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/UpperLagrangeMagnitude", avg_lagrange_upper[iter_idx][step], train_step=global_step)
         
             # Rewards
             logger.log_item("Losses/AvgConfEgoRewards", avg_rewards_teammate_against_ego[iter_idx][step], train_step=global_step)
