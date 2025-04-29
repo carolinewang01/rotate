@@ -1,6 +1,7 @@
 '''Wrap heuristic agent policies in AgentPolicy interface.
 TODO: clean up logic by vectorizing init_hstate. See HeuristicPolicyPopulation.
 '''
+import jax
 from agents.agent_interface import AgentPolicy
 from agents.overcooked.independent_agent import IndependentAgent
 from agents.overcooked.onion_agent import OnionAgent
@@ -24,6 +25,11 @@ class OvercookedIndependentPolicyWrapper(AgentPolicy):
             env_state = env_state.env_state
         # hstate represents the agent state
         action, new_hstate = self.policy.get_action(obs, env_state, hstate)
+        
+        # if done, reset the hstate
+        new_hstate = jax.lax.cond(done.squeeze(), 
+                                  lambda: self.policy.init_agent_state(hstate.agent_id),
+                                  lambda: new_hstate)
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
@@ -41,6 +47,10 @@ class OvercookedOnionPolicyWrapper(AgentPolicy):
         if self.using_log_wrapper:
             env_state = env_state.env_state
         action, new_hstate = self.policy.get_action(obs, env_state, hstate)
+        # if done, reset the hstate
+        new_hstate = jax.lax.cond(done.squeeze(), 
+                                  lambda: self.policy.init_agent_state(hstate.agent_id),
+                                  lambda: new_hstate)
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
@@ -58,6 +68,10 @@ class OvercookedPlatePolicyWrapper(AgentPolicy):
         if self.using_log_wrapper:
             env_state = env_state.env_state
         action, new_hstate = self.policy.get_action(obs, env_state, hstate)
+        # if done, reset the hstate
+        new_hstate = jax.lax.cond(done.squeeze(), 
+                                  lambda: self.policy.init_agent_state(hstate.agent_id),
+                                  lambda: new_hstate)
         return action, new_hstate
 
     def init_hstate(self, batch_size: int, aux_info=None):
