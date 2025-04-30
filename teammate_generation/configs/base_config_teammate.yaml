@@ -46,7 +46,7 @@ logger:
     - seed=${algorithm.TRAIN_SEED}
     - ${label}
   mode: online # options: online, offline, disabled
-  verbose: true
+  verbose: false
   log_train_out: true # whether to log the out dictionary
   log_eval_out: true # whether to log the eval metrics
 
