@@ -487,11 +487,12 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                     
-                    combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
-                    combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
-
-                    #combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
-                    #combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
+                    if config["LAGRANGE_USE_TARGET_RETURNS"]:
+                        combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
+                        combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
+                    else:
+                        combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
+                        combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
 
                     lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"] # TODO: log lower and upper diffs
                     upper_diff = combined_ego + config["UPPER_REGRET_THRESHOLD"] - combined_value_br
@@ -502,7 +503,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     new_lower_lm = jnp.maximum(new_lower_lm, jnp.zeros_like(new_lower_lm))
                     new_upper_lm = jnp.maximum(new_upper_lm, jnp.zeros_like(new_upper_lm))
 
-                    return jnp.reshape(new_lower_lm, (1,)), jnp.reshape(new_upper_lm, (1,))
+                    return jnp.reshape(new_lower_lm, (1,)), jnp.reshape(new_upper_lm, (1,)), lower_diff_mean, upper_diff_mean
                 
                 (
                     train_state_conf, train_state_br, 
@@ -539,16 +540,16 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     _update_minbatch_br, train_state_br, (minibatches_br1, repeated_lower_lm, repeated_upper_lm)
                 )
 
-                lower_lm, upper_lm = _update_lagrange(
+                lower_lm, upper_lm, lower_diff_mean, upper_diff_mean = _update_lagrange(
                     old_train_state_conf, minibatches_ego, minibatches_br0, lower_lm, upper_lm
                 )
-
+                lm_grads = (lower_diff_mean, upper_diff_mean)
                 update_state = (train_state_conf, train_state_br, 
                     traj_batch_ego, traj_batch_br_0, traj_batch_br_1, 
                     advantages_conf_ego, advantages_conf_br, advantages_br,
                     targets_conf_ego, targets_conf_br, targets_br, 
                     rng_ego, rng_br, lower_lm, upper_lm)
-                return update_state, (total_loss, total_loss_br)
+                return update_state, (total_loss, total_loss_br, lm_grads)
 
             def _update_step(update_runner_state, unused):
                 """
@@ -650,8 +651,6 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 lower_lm = update_state[-2]
                 upper_lm = update_state[-1]
 
-                #jax.debug.breakpoint()
-
                 # Metrics
                 metric = traj_batch_ego.info
                 metric["update_steps"] = update_steps
@@ -665,6 +664,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 metric["entropy_conf_against_br"] = all_losses[0][1][5]
                 metric["average_rewards_br"] = jnp.mean(traj_batch_br_0.reward)
                 metric["average_rewards_ego"] = jnp.mean(traj_batch_ego.reward)
+                metric["lm_lower_diff_mean"] = all_losses[2][0]
+                metric["lm_upper_diff_mean"] = all_losses[2][1]
 
                 #value_loss_br, pg_loss_br, entropy_loss_br = total_loss_br[1]
                 metric["value_loss_br"] = all_losses[1][1][0]
@@ -983,6 +984,9 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates, num_eval_episodes, num_agents_per_env)
     avg_teammate_sp_returns = np.asarray(teammate_metrics["eval_ep_last_info_br"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5))
     avg_teammate_xp_returns = np.asarray(teammate_metrics["eval_ep_last_info_ego"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5))
+    # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates, update_epochs)
+    avg_lm_lower_diff_mean = np.asarray(teammate_metrics["lm_lower_diff_mean"]).mean(axis=(0, 2, 4))
+    avg_lm_upper_diff_mean = np.asarray(teammate_metrics["lm_upper_diff_mean"]).mean(axis=(0, 2, 4))
 
     # Conf vs ego, conf vs br, br losses
     #  shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates, update_epochs, num_minibatches)
@@ -1041,8 +1045,11 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             logger.log_item("Losses/BRActorLoss", avg_actor_losses_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/BREntropyLoss", avg_entropy_losses_br[iter_idx][step], train_step=global_step)
 
+            # Lagrange learning
             logger.log_item("Losses/LowerLagrangeMagnitude", avg_lagrange_lower[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/UpperLagrangeMagnitude", avg_lagrange_upper[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/LagrangeLowerDiffMean", avg_lm_lower_diff_mean[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/LagrangeUpperDiffMean", avg_lm_upper_diff_mean[iter_idx][step], train_step=global_step)
         
             # Rewards
             logger.log_item("Losses/AvgConfEgoRewards", avg_rewards_teammate_against_ego[iter_idx][step], train_step=global_step)
