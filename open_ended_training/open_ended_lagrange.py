@@ -493,11 +493,11 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     #combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
                     #combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
 
-                    lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"]
+                    lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"] # TODO: log lower and upper diffs
                     upper_diff = combined_ego + config["UPPER_REGRET_THRESHOLD"] - combined_value_br
 
                     lower_diff_mean, upper_diff_mean = lower_diff.mean(), upper_diff.mean()
-                    new_lower_lm = lower_lm - (config["LAGRANGE_MULTIPLIER_LR"] * lower_diff_mean)
+                    new_lower_lm = lower_lm - (config["LAGRANGE_MULTIPLIER_LR"] * lower_diff_mean) # TODO: try using an optimizer for this
                     new_upper_lm = upper_lm - (config["LAGRANGE_MULTIPLIER_LR"] * upper_diff_mean)
                     new_lower_lm = jnp.maximum(new_lower_lm, jnp.zeros_like(new_lower_lm))
                     new_upper_lm = jnp.maximum(new_upper_lm, jnp.zeros_like(new_upper_lm))
