@@ -15,7 +15,7 @@ partner_agent:
   custom_loader: 
     name: open_ended # if null, use default loader
     type: ego # options: ego, partner
-  ckpt_key: final_buffer # TODO: write custom loader for this checkpoint type
+  ckpt_key: final_buffer
   idx_list: [[0, -1]]
   
   # name: ippo_mlp # lbf policy!

@@ -39,12 +39,11 @@ def load_checkpoints(path, ckpt_key="checkpoints", custom_loader_cfg: dict=None)
         return restored[ckpt_key]
     elif custom_loader_cfg["name"] == "open_ended":
         partner_out, ego_out = restored
-        if custom_loader_cfg["type"] == "ego":
-            return ego_out[ckpt_key]
-        elif custom_loader_cfg["type"] == "partner":
-            return partner_out[ckpt_key]
+        out = ego_out if custom_loader_cfg["type"] == "ego" else partner_out
+        if ckpt_key == "final_buffer":
+            return out["final_buffer"]["params"]
         else:
-            raise ValueError(f"Invalid custom loader type: {custom_loader_cfg['type']}")
+            return out[ckpt_key]
     else:
         raise ValueError(f"Invalid custom loader name: {custom_loader_cfg['name']}")
 

@@ -564,9 +564,9 @@ def run_ego_training(config, wandb_logger):
     partner_agent_config = dict(config["partner_agent"])
     partner_policy, partner_params, init_partner_params, idx_labels = initialize_rl_agent_from_config(
         partner_agent_config, partner_agent_config["name"], env, init_rng)
-    pop_size = len(np.array(idx_labels).flatten())
-    # import pdb; pdb.set_trace() # TODO: check out why this isn't working 
+
     flattened_partner_params = jax.tree.map(lambda x, y: x.reshape((-1,) + y.shape), partner_params, init_partner_params)        
+    pop_size = jax.tree.leaves(flattened_partner_params)[0].shape[0]
 
     # Create partner population
     partner_population = AgentPopulation(

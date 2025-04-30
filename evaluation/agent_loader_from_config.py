@@ -100,9 +100,7 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
             idx_list = agent_config["idx_list"]
         idx_list = jax.tree.map(lambda x: int(x), idx_list)
         idxs = process_idx_list(idx_list)
-        
-        import pdb; pdb.set_trace()
-        
+                
         agent_params = jax.tree.map(lambda x: x[idxs], agent_ckpt)
     
     log.info(f"Loaded {agent_name} checkpoint where leaf 0 has shape {leaf0_shape}. "
