@@ -83,7 +83,8 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
 
     agent_path = agent_config["path"]
     ckpt_key = agent_config.get("ckpt_key", "checkpoints")
-    agent_ckpt = load_checkpoints(agent_path, ckpt_key=ckpt_key)
+    custom_loader_cfg = agent_config.get("custom_loader", None)
+    agent_ckpt = load_checkpoints(agent_path, ckpt_key=ckpt_key, custom_loader_cfg=custom_loader_cfg)
 
     leaf0_shape = jax.tree.leaves(agent_ckpt)[0].shape
 
@@ -99,9 +100,9 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
             idx_list = agent_config["idx_list"]
         idx_list = jax.tree.map(lambda x: int(x), idx_list)
         idxs = process_idx_list(idx_list)
+                
         agent_params = jax.tree.map(lambda x: x[idxs], agent_ckpt)
     
-
     log.info(f"Loaded {agent_name} checkpoint where leaf 0 has shape {leaf0_shape}. "
             f" Selecting indices {idx_list if idx_list is not None else 'all'} for evaluation.")
 
@@ -117,7 +118,7 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
         policy, init_params = initialize_mlp_agent(agent_config, env, init_rng)
     elif agent_config["actor_type"] == "rnn":
         policy, init_params = initialize_rnn_agent(agent_config, env, init_rng)
-    elif agent_config["actor_type"] == "actor_double_critic":
+    elif agent_config["actor_type"] == "actor_with_double_critic":
         policy, init_params = initialize_actor_with_double_critic(agent_config, env, init_rng)
     elif agent_config["actor_type"] == "actor_with_conditional_critic":
         policy, init_params = initialize_actor_with_conditional_critic(agent_config, env, init_rng)
