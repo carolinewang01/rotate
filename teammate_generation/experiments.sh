@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="brdiv"
+algo="lbrdiv"
 label="paper-v0"
 num_seeds=3
 
