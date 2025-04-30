@@ -39,6 +39,9 @@ During rebuttal phase:
     - Enable decision-making to account for the available actions
 - PPO-ego: 
     - Update this code to resample from the agent population each time the episode is done.
+    - Figure out better place to put the initialize_ego_agent helper function
+- Hydra configs: 
+    - add structured hydra configs for ego agent training, evaluation, and ppo
 
 ### Code Assumptions
 While cleaning up the code, we should re-examine these assumptions for the benchmark. 
