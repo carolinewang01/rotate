@@ -158,30 +158,12 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 val_0 = val_0.squeeze()
 
                 # Agent_1 (partner) action using the BufferedPopulation interface
-                # Conditionally resample partners based on prev_done["__all__"]
-                
-                
+                # Conditionally resample partners based on prev_done["__all__"]                
                 needs_resample = prev_done["__all__"] # shape (NUM_ENVS,) bool
-                
-                # # Sample new partners for done environments
-                # def resample_partners():
-                #     new_indices, new_buffer = partner_population.sample_agent_indices(
-                #         population_buffer, jnp.sum(needs_resample), partner_rng
-                #     )
-                #     # Update only the partner indices for done environments
-                #     updated_indices = partner_indices.at[jnp.where(needs_resample)[0]].set(new_indices)
-                #     return updated_indices, new_buffer
-                
-                # # If any environment is done, resample partners for those envs
-                # partner_indices_updated, new_buffer = jax.lax.cond(
-                #     jnp.any(needs_resample),
-                #     lambda: resample_partners(),
-                #     lambda: (partner_indices, population_buffer)
-                # )
 
                 # Sample potential new indices for all envs & get buffer with updated ages
                 # Pass the needs_resample mask to correctly update ages
-                sampled_indices_all, buffer_updated_ages = partner_population.sample_agent_indices(
+                sampled_indices_all, updated_buffer = partner_population.sample_agent_indices(
                     population_buffer, # Buffer from previous step
                     config["NUM_UNCONTROLLED_ACTORS"], # Static n = num_envs
                     partner_sample_rng,
@@ -189,7 +171,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 )
 
                 # Determine final indices based on whether resampling was needed for each env
-                final_partner_indices = jnp.where(
+                updated_partner_indices = jnp.where(
                     needs_resample,         # Mask shape (NUM_ENVS,)
                     sampled_indices_all,    # Use newly sampled index if True
                     partner_indices         # Else, keep index from previous step
@@ -201,8 +183,8 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
 
                 # Get actions using the final indices and the updated buffer
                 act_1, new_partner_hstate = partner_population.get_actions(
-                    buffer_updated_ages,    # Use buffer with correct ages
-                    final_partner_indices,  # Use the final selected indices
+                    updated_buffer,    # Use buffer with correct ages
+                    updated_partner_indices,  # Use the final selected indices
                     obs_1_reshaped,
                     done_1_reshaped,
                     avail_actions_1,
@@ -238,8 +220,9 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     avail_actions=avail_actions_0
                 )
                 # The new runner state for the next iteration includes the updated buffer and final indices
-                # TODO: consider renaming the buffer and indices
-                new_runner_state = (train_state, env_state_next, obs_next, done, hstate_0, new_partner_hstate, buffer_updated_ages, final_partner_indices, rng)
+                new_runner_state = (train_state, env_state_next, obs_next, done, 
+                                    hstate_0, new_partner_hstate, updated_buffer, 
+                                    updated_partner_indices, rng)
                 return new_runner_state, transition
 
             # GAE & update step

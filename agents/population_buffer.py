@@ -28,19 +28,24 @@ class BufferedPopulation(AgentPopulation):
     This extends the AgentPopulation class and provides methods to add new agents
     to the buffer and sample from existing agents based on their scores.
     """
-    def __init__(self, max_pop_size, policy_cls, staleness_coef=0.3, temp=1.0):
+    def __init__(self, max_pop_size, policy_cls, sampling_strategy="plr", staleness_coef=0.3, temp=1.0):
         """Initialize a buffered population.
         
         Args:
             max_pop_size: Maximum number of agents in the population
             policy_cls: Agent policy class
-            staleness_coef: Weight for staleness in sampling
-            temp: Temperature for softmax in weighted sampling
+            sampling_strategy: Method for sampling partners ('plr' or 'uniform').
+            staleness_coef: Weight for staleness in 'plr' sampling. If 0, 
+                only the score is used for sampling. If scores are 1s (default), 
+                sampling becomes uniform over filled slots (equivalent to 'uniform' strategy).
+            temp: Temperature for score-based sampling distribution (currently has no effect).
         """
         super().__init__(max_pop_size, policy_cls)
         self.max_pop_size = max_pop_size
         self.staleness_coef = staleness_coef
-        self.temp = temp
+        self.temp = temp # Note: Currently ineffective
+        self.sampling_strategy = sampling_strategy
+        assert sampling_strategy in ["plr", "uniform"], "sampling_strategy must be 'plr' or 'uniform'"
     
     @partial(jax.jit, static_argnums=(0,))
     def reset_buffer(self, example_params):
@@ -66,12 +71,19 @@ class BufferedPopulation(AgentPopulation):
             filled_count=jnp.zeros(1, dtype=jnp.int32),
             buffer_size=self.max_pop_size,
             staleness_coef=self.staleness_coef,
-            temp=self.temp
+            temp=self.temp,
         )
     
+
     @partial(jax.jit, static_argnums=(0,))
-    def _get_sampling_dist(self, buffer):
-        """Get distribution for sampling agents based on scores and staleness.
+    def _get_uniform_sampling_dist(self, buffer):
+        """Get uniform distribution over filled slots."""
+        filled_count = jnp.maximum(buffer.filled.sum(), 1) # Avoid division by zero
+        return buffer.filled / filled_count
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def _get_plr_sampling_dist(self, buffer):
+        """Get distribution for sampling agents based on scores and staleness (PLR strategy).
         
         Args:
             buffer: The population buffer
@@ -80,8 +92,10 @@ class BufferedPopulation(AgentPopulation):
             Distribution over agents
         """
         # Score distribution (use scores only for filled slots)
+        # TODO: temp currently doesn't do anything. check the PLR paper for correct implementation.
         score_dist = buffer.scores * buffer.filled / buffer.temp
-        score_sum = score_dist.sum()
+        score_sum = score_dist.sum()  # sum of scores over filled slots
+        # if filled slots exist, use score distribution. otherwise, uniform over filled slots
         score_dist = jnp.where(
             score_sum > 0,
             score_dist / score_sum,
@@ -110,10 +124,18 @@ class BufferedPopulation(AgentPopulation):
         Returns:
             Index to insert the next agent
         """
+        # Select distribution based on the instance's sampling strategy
+        sampling_dist = jax.lax.cond(
+            self.sampling_strategy == "uniform", # Use self.sampling_strategy
+            self._get_uniform_sampling_dist,
+            self._get_plr_sampling_dist,
+            buffer # Pass buffer as the operand to the selected function
+        )
+
         return jax.lax.cond(
             jnp.less(buffer.filled_count[0], buffer.buffer_size),
             lambda: buffer.filled_count[0],
-            lambda: jnp.argmin(self._get_sampling_dist(buffer))
+            lambda: jnp.argmin(sampling_dist)
         )
     
     @partial(jax.jit, static_argnums=(0,))
@@ -178,7 +200,15 @@ class BufferedPopulation(AgentPopulation):
         rng, sample_rng = jax.random.split(rng, 2)
 
         buffer_has_agents = jnp.greater(buffer.filled.sum(), 0)
-        sampling_dist = self._get_sampling_dist(buffer)
+        
+        # Select distribution based on the instance's sampling strategy
+        sampling_dist = jax.lax.cond(
+            self.sampling_strategy == "uniform", # Use self.sampling_strategy
+            self._get_uniform_sampling_dist,
+            self._get_plr_sampling_dist,
+            buffer # Pass buffer as the operand to the selected function
+        )
+        # --- End Distribution Logic ---
 
         def handle_empty_buffer():
             # If buffer is empty, return random indices and unchanged buffer
@@ -186,45 +216,51 @@ class BufferedPopulation(AgentPopulation):
             return rand_indices, buffer
 
         def handle_filled_buffer():
-            # Always sample n indices
+            # Always sample n indices using the chosen distribution
             indices = jax.random.choice(
                 sample_rng, jnp.arange(buffer.buffer_size),
                 shape=(n,), p=sampling_dist, replace=True
             )
 
-            # --- Correct Age Update Logic ---
-            # Initialize reset mask for buffer entries
-            reset_mask = jnp.zeros(buffer.buffer_size, dtype=bool)
+            def update_ages_plr(current_buffer, sampled_indices, needs_mask):
+                '''
+                Update the ages of the buffer based on the sampled indices.
+                '''
+                # Initialize reset mask for buffer entries
+                reset_mask = jnp.zeros(current_buffer.buffer_size, dtype=bool)
+                # Default to assuming all samples are used if mask is not provided
+                actual_needs_mask = needs_mask if needs_mask is not None else jnp.ones(n, dtype=bool)
+                # Loop through samples to build the reset_mask without dynamic slicing
+                def update_reset_mask(i, current_reset_mask):
+                    buffer_idx = sampled_indices[i]
+                    is_needed = actual_needs_mask[i]
+                    new_reset_mask = jax.lax.cond(
+                        is_needed, lambda mask: mask.at[buffer_idx].set(True), lambda mask: mask, current_reset_mask
+                    )
+                    return new_reset_mask
+                reset_mask = jax.lax.fori_loop(0, n, update_reset_mask, reset_mask)
+                # Compute final ages
+                increment_mask = current_buffer.filled & (~reset_mask)
+                new_ages = current_buffer.ages
+                new_ages = jnp.where(increment_mask, new_ages + 1, new_ages)
+                new_ages = jnp.where(reset_mask, 0, new_ages)
+                return current_buffer.replace(ages=new_ages)
 
-            # Default to assuming all samples are used if mask is not provided
-            actual_needs_resample_mask = needs_resample_mask if needs_resample_mask is not None else jnp.ones(n, dtype=bool)
+            def skip_age_update(current_buffer, sampled_indices, needs_mask):
+                '''Do nothing, return buffer unchanged
+                '''
+                return current_buffer
 
-            # Loop through samples to build the reset_mask without dynamic slicing
-            def update_reset_mask(i, current_reset_mask):
-                buffer_idx = indices[i]
-                is_needed = actual_needs_resample_mask[i]
-                # Set reset_mask[buffer_idx] = True only if this sample was needed
-                new_reset_mask = jax.lax.cond(
-                    is_needed,
-                    lambda mask: mask.at[buffer_idx].set(True),
-                    lambda mask: mask,
-                    current_reset_mask
-                )
-                return new_reset_mask
-
-            reset_mask = jax.lax.fori_loop(0, n, update_reset_mask, reset_mask)
-
-            # Now compute final ages using the statically constructed reset_mask
-            increment_mask = buffer.filled & (~reset_mask) # Increment only if filled AND not reset
-
-            # Apply updates
-            new_ages = buffer.ages
-            new_ages = jnp.where(increment_mask, new_ages + 1, new_ages)
-            new_ages = jnp.where(reset_mask, 0, new_ages) # Reset age if it was sampled and needed
-            # --- End Age Update Logic ---
-
-            new_buffer = buffer.replace(ages=new_ages)
-            return indices, new_buffer
+            # Apply age updates only for 'plr' strategy to skip for-i loop if possible.
+            updated_buffer = jax.lax.cond(
+                self.sampling_strategy == "uniform",
+                skip_age_update,
+                update_ages_plr,
+                # Operands for the conditional functions:
+                buffer, indices, needs_resample_mask 
+            )
+            
+            return indices, updated_buffer
 
         indices, new_buffer = jax.lax.cond(
             buffer_has_agents,

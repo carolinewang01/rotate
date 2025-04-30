@@ -1,23 +1,12 @@
-import shutil
 import time
 import logging
 from functools import partial
 
-import hydra
 import jax
-import jax.numpy as jnp
-import numpy as np
-import optax
-from flax.training.train_state import TrainState
 
-from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
-from agents.population_interface import AgentPopulation
-from agents.population_buffer import BufferedPopulation, PopulationBuffer
+from agents.population_buffer import BufferedPopulation
 from agents.initialize_agents import initialize_s5_agent, initialize_actor_with_double_critic
-from common.plot_utils import get_stats, get_metric_names
-from common.save_load_utils import save_train_run
-from common.run_episodes import run_episodes
-from common.ppo_utils import Transition, unbatchify
+from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ego_agent_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
@@ -103,20 +92,16 @@ def train_persistent_paired(rng, env, algorithm_config):
     # Create persistent partner population with BufferedPopulation
     # The max_pop_size should be large enough to hold all agents across all iterations
     # Now we need more space since we're storing all checkpoints
-    max_pop_size = algorithm_config.get("MAX_POPULATION_SIZE", 
-                                      algorithm_config["PARTNER_POP_SIZE"] * 
-                                      algorithm_config["NUM_CHECKPOINTS"] *
-                                      algorithm_config["NUM_OPEN_ENDED_ITERS"])  # Add extra buffer space
-    
-    # Set max_sample_n to the maximum of NUM_ENVS and NUM_EVAL_EPISODES. Ensure it's at least 32 for safety
-    max_sample_n = max(algorithm_config["NUM_ENVS"], algorithm_config["NUM_EVAL_EPISODES"], 32)
+    max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
+                   algorithm_config["NUM_CHECKPOINTS"] * \
+                   algorithm_config["NUM_OPEN_ENDED_ITERS"]
     
     partner_population = BufferedPopulation(
         max_pop_size=max_pop_size,
         policy_cls=conf_policy,
-        staleness_coef=algorithm_config.get("STALENESS_COEF", 0.3),
-        temp=algorithm_config.get("REPLAY_TEMP", 1.0),
-        # max_sample_n=max_sample_n
+        sampling_strategy=algorithm_config["SAMPLING_STRATEGY"],
+        staleness_coef=algorithm_config["STALENESS_COEF"],
+        temp=algorithm_config["SCORE_TEMP"],
     )
 
     population_buffer = partner_population.reset_buffer(init_conf_params)
@@ -125,7 +110,7 @@ def train_persistent_paired(rng, env, algorithm_config):
     def open_ended_step_fn(carry, unused):
         return persistent_open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, population_buffer, rng)
+    init_carry = (init_ego_params, population_buffer, train_rng)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 
@@ -133,8 +118,8 @@ def train_persistent_paired(rng, env, algorithm_config):
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
     
-    final_ego_params, final_buffer, _ = final_carry
-    return final_ego_params, final_buffer, outs
+    # final_ego_params, final_buffer, _ = final_carry
+    return outs
 
 
 def run_persistent_paired(config, wandb_logger):
@@ -144,13 +129,6 @@ def run_persistent_paired(config, wandb_logger):
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
     
-    # Initialize partner policy once - reused for all iterations
-    # partner_policy = ActorWithDoubleCriticPolicy(
-    #     action_dim=env.action_space(env.agents[1]).n,
-    #     obs_dim=env.observation_space(env.agents[1]).shape[0]
-    # )
-    
-
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rng, init_ego_rng = jax.random.split(rng)
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
@@ -165,7 +143,7 @@ def run_persistent_paired(config, wandb_logger):
                 )
             )
         )
-        all_ego_params, all_buffers, outs = train_fn(rngs)
+        outs = train_fn(rngs)
     
     end_time = time.time()
     log.info(f"Persistent open-ended PAIRED training completed in {end_time - start_time} seconds.")
@@ -179,4 +157,4 @@ def run_persistent_paired(config, wandb_logger):
     ego_params = jax.tree_map(lambda x: x[:, :, 0], ego_outs["final_params"]) # shape (num_seeds, num_open_ended_iters, 1, num_ckpts, leaf_dim)
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
 
-    return ego_policy, ego_params, init_ego_params, all_buffers 
+    return ego_policy, ego_params, init_ego_params

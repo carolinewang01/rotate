@@ -36,9 +36,10 @@ If time permits:
 - Clean up IPPO: 
     - Update IPPO to use the general agent interface
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
-- Clean up multiple copies of log_heldout_metrics
 - Heuristic agents: 
     - Enable decision-making to account for the available actions
+- PPO-ego: 
+    - Update this code to resample from the agent population each time the episode is done.
 
 ### Code Assumptions
 While cleaning up the code, we should re-examine these assumptions for the benchmark. 

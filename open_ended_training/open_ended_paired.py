@@ -826,7 +826,7 @@ def train_paired(rng, env, algorithm_config, partner_policy, partner_population)
     def open_ended_step_fn(carry, unused):
         return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, rng)
+    init_carry = (init_ego_params, train_rng)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 
@@ -834,8 +834,6 @@ def train_paired(rng, env, algorithm_config, partner_policy, partner_population)
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
     return outs
-
-
 
 def run_paired(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])

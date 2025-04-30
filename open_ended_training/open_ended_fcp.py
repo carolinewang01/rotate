@@ -81,7 +81,7 @@ def train_fcp(rng, env, algorithm_config, partner_policy, partner_population):
     def open_ended_step_fn(carry, unused):
         return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, rng)
+    init_carry = (init_ego_params, train_rng)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 

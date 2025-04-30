@@ -815,7 +815,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
 
 
 def train_paired(rng, env, algorithm_config):
-    rng, init_ego_rng, init_conf_rng, init_br_rng = jax.random.split(rng, 4)
+    rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
     conf_policy, init_conf_params = initialize_actor_with_double_critic(algorithm_config, env, init_conf_rng)
@@ -832,7 +832,7 @@ def train_paired(rng, env, algorithm_config):
         return open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
                                         partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, init_conf_params, init_br_params, rng)
+    init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 

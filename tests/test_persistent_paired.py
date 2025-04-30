@@ -95,9 +95,9 @@ def test_persistent_paired():
         "CLIP_EPS": 0.2,
         "ENT_COEF": 0.01,
         "VF_COEF": 0.5,
-        "MAX_POPULATION_SIZE": 10,
+        "SAMPLING_STRATEGY": "plr",
         "STALENESS_COEF": 0.3,
-        "REPLAY_TEMP": 1.0,
+        "SCORE_TEMP": 1.0,
         "CONF_BR_WEIGHT": 0.5,
         "NUM_EVAL_EPISODES": 2
     }
@@ -132,5 +132,5 @@ def test_persistent_paired():
 
 if __name__ == "__main__":
     # Run tests
-    # test_buffered_population()
+    test_buffered_population()
     test_persistent_paired() 
