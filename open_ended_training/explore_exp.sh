@@ -2,7 +2,8 @@
 
 # Algorithm to run
 algo="oe_paired_reset"
-label="method-explore:no-reset:pop-size-3"
+label="method-explore:br-ego:popsize-3"
+# sampling_strategy="plr"
 partner_pop_size=3
 num_seeds=1
 
@@ -22,6 +23,7 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 #     "open_ended_minimax"
 #     "open_ended_paired"
 #     "oe_paired_reset"
+#     "oe_persistent_paired"
 #     "paired_ued"
 #     "open_ended_fcp"
 # )
@@ -51,7 +53,11 @@ failure_count=0
 for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
-    if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" algorithm.PARTNER_POP_SIZE="${partner_pop_size}" 2>> "${log_file}"; then
+    if python open_ended_training/run.py algorithm="${algo}/${task}" \
+        task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
+        algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
+        # algorithm.SAMPLING_STRATEGY="${sampling_strategy}" \
+        2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
     else

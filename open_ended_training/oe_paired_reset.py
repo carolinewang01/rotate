@@ -1,4 +1,5 @@
-'''Same as open_ended_paired.py, but doesn't reset the conf and br policies.'''
+'''Same as open_ended_paired.py, but doesn't reset the conf and br policies and 
+supports recurrent conf/br policies.'''
 import shutil
 import time
 import logging
@@ -13,7 +14,7 @@ from flax.training.train_state import TrainState
 
 from agents.population_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent
-from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
+from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from common.run_episodes import run_episodes
@@ -26,35 +27,40 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def _create_minibatches(traj_batch, advantages, targets, batch_size, num_minibatches, permutation_rng):
-    """Create minibatches for PPO updates, where each leaf has shape (num_minibatches, batch_size, ...) 
-    Note that the rollout dimension is combined with the num_actors dimension.
+def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
+    """Create minibatches for PPO updates, where each leaf has shape 
+        (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
+    This function ensures that the rollout (time) dimension is kept separate from the minibatch and num_actors 
+    dimensions, so that the minibatches are compatible with recurrent ActorCritics.
     """
     # Create batch containing trajectory, advantages, and targets
+
     batch = (
+        init_hstate, # shape (1, num_actors, hidden_dim) = (1, 16, 64)
         traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
-        advantages, # shape (rollout_len, num_agents) = (128, 16)
-        targets # shape (rollout_len, num_agents) = (128, 16)
+        advantages, # shape (rollout_len, num_actors) = (128, 16)
+        targets # shape (rollout_len, num_actors) = (128, 16)
             )
-    # Reshape batch to expected dimensions
-    batch_reshaped = jax.tree.map(
-        lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-    )
-    
-    # Shuffle using the provided RNG key
-    permutation = jax.random.permutation(permutation_rng, batch_size)
+
+    permutation = jax.random.permutation(perm_rng, num_actors)
+
+    # each leaf of shuffled batch has shape (rollout_len, num_actors, feat_shape)
+    # except for init_hstate which has shape (1, num_actors, hidden_dim)
     shuffled_batch = jax.tree.map(
-        lambda x: jnp.take(x, permutation, axis=0), batch_reshaped
+        lambda x: jnp.take(x, permutation, axis=1), batch
     )
-    
-    # Create minibatches for training
-    minibatches = jax.tree.map(
-        lambda x: jnp.reshape(
-            x, [num_minibatches, -1] + list(x.shape[1:])
-        ),
+    # each leaf has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape)
+    # except for init_hstate which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim)
+    minibatches = jax.tree_util.tree_map(
+        lambda x: jnp.swapaxes(
+            jnp.reshape(
+                x,
+                [x.shape[0], num_minibatches, -1] 
+                + list(x.shape[2:]),
+        ), 1, 0,),
         shuffled_batch,
     )
-    
+    # import pdb; pdb.set_trace()
     return minibatches
 
 def train_regret_maximizing_partners(config, env, 
@@ -305,10 +311,9 @@ def train_regret_maximizing_partners(config, env,
             def _update_epoch(update_state, unused):
                 def _update_minbatch_conf(train_state_conf, batch_infos):
                     minbatch_ego, minbatch_br = batch_infos
-                    traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
-                    traj_batch_br, advantages_br, returns_br = minbatch_br
+                    init_conf_hstate_ego, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
+                    init_conf_hstate_br, traj_batch_br, advantages_br, returns_br = minbatch_br
 
-                    init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
                         _, (value_ego, _), pi_ego, _ = confederate_policy.get_action_value_policy(
@@ -316,7 +321,7 @@ def train_regret_maximizing_partners(config, env,
                             obs=traj_batch_ego.obs, 
                             done=traj_batch_ego.done,
                             avail_actions=traj_batch_ego.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_conf_hstate_ego,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                         _, (_, value_br), pi_br, _ = confederate_policy.get_action_value_policy(
@@ -324,7 +329,7 @@ def train_regret_maximizing_partners(config, env,
                             obs=traj_batch_br.obs, 
                             done=traj_batch_br.done,
                             avail_actions=traj_batch_br.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_conf_hstate_br,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
 
@@ -393,8 +398,7 @@ def train_regret_maximizing_partners(config, env,
                     return train_state_conf, (loss_val, aux_vals)
                 
                 def _update_minbatch_br(train_state_br, batch_info):
-                    traj_batch_br, advantages, returns = batch_info
-                    init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                    init_br_hstate, traj_batch_br, advantages, returns = batch_info
                     def _loss_fn_br(params, traj_batch_br, gae, target_v):
                         _, value, pi, _ = br_policy.get_action_value_policy(
                             params=params, 
@@ -452,13 +456,13 @@ def train_regret_maximizing_partners(config, env,
 
                 # Create minibatches for each agent and interaction type
                 minibatches_ego = _create_minibatches(
-                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_ego
+                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, init_conf_hstate_ego, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_ego
                 )
                 minibatches_br0 = _create_minibatches(
-                    traj_batch_br_0, advantages_conf_br, targets_conf_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br0
+                    traj_batch_br_0, advantages_conf_br, targets_conf_br, init_conf_hstate_br, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br0
                 )
                 minibatches_br1 = _create_minibatches(
-                    traj_batch_br_1, advantages_br, targets_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br1
+                    traj_batch_br_1, advantages_br, targets_br, init_br_hstate, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br1
                 )
 
                 # Update confederate
@@ -770,11 +774,14 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     rng, partner_rng, ego_rng = jax.random.split(rng, 3)
     
     # Train partner agents with ego_policy
+    # set br to be the same as ego for now
+    br_ego_params = jax.tree.map(lambda x: x[np.newaxis, ...].repeat(config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
     train_out = train_regret_maximizing_partners(config, env, 
-                                                 prev_ego_params, ego_policy, 
-                                                 prev_conf_params, conf_policy, 
-                                                 prev_br_params, br_policy, 
-                                                 partner_rng
+                                                 ego_params=prev_ego_params, ego_policy=ego_policy, 
+                                                 conf_params=prev_conf_params, conf_policy=conf_policy, 
+                                                 br_params=br_ego_params, # prev_br_params, 
+                                                 br_policy=ego_policy, # br_policy, 
+                                                 partner_rng=partner_rng
                                                  )
     train_partner_params = train_out["checkpoints_conf"]
     
@@ -824,9 +831,23 @@ def train_paired(rng, env, algorithm_config):
     init_conf_rngs = jax.random.split(init_conf_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_conf_params = jax.vmap(conf_policy.init_params)(init_conf_rngs)
 
-    br_policy = MLPActorCriticPolicy(
+    # br_policy = MLPActorCriticPolicy(
+    #     action_dim=env.action_space(env.agents[0]).n,
+    #     obs_dim=env.observation_space(env.agents[0]).shape[0],
+    # )
+    # Hacky, but we're using the same policy for br and ego for now
+    br_policy = S5ActorCriticPolicy(
         action_dim=env.action_space(env.agents[0]).n,
         obs_dim=env.observation_space(env.agents[0]).shape[0],
+        d_model=algorithm_config.get("S5_D_MODEL", 16),
+        ssm_size=algorithm_config.get("S5_SSM_SIZE", 16),
+        n_layers=algorithm_config.get("S5_N_LAYERS", 2),
+        blocks=algorithm_config.get("S5_BLOCKS", 1),
+        fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 64),
+        s5_activation=algorithm_config.get("S5_ACTIVATION", "full_glu"),
+        s5_do_norm=algorithm_config.get("S5_DO_NORM", True),
+        s5_prenorm=algorithm_config.get("S5_PRENORM", True),
+        s5_do_gtrxl_norm=algorithm_config.get("S5_DO_GTRXL_NORM", True),
     )
     init_br_rngs = jax.random.split(init_br_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
