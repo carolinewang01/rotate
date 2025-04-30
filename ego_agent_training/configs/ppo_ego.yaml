@@ -1,12 +1,16 @@
 defaults:
   - task: overcooked/cramped_room # task configs
   - hydra: hydra_simple
+  - ../../evaluation/configs/global_heldout_settings
+  - algorithm@algorithm: ppo_ego/${task} # task-specific algorithm configs
   - _self_         # Ensures that values in this file override imported ones if needed
 
 ENV_NAME: ${task.ENV_NAME}
 ENV_KWARGS: ${task.ENV_KWARGS}
 ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
 TASK_NAME: ${task.TASK_NAME}
+
+run_heldout_eval: true
 
 partner_agent:
   name: persistent_paired # overcooked cramped room
@@ -32,7 +36,7 @@ algorithm:
   EGO_ACTOR_TYPE: s5 # options: s5, mlp, rnn
   TOTAL_TIMESTEPS: 3e5
   TRAIN_SEED: 12345
-  NUM_EGO_TRAIN_SEEDS: 1
+  NUM_EGO_TRAIN_SEEDS: 2
   NUM_EVAL_EPISODES: 20
   NUM_CHECKPOINTS: 5
   NUM_ENVS: 16
@@ -50,6 +54,9 @@ algorithm:
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: true
 
+label: ""
+name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}
+
 # WandB Params
 logger: 
   project: open-ended-aht
@@ -58,13 +65,12 @@ logger:
     - ${algorithm.ALG}
     - ${TASK_NAME}
   mode: offline # options: online, offline, disabled
-  verbose: true
-  log_train_out: false # whether to log the out dictionary
+  verbose: false
+  log_train_out: true # whether to log the out dictionary
+  log_eval_out: true # whether to log the eval metrics
 
 # Local logger
 local_logger:
   save_figures: true # currently unused
   save_train_out: true
-
-label: ""
-name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}
+  save_eval_out: true

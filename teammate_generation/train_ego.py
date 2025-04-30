@@ -9,8 +9,7 @@ import hydra
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 
-from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
-from ego_agent_training.ppo_ego import train_ppo_ego_agent
+from ego_agent_training.ppo_ego import train_ppo_ego_agent, initialize_ego_agent
 from common.plot_utils import get_metric_names, get_stats
 from common.save_load_utils import save_train_run
 
@@ -35,27 +34,21 @@ def train_ego_agent(config, logger, partner_params, partner_population):
     rng, init_rng = jax.random.split(rng, 2)
     train_rngs = jax.random.split(rng, num_seeds)
     
-    # Initialize ego agent
-    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
-        # WARNING: currently the RNN policy is not working. 
-        # TODO: fix this!
-        ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
     
     log.info("Starting ego agent training...")
     start_time = time.time()
     
-    def train_ego_fn(train_rng, partner_params):
+    def train_ego_fn(rng, partner_params):
+        rng, init_rng, train_rng = jax.random.split(rng, 3)
+        ego_policy, init_ego_params = initialize_ego_agent(algorithm_config, env, init_rng)
+
         return train_ppo_ego_agent(
             config=algorithm_config,
             env=env,
             train_rng=train_rng,
             ego_policy=ego_policy,
             init_ego_params=init_ego_params,
-            n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
+            n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"], # PER provided partner params
             partner_population=partner_population,
             partner_params=partner_params
         )
@@ -69,10 +62,12 @@ def train_ego_agent(config, logger, partner_params, partner_population):
     num_seeds, num_ego_train_seeds = jax.tree.leaves(out["final_params"])[0].shape[:2]
     ego_params = jax.tree.map(lambda x: x.reshape(num_seeds*num_ego_train_seeds, *x.shape[2:]), 
                               out["final_params"])
+    ego_policy, init_ego_params = initialize_ego_agent(algorithm_config, env, init_rng)
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     log_ego_metrics(config, out, logger, metric_names)
+
     return ego_params, ego_policy, init_ego_params
 
 def log_ego_metrics(config, out, logger, metric_names: tuple):

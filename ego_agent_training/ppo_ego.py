@@ -488,6 +488,71 @@ def train_ppo_ego_agent(config, env, train_rng,
     out = train_fn(rngs)    
     return out
 
+def initialize_ego_agent(algorithm_config, env, init_rng):
+    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
+        ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
+        ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
+    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
+        ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
+    return ego_policy, init_ego_params
+
+    
+def run_ego_training(config, wandb_logger):
+    '''Run ego agent training against the population of partner agents.
+    
+    Args:
+        config: dict, config for the training
+    '''
+    algorithm_config = dict(config["algorithm"])
+
+    # Create only one environment instance
+    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
+    env = LogWrapper(env)
+
+    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
+    rng, init_partner_rng, init_ego_rng, train_rng = jax.random.split(rng, 4)
+    
+
+    partner_agent_config = dict(config["partner_agent"])
+    partner_policy, partner_params, init_partner_params, idx_labels = initialize_rl_agent_from_config(
+        partner_agent_config, partner_agent_config["name"], env, init_partner_rng)
+
+    flattened_partner_params = jax.tree.map(lambda x, y: x.reshape((-1,) + y.shape), partner_params, init_partner_params)        
+    pop_size = jax.tree.leaves(flattened_partner_params)[0].shape[0]
+
+    # Create partner population
+    partner_population = AgentPopulation(
+        pop_size=pop_size,
+        policy_cls=partner_policy
+    )
+    
+    # Initialize ego agent
+    ego_policy, init_ego_params = initialize_ego_agent(algorithm_config, env, init_ego_rng)
+    
+    log.info("Starting ego agent training...")
+    start_time = time.time()
+    
+    # Run the training
+    out = train_ppo_ego_agent(
+        config=algorithm_config,
+        env=env,
+        train_rng=train_rng,
+        ego_policy=ego_policy,
+        init_ego_params=init_ego_params,
+        n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
+        partner_population=partner_population,
+        partner_params=flattened_partner_params
+    )
+    
+    log.info(f"Training completed in {time.time() - start_time:.2f} seconds")
+    
+    # process and log metrics
+    metric_names = get_metric_names(config["ENV_NAME"])
+    log_metrics(config, out, wandb_logger, metric_names)
+    
+    return out["final_params"], ego_policy, init_ego_params
+
 def log_metrics(config, train_out, logger, metric_names: tuple):
     """Process training metrics and log them using the provided logger.
     
@@ -543,66 +608,3 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
         # Cleanup locally logged out file
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
-   
-    
-def run_ego_training(config, wandb_logger):
-    '''Run ego agent training against the population of partner agents.
-    
-    Args:
-        config: dict, config for the training
-    '''
-    algorithm_config = dict(config["algorithm"])
-
-    # Create only one environment instance
-    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
-    env = LogWrapper(env)
-
-    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
-    rng, init_rng, train_rng = jax.random.split(rng, 3)
-    
-
-    partner_agent_config = dict(config["partner_agent"])
-    partner_policy, partner_params, init_partner_params, idx_labels = initialize_rl_agent_from_config(
-        partner_agent_config, partner_agent_config["name"], env, init_rng)
-
-    flattened_partner_params = jax.tree.map(lambda x, y: x.reshape((-1,) + y.shape), partner_params, init_partner_params)        
-    pop_size = jax.tree.leaves(flattened_partner_params)[0].shape[0]
-
-    # Create partner population
-    partner_population = AgentPopulation(
-        pop_size=pop_size,
-        policy_cls=partner_policy
-    )
-    
-    # Initialize ego agent
-    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
-        # WARNING: currently the RNN policy is not working. 
-        # TODO: fix this!
-        ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
-    
-    log.info("Starting ego agent training...")
-    start_time = time.time()
-    
-    # Run the training
-    out = train_ppo_ego_agent(
-        config=algorithm_config,
-        env=env,
-        train_rng=train_rng,
-        ego_policy=ego_policy,
-        init_ego_params=init_ego_params,
-        n_ego_train_seeds=algorithm_config["NUM_EGO_TRAIN_SEEDS"],
-        partner_population=partner_population,
-        partner_params=flattened_partner_params
-    )
-    
-    log.info(f"Training completed in {time.time() - start_time:.2f} seconds")
-    
-    # process and log metrics
-    metric_names = get_metric_names(config["ENV_NAME"])
-    log_metrics(config, out, wandb_logger, metric_names)
-    
-    return out

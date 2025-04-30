@@ -1,15 +1,15 @@
+from functools import partial
 import time
 import logging
 
 import jax
 import jax.numpy as jnp
-from functools import partial
+
 from agents.population_interface import AgentPopulation
-from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from ego_agent_training.ppo_ego import train_ppo_ego_agent, log_metrics
+from ego_agent_training.ppo_ego import train_ppo_ego_agent, log_metrics, initialize_ego_agent
 from evaluation.heldout_evaluator import load_heldout_set
 
 log = logging.getLogger(__name__)
@@ -112,14 +112,7 @@ def run_br_training(config, wandb_logger):
     rng, init_rng, train_rng = jax.random.split(rng, 3)
 
     # Initialize ego agent
-    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
-        # WARNING: currently the RNN policy is not working. 
-        # TODO: fix this!
-        ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
+    ego_policy, init_ego_params = initialize_ego_agent(algorithm_config, env, init_rng)
 
     # Initialize partner agent
     partner_agent_config = dict(config["partner_agent"])
@@ -164,4 +157,4 @@ def run_br_training(config, wandb_logger):
     metric_names = get_metric_names(config["ENV_NAME"])
     log_metrics(config, out, wandb_logger, metric_names)
     
-    return out
+    return out["final_params"], ego_policy, init_ego_params
