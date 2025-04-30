@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_paired_reset"
-label="method-explore:br-ego:popsize-3"
+algo="open_ended_lagrange"
+label="method-explore:brfixes:rboundfixes"
 # sampling_strategy="plr"
-partner_pop_size=3
+partner_pop_size=1
 num_seeds=1
 
 # DEBUG COMMAND

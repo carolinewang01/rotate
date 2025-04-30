@@ -5,6 +5,9 @@ defaults:
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
+LOWER_REGRET_THRESHOLD: 0.15
+UPPER_REGRET_THRESHOLD: 0.4
+LAGRANGE_MULTIPLIER_LR: 0.05
 LR: 1e-3
 CLIP_EPS: 0.1
 ENT_COEF: 0.05
