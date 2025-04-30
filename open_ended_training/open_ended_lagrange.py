@@ -487,11 +487,11 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                     
-                    # combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
-                    # combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
+                    combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
+                    combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
 
-                    combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
-                    combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
+                    #combined_ego = jnp.concatenate([targets_batch_1, value_ego2], axis=0)
+                    #combined_value_br = jnp.concatenate([value_br1, targets_batch_2], axis=0)
 
                     lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"]
                     upper_diff = combined_ego + config["UPPER_REGRET_THRESHOLD"] - combined_value_br
@@ -501,8 +501,6 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     new_upper_lm = upper_lm - (config["LAGRANGE_MULTIPLIER_LR"] * upper_diff_mean)
                     new_lower_lm = jnp.maximum(new_lower_lm, jnp.zeros_like(new_lower_lm))
                     new_upper_lm = jnp.maximum(new_upper_lm, jnp.zeros_like(new_upper_lm))
-
-                    jax.debug.breakpoint()
 
                     return jnp.reshape(new_lower_lm, (1,)), jnp.reshape(new_upper_lm, (1,))
                 
@@ -651,6 +649,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 train_state_br = update_state[1]
                 lower_lm = update_state[-2]
                 upper_lm = update_state[-1]
+
+                #jax.debug.breakpoint()
 
                 # Metrics
                 metric = traj_batch_ego.info
