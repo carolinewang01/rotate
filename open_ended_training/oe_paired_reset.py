@@ -11,8 +11,9 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 
-from agents.agent_interface import AgentPopulation, ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
+from agents.population_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent
+from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from common.run_episodes import run_episodes
@@ -811,7 +812,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
 
 
 def train_paired(rng, env, algorithm_config):
-    rng, init_ego_rng, init_conf_rng, init_br_rng = jax.random.split(rng, 4)
+    rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
 
@@ -841,7 +842,7 @@ def train_paired(rng, env, algorithm_config):
         return open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
                                         partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, init_conf_params, init_br_params, rng)
+    init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 

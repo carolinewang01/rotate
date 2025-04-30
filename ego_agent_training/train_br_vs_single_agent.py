@@ -4,7 +4,7 @@ import logging
 import jax
 import jax.numpy as jnp
 from functools import partial
-from agents.agent_interface import AgentPopulation
+from agents.population_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_metric_names
 from envs import make_env

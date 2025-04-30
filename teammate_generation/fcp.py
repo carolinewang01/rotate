@@ -6,7 +6,8 @@ from functools import partial
 import jax
 import hydra
 import numpy as np
-from agents.agent_interface import AgentPopulation, MLPActorCriticPolicy
+from agents.agent_interface import MLPActorCriticPolicy
+from agents.population_interface import AgentPopulation
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from ppo.ippo import make_train as make_ppo_train
