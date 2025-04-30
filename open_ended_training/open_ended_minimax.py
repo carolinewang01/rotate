@@ -622,6 +622,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     # Process ego-specific metrics
     # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_updates, num_partners, num_eval_episodes, num_agents_per_env)
     avg_ego_returns = np.asarray(ego_metrics["eval_ep_last_info"]["returned_episode_returns"]).mean(axis=(0, 2, 4, 5, 6))
+
     # shape (num_seeds, num_open_ended_iters, num_ego_seeds, num_updates, update_epochs, num_minibatches)
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(0, 2, 4, 5))
@@ -636,10 +637,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             for stat_name, stat_data in teammate_stat_means.items():
                 logger.log_item(f"Train/Conf-Against-Ego_{stat_name}", stat_data[iter_idx, step], train_step=global_step)
             
-            # Log minimax-specific metrics
-            # Eval metrics
+            # Minimax partner eval metrics
             logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
-            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], train_step=global_step)
             
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
@@ -656,6 +655,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             for stat_name, stat_data in ego_stat_means.items():
                 logger.log_item(f"Train/Ego_{stat_name}", stat_data[iter_idx, step], train_step=global_step)
 
+            # Ego eval metrics
+            logger.log_item("Eval/EgoReturn-Against-Conf", avg_ego_returns[iter_idx][step], train_step=global_step)
             # Ego agent losses
             logger.log_item("Losses/EgoValueLoss", avg_ego_value_losses[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/EgoActorLoss", avg_ego_actor_losses[iter_idx][step], train_step=global_step)
