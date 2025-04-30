@@ -10,8 +10,11 @@ TASK_NAME: ${task.TASK_NAME}
 
 partner_agent:
   name: persistent_paired # overcooked cramped room
-  path: "results/overcooked-v1/cramped_room/oe_persistent_paired/method-explore:uniform/2025-04-30_00-47-07/saved_train_run"
+  path: "../continual-aht/results/overcooked-v1/cramped_room/oe_persistent_paired/method-explore:uniform/2025-04-30_00-47-07/saved_train_run"
   actor_type: actor_with_double_critic
+  custom_loader: 
+    name: open_ended # if null, use default loader
+    type: ego # options: ego, partner
   ckpt_key: final_buffer # TODO: write custom loader for this checkpoint type
   idx_list: [[0, -1]]
   

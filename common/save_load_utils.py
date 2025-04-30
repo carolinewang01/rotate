@@ -31,11 +31,22 @@ def save_train_run(out, savedir, savename):
     checkpointer.save(savepath, out, save_args=save_args)
     return savepath
 
-def load_checkpoints(path, ckpt_key="checkpoints"):
+def load_checkpoints(path, ckpt_key="checkpoints", custom_loader_cfg: dict=None):
     '''Load checkpoints from orbax checkpoint. 
     Orbax requires absolute paths, so we compute the absolute path to the repo root.'''
     restored = load_train_run(path)
-    return restored[ckpt_key]
+    if custom_loader_cfg is None:
+        return restored[ckpt_key]
+    elif custom_loader_cfg["name"] == "open_ended":
+        partner_out, ego_out = restored
+        if custom_loader_cfg["type"] == "ego":
+            return ego_out[ckpt_key]
+        elif custom_loader_cfg["type"] == "partner":
+            return partner_out[ckpt_key]
+        else:
+            raise ValueError(f"Invalid custom loader type: {custom_loader_cfg['type']}")
+    else:
+        raise ValueError(f"Invalid custom loader name: {custom_loader_cfg['name']}")
 
 def load_train_run(path):
     '''Load checkpoints from orbax checkpoint. 
