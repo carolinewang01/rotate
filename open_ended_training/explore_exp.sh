@@ -1,11 +1,12 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_lagrange"
-label="method-explore:brfixes:rboundfixes"
+algo="open_ended_paired"
+label="method-explore:conf-br-0.75"
 # sampling_strategy="plr"
 partner_pop_size=1
 num_seeds=1
+conf_br_weight=0.75
 
 # DEBUG COMMAND
 # python open_ended_training/run.py algorithm=open_ended_lagrange/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=8e4 algorithm.TIMESTEPS_PER_ITER_EGO=8e4 label=debug algorithm.NUM_SEEDS=1
@@ -57,6 +58,7 @@ for task in "${tasks[@]}"; do
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
         # algorithm.SAMPLING_STRATEGY="${sampling_strategy}" \
+        algorithm.CONF_BR_WEIGHT="${conf_br_weight}" \
         2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
