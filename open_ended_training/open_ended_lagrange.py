@@ -392,11 +392,14 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             1.0 + config["CLIP_EPS"]) * gae_norm_br
                         pg_loss_br = -jnp.mean(sp_weight * jnp.minimum(pg_loss_1_br, pg_loss_2_br))
 
+                        entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
+                        entropy_weight = jnp.maximum(entropy_weight, 1)
+
                         # Entropy for interaction with ego agent
-                        entropy_ego = jnp.mean(pi_ego.entropy())
+                        entropy_ego = entropy_weight*jnp.mean(pi_ego.entropy())
                         
                         # Entropy for interaction with best response agent
-                        entropy_br = jnp.mean(pi_br.entropy())
+                        entropy_br = entropy_weight*jnp.mean(pi_br.entropy())
 
                         total_loss = (pg_loss_ego + pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
@@ -436,7 +439,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                         )
 
                         # Policy gradient loss
-                        sp_weight = 1 + lower_lm - upper_lm
+                        # sp_weight = 1 + lower_lm - upper_lm
                         ratio = jnp.exp(log_prob - traj_batch_br.log_prob)
                         gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
                         pg_loss_1 = ratio * gae_norm
@@ -444,7 +447,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             ratio, 
                             1.0 - config["CLIP_EPS"], 
                             1.0 + config["CLIP_EPS"]) * gae_norm
-                        pg_loss = -jnp.mean(sp_weight * jnp.minimum(pg_loss_1, pg_loss_2))
+                        pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
 
                         # Entropy
                         entropy = jnp.mean(pi.entropy())
@@ -497,6 +500,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     new_upper_lm = upper_lm - (config["LAGRANGE_MULTIPLIER_LR"] * upper_diff_mean)
                     new_lower_lm = jnp.maximum(new_lower_lm, jnp.zeros_like(new_lower_lm))
                     new_upper_lm = jnp.maximum(new_upper_lm, jnp.zeros_like(new_upper_lm))
+
+                    jax.debug.breakpoint()
 
                     return jnp.reshape(new_lower_lm, (1,)), jnp.reshape(new_upper_lm, (1,))
                 
