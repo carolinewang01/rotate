@@ -4,25 +4,24 @@
 
 ### Evaluation
 - Metrics: 
-    - BRProx metric
-    - Convert main log_metrics() function to log IQMs instead of means (current issue is the get_stats function, which manually
-    computes the mean and std)
-    
+    - BRProx metric    
 - Regret-based evaluator: 
     - Figure out how to return regret-maximizing teammates that don't sabotage
 
 ### Method Exploration: 
-- OE-Minimax, OE-PAIRED and OE-Lagrange: do we want to train multiple seeds of partners? Do we want to train against the last checkpoint or the first?
-- Allow population size to expand between open-ended iterations
-- Try initializing open-ended learning from BRDiv ego agent
-- Try initializing confederate/br agents to the ego agent; try NOT re-initializing the conf/br agents
-- Check if minimax return is better than minimax regret (Minimax AHT paper)
+- OE-Lagrange: 
+    - Hyperparameter tuning for lower and upper regret bounds, LM leraning rates 
+    - Implement no-reset for BR and confederate; try decreasing the number of steps for the conf learning rate
+- BufferedPopulation
+    - Try using regret-based scores
+    - Try decreasing the population size / increasing ego agent learning time
 
 ### Baselines 
-- Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations)
+- FIX LBRDIV!
+- Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations and implementing a curator)
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
-If time permits: 
+During rebuttal phase: 
 - Implement CoMeDi
 
 ### Clean Up Code: 
