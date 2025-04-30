@@ -14,7 +14,8 @@ import wandb
 
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from agents.agent_interface import ActorWithConditionalCriticPolicy, AgentPopulation
+from agents.agent_interface import ActorWithConditionalCriticPolicy
+from agents.population_interface import AgentPopulation
 from agents.mlp_actor_critic import ActorWithConditionalCritic
 from common.plot_utils import get_metric_names
 from common.ppo_utils import unbatchify
