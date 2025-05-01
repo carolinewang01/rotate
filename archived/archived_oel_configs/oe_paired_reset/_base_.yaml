@@ -7,6 +7,8 @@ NUM_OPEN_ENDED_ITERS: 30
 NUM_CHECKPOINTS: 5 # per iter of open-ended training
 PARTNER_POP_SIZE: 1 # true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS per iter of open-ended training
 CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
+REINIT_CONF: false # whether to reinitialize the confederate policy each iteration of open-ended training
+REINIT_BR: false # whether to reinitialize the br policy each iteration of open-ended training
 NUM_ENVS: 16
 LR: 1.e-4
 UPDATE_EPOCHS: 15

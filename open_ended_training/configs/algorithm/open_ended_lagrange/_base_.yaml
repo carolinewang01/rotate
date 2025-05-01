@@ -6,6 +6,9 @@ TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
 NUM_CHECKPOINTS: 5 # per iter of open-ended training
 PARTNER_POP_SIZE: 1
+REINIT_CONF: true # whether to reinitialize the confederate policy each iteration of open-ended training
+REINIT_BR: true # whether to reinitialize the br policy each iteration of open-ended training
+# lagrange args
 LOWER_REGRET_THRESHOLD: 0.15
 UPPER_REGRET_THRESHOLD: 0.4
 LAGRANGE_MULTIPLIER_LR: 0.05
