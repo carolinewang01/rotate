@@ -345,7 +345,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                         value_losses_ego = jnp.square(value_ego - target_v_ego)
                         value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
                         value_loss_ego = (
-                            0.5 * jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
+                            jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
                         )
 
                         # Value loss for interaction with best response agent
@@ -356,7 +356,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                         value_losses_br = jnp.square(value_br - target_v_br)
                         value_losses_clipped_br = jnp.square(value_pred_br_clipped - target_v_br)
                         value_loss_br = (
-                            0.5 * jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
+                            jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
                         )
 
                         # Policy gradient loss for interaction with ego agent
@@ -424,7 +424,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                         value_losses = jnp.square(value - target_v)
                         value_losses_clipped = jnp.square(value_pred_clipped - target_v)
                         value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+                            jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
 
                         # Policy gradient loss

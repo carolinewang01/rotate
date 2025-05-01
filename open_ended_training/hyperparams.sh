@@ -2,18 +2,18 @@
 
 # Algorithm to run
 algo="open_ended_lagrange"
-label="hyperparam:lr-0.1:ur-0.3"
+label="hyperparam:no-reset:lr-0.1:ur-0.3" # lr-0.1:ur-0.3
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
 # hyperparams
-lower_regret_bound=0.1
-upper_regret_bound=0.3
+# lower_regret_bound=0.1
+# upper_regret_bound=0.3
 # reinit_conf=false
 # reinit_br=false
-# timesteps_per_iter_ego=2000000 # 2M
-# timesteps_per_iter_conf=500000 # 500K
+# timesteps_per_iter_ego=1500000 # 1.5M
+# timesteps_per_iter_partner=1000000 # 1M
 
 # DEBUG COMMAND
 # python open_ended_training/run.py algorithm=open_ended_lagrange/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=8e4 algorithm.TIMESTEPS_PER_ITER_EGO=8e4 label=debug algorithm.NUM_SEEDS=1
@@ -66,6 +66,10 @@ for task in "${tasks[@]}"; do
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
         algorithm.LOWER_REGRET_THRESHOLD="${lower_regret_bound}" \
         algorithm.UPPER_REGRET_THRESHOLD="${upper_regret_bound}" \
+        algorithm.REINIT_CONF="${reinit_conf}" \
+        algorithm.REINIT_BR="${reinit_br}" \
+        algorithm.TIMESTEPS_PER_ITER_EGO="${timesteps_per_iter_ego}" \
+        algorithm.TIMESTEPS_PER_ITER_PARTNER="${timesteps_per_iter_conf}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

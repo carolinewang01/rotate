@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_persistent_paired"
+algo="open_ended_lagrange"
 label="method-explore:popsize-1:uniform"
 partner_pop_size=1
 num_seeds=1
-log_train_out=true
-log_eval_out=true
+log_train_out=false
+log_eval_out=false
 
 # DEBUG COMMAND
 # python open_ended_training/run.py algorithm=open_ended_lagrange/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=8e4 algorithm.TIMESTEPS_PER_ITER_EGO=8e4 label=debug algorithm.NUM_SEEDS=1
