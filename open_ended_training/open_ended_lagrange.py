@@ -494,12 +494,13 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                         combined_ego = jnp.concatenate([value_ego1, value_ego2], axis=0)
                         combined_value_br = jnp.concatenate([value_br1, value_br2], axis=0)
 
-                    lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"] # TODO: log lower and upper diffs
+                    lower_diff = combined_value_br - combined_ego - config["LOWER_REGRET_THRESHOLD"]
                     upper_diff = combined_ego + config["UPPER_REGRET_THRESHOLD"] - combined_value_br
 
                     lower_diff_mean, upper_diff_mean = lower_diff.mean(), upper_diff.mean()
                     new_lower_lm = lower_lm - (config["LAGRANGE_MULTIPLIER_LR"] * lower_diff_mean) # TODO: try using an optimizer for this
                     new_upper_lm = upper_lm - (config["LAGRANGE_MULTIPLIER_LR"] * upper_diff_mean)
+
                     new_lower_lm = jnp.maximum(new_lower_lm, jnp.zeros_like(new_lower_lm))
                     new_upper_lm = jnp.maximum(new_upper_lm, jnp.zeros_like(new_upper_lm))
 
@@ -1002,8 +1003,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     avg_entropy_losses_teammate_against_br = np.asarray(teammate_metrics["entropy_conf_against_br"]).mean(axis=(0, 2, 4, 5))
     avg_entropy_losses_br = np.asarray(teammate_metrics["entropy_loss_br"]).mean(axis=(0, 2, 4, 5))
     
-    avg_lagrange_lower = np.asarray(teammate_metrics["upper_lm"]).mean(axis=(0, 2, 4))
-    avg_lagrange_upper = np.asarray(teammate_metrics["lower_lm"]).mean(axis=(0, 2, 4))
+    avg_lagrange_upper = np.asarray(teammate_metrics["upper_lm"]).mean(axis=(0, 2, 4))
+    avg_lagrange_lower = np.asarray(teammate_metrics["lower_lm"]).mean(axis=(0, 2, 4))
 
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates)
     avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br"]).mean(axis=(0, 2))
