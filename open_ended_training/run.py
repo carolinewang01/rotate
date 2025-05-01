@@ -3,7 +3,6 @@ from omegaconf import OmegaConf
 
 from open_ended_minimax import run_minimax
 from open_ended_paired import run_paired
-from oe_paired_reset import run_paired_reset
 from open_ended_persistent_paired import run_persistent_paired
 from open_ended_fcp import run_fcp
 from open_ended_lagrange import run_lagrange
@@ -21,8 +20,6 @@ def run_training(cfg):
         ego_policy, final_ego_params, init_ego_params = run_minimax(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "open_ended_paired":
         ego_policy, final_ego_params, init_ego_params = run_paired(cfg, wandb_logger)
-    elif cfg.algorithm["ALG"] == "oe_paired_reset":
-        ego_policy, final_ego_params, init_ego_params = run_paired_reset(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "oe_persistent_paired":
         ego_policy, final_ego_params, init_ego_params = run_persistent_paired(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "paired_ued":

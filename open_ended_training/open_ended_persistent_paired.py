@@ -10,7 +10,8 @@ from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
-from open_ended_training.open_ended_paired import train_regret_maximizing_partners, log_metrics
+# from open_ended_training.open_ended_paired import train_regret_maximizing_partners, log_metrics
+from open_ended_training.open_ended_lagrange import train_lagrange_partners as train_regret_maximizing_partners, log_metrics
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
