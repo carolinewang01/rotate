@@ -2,7 +2,7 @@
 
 # Algorithm to run
 algo="open_ended_lagrange"
-label="method-explore:target-rets"
+label="method-explore:target-rets2"
 # sampling_strategy="plr"
 partner_pop_size=1
 num_seeds=1
@@ -57,7 +57,6 @@ for task in "${tasks[@]}"; do
     if python open_ended_training/run.py algorithm="${algo}/${task}" \
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
-        # algorithm.SAMPLING_STRATEGY="${sampling_strategy}" \
         algorithm.LAGRANGE_USE_TARGET_RETURNS="${lagrange_use_target_returns}" \
         2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
