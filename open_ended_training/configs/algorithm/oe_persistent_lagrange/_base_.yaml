@@ -1,6 +1,6 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
-ALG: oe_persistent_paired
+ALG: oe_persistent_lagrange
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
@@ -10,8 +10,6 @@ CONF_BR_WEIGHT: 0.5 # conf-ego weight set to 1 - conf-br weight
 REINIT_CONF: true # whether to reinitialize the confederate policy each iteration of open-ended training
 REINIT_BR: true # whether to reinitialize the br policy each iteration of open-ended training
 # lagrange args
-LOWER_REGRET_THRESHOLD: 0.15
-UPPER_REGRET_THRESHOLD: 0.4
 LAGRANGE_MULTIPLIER_LR: 0.05
 LAGRANGE_USE_TARGET_RETURNS: false
 # buffer args

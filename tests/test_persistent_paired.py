@@ -5,7 +5,7 @@ from functools import partial
 
 from agents.agent_interface import ActorWithDoubleCriticPolicy
 from agents.population_buffer import BufferedPopulation, PopulationBuffer
-from open_ended_training.open_ended_persistent_paired import train_persistent_paired
+from open_ended_training.open_ended_persistent_lagrange import train_persistent
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 
@@ -111,7 +111,7 @@ def test_persistent_paired():
     
     # Run training
     print("Starting persistent PAIRED test...")
-    final_ego_params, final_buffer, outs = train_persistent_paired(
+    final_ego_params, final_buffer, outs = train_persistent(
         rng, env, config
     )
     
