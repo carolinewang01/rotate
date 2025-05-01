@@ -25,39 +25,44 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def _create_minibatches(traj_batch, advantages, targets, batch_size, num_minibatches, permutation_rng):
-    """Create minibatches for PPO updates, where each leaf has shape (num_minibatches, batch_size, ...) 
-    Note that the rollout dimension is combined with the num_actors dimension.
+def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
+    """Create minibatches for PPO updates, where each leaf has shape 
+        (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
+    This function ensures that the rollout (time) dimension is kept separate from the minibatch and num_actors 
+    dimensions, so that the minibatches are compatible with recurrent ActorCritics.
     """
     # Create batch containing trajectory, advantages, and targets
     batch = (
+        init_hstate, # shape (1, num_actors, hidden_dim) = (1, 16, 64)
         traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
-        advantages, # shape (rollout_len, num_agents) = (128, 16)
-        targets # shape (rollout_len, num_agents) = (128, 16)
+        advantages, # shape (rollout_len, num_actors) = (128, 16)
+        targets # shape (rollout_len, num_actors) = (128, 16)
             )
-    # Reshape batch to expected dimensions
-    batch_reshaped = jax.tree.map(
-        lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-    )
-    
-    # Shuffle using the provided RNG key
-    permutation = jax.random.permutation(permutation_rng, batch_size)
+
+    permutation = jax.random.permutation(perm_rng, num_actors)
+
+    # each leaf of shuffled batch has shape (rollout_len, num_actors, feat_shape)
+    # except for init_hstate which has shape (1, num_actors, hidden_dim)
     shuffled_batch = jax.tree.map(
-        lambda x: jnp.take(x, permutation, axis=0), batch_reshaped
+        lambda x: jnp.take(x, permutation, axis=1), batch
     )
-    
-    # Create minibatches for training
-    minibatches = jax.tree.map(
-        lambda x: jnp.reshape(
-            x, [num_minibatches, -1] + list(x.shape[1:])
-        ),
+    # each leaf has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape)
+    # except for init_hstate which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim)
+    minibatches = jax.tree_util.tree_map(
+        lambda x: jnp.swapaxes(
+            jnp.reshape(
+                x,
+                [x.shape[0], num_minibatches, -1] 
+                + list(x.shape[2:]),
+        ), 1, 0,),
         shuffled_batch,
     )
-    
     return minibatches
 
 
-def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
+def train_lagrange_partners(config, ego_params, ego_policy, env, 
+                            conf_params, conf_policy, 
+                            br_params, br_policy, partner_rng):
     '''
     Train confederate/best-response pairs that optimize regret within a certain range 
     using the given ego agent policy and IPPO.
@@ -84,28 +89,12 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
             frac = 1.0 - (count // (config["NUM_MINIBATCHES"] * config["UPDATE_EPOCHS"])) / config["NUM_UPDATES"]
             return config["LR"] * frac
 
-        def train(rng):
-            # Initialize confederate policy using ActorWithDoubleCriticPolicy
-            confederate_policy = ActorWithDoubleCriticPolicy(
-                action_dim=env.action_space(env.agents[0]).n,
-                obs_dim=env.observation_space(env.agents[0]).shape[0]
-            )
-            
-            # Initialize best response policy using MLPActorCriticPolicy
-            br_policy = MLPActorCriticPolicy(
-                action_dim=env.action_space(env.agents[1]).n,
-                obs_dim=env.observation_space(env.agents[1]).shape[0]
-            )
+        def train(rng, init_params_conf, init_params_br):
+            confederate_policy = conf_policy # ActorWithDoubleCriticPolicy
 
             upper_lagrange_multiplier = jnp.zeros((1,), dtype=jnp.float32)
             lower_lagrange_multiplier = jnp.zeros((1,), dtype=jnp.float32)
             
-            rng, init_conf_rng, init_br_rng = jax.random.split(rng, 3)
-            
-            # Initialize parameters using the policy interfaces
-            init_params_conf = confederate_policy.init_params(init_conf_rng)
-            init_params_br = br_policy.init_params(init_br_rng)
-
             # Define optimizers for both confederate and BR policy
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -322,10 +311,9 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
             def _update_epoch(update_state, unused):
                 def _update_minbatch_conf(train_state_conf, batch_infos):
                     minbatch_ego, minbatch_br, lower_lm, upper_lm = batch_infos
-                    traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
-                    traj_batch_br, advantages_br, returns_br = minbatch_br
+                    init_conf_hstate_ego, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
+                    init_conf_hstate_br, traj_batch_br, advantages_br, returns_br = minbatch_br
 
-                    init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
 
@@ -334,7 +322,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             obs=traj_batch_ego.obs, 
                             done=traj_batch_ego.done,
                             avail_actions=traj_batch_ego.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_conf_hstate_ego,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                         _, (_, value_br), pi_br, _ = confederate_policy.get_action_value_policy(
@@ -342,7 +330,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             obs=traj_batch_br.obs, 
                             done=traj_batch_br.done,
                             avail_actions=traj_batch_br.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_conf_hstate_br,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
 
@@ -414,9 +402,9 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                     return train_state_conf, (loss_val, aux_vals)
                 
                 def _update_minbatch_br(train_state_br, batch_info):
-                    batches, lower_lm, upper_lm = batch_info
-                    traj_batch_br, advantages, returns = batches
-                    init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                    batch_info_br, lower_lm, upper_lm = batch_info
+                    init_br_hstate, traj_batch_br, advantages, returns = batch_info_br
+                    
                     def _loss_fn_br(params, traj_batch_br, gae, target_v):
                         _, value, pi, _ = br_policy.get_action_value_policy(
                             params=params, 
@@ -465,16 +453,15 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 def _update_lagrange(conf_train_state, minibatches_ego, 
                                      minibatches_0_br, lower_lm, upper_lm):
                     
-                    traj_batches1, _, targets_batch_1 = minibatches_ego
-                    traj_batches2, _, targets_batch_2 = minibatches_0_br
-
-                    init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                    init_conf_hstate_ego, traj_batches1, _, targets_batch_1 = minibatches_ego
+                    init_conf_hstate_br, traj_batches2, _, targets_batch_2 = minibatches_0_br
+                    
                     _, (value_ego1, value_br1), _, _ = confederate_policy.get_action_value_policy(
                             params=conf_train_state.params, 
                             obs=traj_batches1.obs, 
                             done=traj_batches1.done,
                             avail_actions=traj_batches1.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_conf_hstate_ego,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                     
@@ -483,7 +470,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                             obs=traj_batches2.obs, 
                             done=traj_batches2.done,
                             avail_actions=traj_batches2.avail_actions,
-                            hstate=init_conf_hstate,
+                            hstate=init_conf_hstate_br,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
                     
@@ -517,23 +504,31 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
                 rng_ego, perm_rng_ego, perm_rng_br0, perm_rng_br1 = jax.random.split(rng_ego, 4)
 
                 # Create minibatches for each agent and interaction type
+                init_conf_hstate_ego = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                init_conf_hstate_br = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                init_hstate_br = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+
                 minibatches_ego = _create_minibatches(
-                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_ego
+                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, init_conf_hstate_ego, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_ego
                 )
                 minibatches_br0 = _create_minibatches(
-                    traj_batch_br_0, advantages_conf_br, targets_conf_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br0
+                    traj_batch_br_0, advantages_conf_br, targets_conf_br, init_conf_hstate_br, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br0
                 )
                 minibatches_br1 = _create_minibatches(
-                    traj_batch_br_1, advantages_br, targets_br, config["MINIBATCH_SIZE"], config["NUM_MINIBATCHES"], perm_rng_br1
+                    traj_batch_br_1, advantages_br, targets_br, init_hstate_br, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br1
                 )
 
                 old_train_state_conf, old_train_state_br = train_state_conf, train_state_br
-                repeated_lower_lm = jnp.tile(lower_lm, minibatches_ego[0].obs.shape[0])
-                repeated_upper_lm = jnp.tile(upper_lm, minibatches_ego[0].obs.shape[0])
+                repeated_lower_lm = jnp.tile(lower_lm, minibatches_ego[1].obs.shape[0])
+                repeated_upper_lm = jnp.tile(upper_lm, minibatches_ego[1].obs.shape[0])
 
                 # Update confederate
                 train_state_conf, total_loss = jax.lax.scan(
-                    _update_minbatch_conf, train_state_conf, (minibatches_ego, minibatches_br0, repeated_lower_lm, repeated_upper_lm)
+                    _update_minbatch_conf, train_state_conf, 
+                    (minibatches_ego, minibatches_br0, repeated_lower_lm, repeated_upper_lm)
                 )
 
                 # Update best response
@@ -838,20 +833,34 @@ def train_lagrange_partners(config, ego_params, ego_policy, env, partner_rng):
     # ------------------------------
     rngs = jax.random.split(partner_rng, config["PARTNER_POP_SIZE"])
     train_fn = jax.jit(jax.vmap(make_lagrange_partner_train(config)))
-    out = train_fn(rngs)
+    out = train_fn(rngs, conf_params, br_params)
     return out
 
-def open_ended_training_step(carry, ego_policy, partner_population, config, env):
+def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, config, env):
     '''
     Train the ego agent against the regret-maximizing partners. 
     Note: Currently training fcp agent against **all** adversarial partner checkpoints
     TODO: Limit training against the last adversarial checkpoints instead.
     '''
-    prev_ego_params, rng = carry
-    rng, partner_rng, ego_rng = jax.random.split(rng, 3)
+    prev_ego_params, prev_conf_params, prev_br_params, rng = carry
+    rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
+    
+    if config["REINIT_CONF"]:
+        init_rngs = jax.random.split(conf_init_rng, config["PARTNER_POP_SIZE"])
+        conf_params = jax.vmap(conf_policy.init_params)(init_rngs)
+    else:
+        conf_params = prev_conf_params
+
+    if config["REINIT_BR"]:
+        init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
+        br_params = jax.vmap(br_policy.init_params)(init_rngs)
+    else:
+        br_params = prev_br_params
     
     # Train partner agents with ego_policy
-    train_out = train_lagrange_partners(config, prev_ego_params, ego_policy, env, partner_rng)
+    train_out = train_lagrange_partners(config, prev_ego_params, ego_policy, env, 
+                                     conf_params, conf_policy, 
+                                     br_params, br_policy, partner_rng)
     train_partner_params = train_out["checkpoints_conf"]
     
     # Reshape partner parameters for AgentPopulation
@@ -878,12 +887,56 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     )
     
     updated_ego_parameters = ego_out["final_params"]
-    # remove initial dimension of 1, to ensure that input and output carry have the same dimension
+    updated_conf_parameters = train_out["final_params_conf"]
+    updated_br_parameters = train_out["final_params_br"]
+
+    # remove initial dimension of 1, to ensure that input and output ego parameters have the same dimension
     updated_ego_parameters = jax.tree.map(lambda x: x.squeeze(axis=0), updated_ego_parameters)
 
-    carry = (updated_ego_parameters, rng)
+    carry = (updated_ego_parameters, updated_conf_parameters, updated_br_parameters, rng)
     return carry, (train_out, ego_out)
-        
+
+def train_lagrange(rng, env, algorithm_config):
+    rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
+    
+    # Initialize ego agent
+    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
+    
+    # initialize PARTNER_POP_SIZE conf and br params
+    conf_policy = ActorWithDoubleCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+    )
+    init_conf_rngs = jax.random.split(init_conf_rng, algorithm_config["PARTNER_POP_SIZE"])
+    init_conf_params = jax.vmap(conf_policy.init_params)(init_conf_rngs)
+
+    br_policy = MLPActorCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+    )
+    init_br_rngs = jax.random.split(init_br_rng, algorithm_config["PARTNER_POP_SIZE"])
+    init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
+
+    # Create partner population
+    partner_population = AgentPopulation(
+        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        policy_cls=conf_policy
+    )
+    
+    @jax.jit
+    def open_ended_step_fn(carry, unused):
+        return open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
+                                        partner_population, algorithm_config, env)
+    
+    init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng)
+    final_carry, outs = jax.lax.scan(
+        open_ended_step_fn, 
+        init_carry, 
+        xs=None,
+        length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
+    )
+    return outs
+
 def run_lagrange(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
 
@@ -895,26 +948,13 @@ def run_lagrange(config, wandb_logger):
     rng, init_ego_rng = jax.random.split(rng)
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
     
-    # Initialize partner policy once - reused for all iterations
-    partner_policy = ActorWithDoubleCriticPolicy(
-        action_dim=env.action_space(env.agents[1]).n,
-        obs_dim=env.observation_space(env.agents[1]).shape[0]
-    )
-    
-    # Create partner population
-    partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
-        policy_cls=partner_policy
-    )
-
     log.info("Starting open-ended Lagrange training...")
     start_time = time.time()
 
     DEBUG = False
     with jax.disable_jit(DEBUG):
         train_fn = jax.jit(jax.vmap(partial(train_lagrange, 
-                env=env, algorithm_config=algorithm_config, 
-                partner_population=partner_population
+                env=env, algorithm_config=algorithm_config
                 )
             )
         )
@@ -933,25 +973,6 @@ def run_lagrange(config, wandb_logger):
     log_metrics(config, wandb_logger, outs, metric_names)
 
     return ego_policy, ego_params, init_ego_params
-
-def train_lagrange(rng, env, algorithm_config, partner_population):
-    rng, init_rng, train_rng = jax.random.split(rng, 3)
-    
-    # Initialize ego agent
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    
-    @jax.jit
-    def open_ended_step_fn(carry, unused):
-        return open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
-    
-    init_carry = (init_ego_params, train_rng)
-    final_carry, outs = jax.lax.scan(
-        open_ended_step_fn, 
-        init_carry, 
-        xs=None,
-        length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
-    )
-    return outs
 
 
 def log_metrics(config, logger, outs, metric_names: tuple):
