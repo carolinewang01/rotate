@@ -3,7 +3,8 @@ import logging
 from functools import partial
 
 import jax
-
+import jax.numpy as jnp
+from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
 from agents.population_buffer import BufferedPopulation
 from agents.initialize_agents import initialize_s5_agent, initialize_actor_with_double_critic
 from common.plot_utils import get_metric_names
@@ -17,17 +18,34 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def persistent_open_ended_training_step(carry, ego_policy, partner_population, config, env):
+def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
+                                        partner_population, config, env):
     '''
     Train the ego agent against a growing population of regret-maximizing partners.
     Unlike the original implementation, the partner population persists across iterations.
     '''
-    prev_ego_params, population_buffer, rng = carry
-    rng, partner_rng, ego_rng = jax.random.split(rng, 3)
+    prev_ego_params, prev_conf_params, prev_br_params, population_buffer, rng = carry
+    rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
+    
+    # Initialize or reuse confederate parameters based on config
+    if config["REINIT_CONF"]:
+        init_rngs = jax.random.split(conf_init_rng, config["PARTNER_POP_SIZE"])
+        conf_params = jax.vmap(conf_policy.init_params)(init_rngs)
+    else:
+        conf_params = prev_conf_params
+
+    # Initialize or reuse best response parameters based on config
+    if config["REINIT_BR"]:
+        init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
+        br_params = jax.vmap(br_policy.init_params)(init_rngs)
+    else:
+        br_params = prev_br_params
     
     # Train partner agents with ego_policy
-    train_out = train_regret_maximizing_partners(config, prev_ego_params, ego_policy, env, partner_rng)
-    train_partner_params = train_out["checkpoints_conf"]
+    train_out = train_regret_maximizing_partners(config, ego_params=prev_ego_params, ego_policy=ego_policy, env=env, 
+                                                conf_params=conf_params, conf_policy=conf_policy, 
+                                                br_params=br_params, br_policy=br_policy, 
+                                                partner_rng=partner_rng)
     
     # Add all checkpoints of each partner to the population buffer
     pop_size = config["PARTNER_POP_SIZE"]
@@ -41,8 +59,12 @@ def persistent_open_ended_training_step(carry, ego_policy, partner_population, c
         # Reshape to combine pop_size and ckpt_size
         return params.reshape(pop_size * ckpt_size, *param_shape)
     
-    flattened_params = jax.tree_map(flatten_params, train_partner_params)
-    
+    flattened_ckpt_params = jax.tree_map(flatten_params, train_out["checkpoints_conf"])
+    all_conf_params = jax.tree_map(lambda x, y: jnp.concatenate([x, y], axis=0), 
+                                   flattened_ckpt_params,
+                                   train_out["final_params_conf"]
+    )
+
     # Helper function to add each partner checkpoint to the buffer
     def add_partners_to_buffer(buffer, params_batch):
         def add_single_partner(carry_buffer, params):
@@ -55,9 +77,9 @@ def persistent_open_ended_training_step(carry, ego_policy, partner_population, c
         )
         return new_buffer
     
-    # Add all checkpoints of all partners to the buffer
-    updated_buffer = add_partners_to_buffer(population_buffer, flattened_params)
-    
+    # Add all checkpoints and final parameters of all partners to the buffer
+    updated_buffer = add_partners_to_buffer(population_buffer, all_conf_params)
+
     # Train ego agent using the population buffer
     # Sample agents from buffer for training
     config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
@@ -73,43 +95,63 @@ def persistent_open_ended_training_step(carry, ego_policy, partner_population, c
     )
     
     updated_ego_parameters = ego_out["final_params"]
+    updated_conf_parameters = train_out["final_params_conf"]
+    updated_br_parameters = train_out["final_params_br"]
+
     # Remove initial dimension of 1, to ensure that input and output carry have the same dimension
     updated_ego_parameters = jax.tree_map(lambda x: x.squeeze(axis=0), updated_ego_parameters)
 
-    carry = (updated_ego_parameters, updated_buffer, rng)
+    carry = (updated_ego_parameters, updated_conf_parameters, updated_br_parameters, 
+             updated_buffer, rng)
     return carry, (train_out, ego_out)
 
 
 def train_persistent_paired(rng, env, algorithm_config):
-    rng, init_ego_rng, init_partner_rng, train_rng = jax.random.split(rng, 4)
+    rng, init_ego_rng, init_conf_rng1, init_conf_rng2, init_br_rng, train_rng = jax.random.split(rng, 6)
     
     # Initialize ego agent
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
 
-    conf_policy, init_conf_params = initialize_actor_with_double_critic(algorithm_config, env, init_partner_rng)
+    # Initialize confederate agent
+    conf_policy = ActorWithDoubleCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+    )
+    init_conf_rngs = jax.random.split(init_conf_rng1, algorithm_config["PARTNER_POP_SIZE"])
+    init_conf_params = jax.vmap(conf_policy.init_params)(init_conf_rngs)
+    
+    # Initialize best response agent
+    br_policy = MLPActorCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+    )
+    init_br_rngs = jax.random.split(init_br_rng, algorithm_config["PARTNER_POP_SIZE"])
+    init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
     
     # Create persistent partner population with BufferedPopulation
     # The max_pop_size should be large enough to hold all agents across all iterations
     # Now we need more space since we're storing all checkpoints
     max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
-                   algorithm_config["NUM_CHECKPOINTS"] * \
+                   (algorithm_config["NUM_CHECKPOINTS"] + 1) * \
                    algorithm_config["NUM_OPEN_ENDED_ITERS"]
     
+    # hack to initialize the partner population's conf policy class with the right intializer shape
+    conf_policy2, init_conf_params2 = initialize_actor_with_double_critic(algorithm_config, env, init_conf_rng2)
     partner_population = BufferedPopulation(
         max_pop_size=max_pop_size,
-        policy_cls=conf_policy,
+        policy_cls=conf_policy2,
         sampling_strategy=algorithm_config["SAMPLING_STRATEGY"],
         staleness_coef=algorithm_config["STALENESS_COEF"],
         temp=algorithm_config["SCORE_TEMP"],
     )
-
-    population_buffer = partner_population.reset_buffer(init_conf_params)
+    population_buffer = partner_population.reset_buffer(init_conf_params2)
     
     @jax.jit
     def open_ended_step_fn(carry, unused):
-        return persistent_open_ended_training_step(carry, ego_policy, partner_population, algorithm_config, env)
+        return persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
+                                                 partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, population_buffer, train_rng)
+    init_carry = (init_ego_params, init_conf_params, init_br_params, population_buffer, train_rng)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 
@@ -117,7 +159,7 @@ def train_persistent_paired(rng, env, algorithm_config):
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
     
-    # final_ego_params, final_buffer, _ = final_carry
+    # final_ego_params, final_conf_params, final_br_params, final_buffer, _ = final_carry
     return outs
 
 
