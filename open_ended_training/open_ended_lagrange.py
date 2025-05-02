@@ -918,14 +918,24 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
     out = train_fn(rngs, conf_params, br_params)
     return out
 
+def linear_schedule_regret(iter_idx, config):
+    '''Computes the upper and lower regret thresholds based on the iteration index. 
+    Updates the config with the next regret thresholds.'''
+    frac = iter_idx / config["NUM_OPEN_ENDED_ITERS"]
+    config["LOWER_REGRET_THRESHOLD"] = config["LOWER_REGRET_THRESHOLD_START"] + (config["LOWER_REGRET_THRESHOLD_END"] - config["LOWER_REGRET_THRESHOLD_START"]) * frac
+    config["UPPER_REGRET_THRESHOLD"] = config["UPPER_REGRET_THRESHOLD_START"] + (config["UPPER_REGRET_THRESHOLD_END"] - config["UPPER_REGRET_THRESHOLD_START"]) * frac
+    return config
+
 def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, config, env):
     '''
     Train the ego agent against the regret-maximizing partners. 
     Note: Currently training fcp agent against **all** adversarial partner checkpoints
     TODO: Limit training against the last adversarial checkpoints instead.
     '''
-    prev_ego_params, prev_conf_params, prev_br_params, rng = carry
+    prev_ego_params, prev_conf_params, prev_br_params, rng, oel_iter_idx = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
+    
+    config = linear_schedule_regret(oel_iter_idx, config) # update regret thresholds
     
     if config["REINIT_CONF"]:
         init_rngs = jax.random.split(conf_init_rng, config["PARTNER_POP_SIZE"])
@@ -975,7 +985,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     # remove initial dimension of 1, to ensure that input and output ego parameters have the same dimension
     updated_ego_parameters = jax.tree.map(lambda x: x.squeeze(axis=0), updated_ego_parameters)
 
-    carry = (updated_ego_parameters, updated_conf_parameters, updated_br_parameters, rng)
+    carry = (updated_ego_parameters, updated_conf_parameters, updated_br_parameters, rng, oel_iter_idx + 1)
     return carry, (train_out, ego_out)
 
 def train_lagrange(rng, env, algorithm_config):
@@ -1010,7 +1020,7 @@ def train_lagrange(rng, env, algorithm_config):
         return open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
                                         partner_population, algorithm_config, env)
     
-    init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng)
+    init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng, 0)
     final_carry, outs = jax.lax.scan(
         open_ended_step_fn, 
         init_carry, 
