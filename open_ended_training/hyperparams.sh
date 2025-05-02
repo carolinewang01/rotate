@@ -69,7 +69,7 @@ for task in "${tasks[@]}"; do
         algorithm.REINIT_CONF="${reinit_conf}" \
         algorithm.REINIT_BR="${reinit_br}" \
         algorithm.TIMESTEPS_PER_ITER_EGO="${timesteps_per_iter_ego}" \
-        algorithm.TIMESTEPS_PER_ITER_PARTNER="${timesteps_per_iter_conf}" \
+        algorithm.TIMESTEPS_PER_ITER_PARTNER="${timesteps_per_iter_partner}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

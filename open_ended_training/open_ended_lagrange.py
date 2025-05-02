@@ -390,8 +390,8 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                         xp_weight = upper_lm - lower_lm
                         sp_weight = 1 + lower_lm - upper_lm
 
-                        loss_ego = (pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego) * xp_weight
-                        loss_br = (pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br) * sp_weight
+                        loss_ego =  xp_weight * pg_loss_ego + config["VF_COEF"] * value_loss_ego -  xp_weight * config["ENT_COEF"] * entropy_ego
+                        loss_br = sp_weight * pg_loss_br + config["VF_COEF"] * value_loss_br - sp_weight * config["ENT_COEF"] * entropy_br
                         total_loss = loss_ego + loss_br
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
                     
