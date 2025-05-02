@@ -11,7 +11,7 @@ REINIT_CONF: true # whether to reinitialize the confederate policy each iteratio
 REINIT_BR: true # whether to reinitialize the br policy each iteration of open-ended training
 # lagrange args
 LAGRANGE_MULTIPLIER_LR: 0.05
-LAGRANGE_USE_TARGET_RETURNS: false
+LAGRANGE_USE_TARGET_RETURNS: true
 # buffer args
 SAMPLING_STRATEGY: uniform # 'plr' or 'uniform'
 STALENESS_COEF: 0.3 # used only for 'plr' sampling strategy
