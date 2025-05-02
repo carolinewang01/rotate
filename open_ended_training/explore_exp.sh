@@ -2,7 +2,7 @@
 
 # Algorithm to run
 algo="open_ended_lagrange"
-label="method-explore:popsize-1:uniform"
+label="method-explore:scale-all-loss"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
@@ -32,10 +32,10 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 tasks=(
     # "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
-    # "overcooked/counter_circuit"
+    "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
-    # "lbf"
+    "lbf"
 )
 
 # Function to log messages

@@ -314,6 +314,7 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                     init_conf_hstate_ego, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
                     init_conf_hstate_br, traj_batch_br, advantages_br, returns_br = minbatch_br
 
+
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
 
@@ -360,7 +361,6 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                         )
 
                         # Policy gradient loss for interaction with ego agent
-                        xp_weight = upper_lm - lower_lm
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
                         gae_norm_ego = (gae_ego - gae_ego.mean()) / (gae_ego.std() + 1e-8)
                         pg_loss_1_ego = ratio_ego * gae_norm_ego
@@ -368,10 +368,9 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                             ratio_ego, 
                             1.0 - config["CLIP_EPS"], 
                             1.0 + config["CLIP_EPS"]) * gae_norm_ego
-                        pg_loss_ego = -jnp.mean(xp_weight * jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
+                        pg_loss_ego = -jnp.mean(jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
 
                         # Policy gradient loss for interaction with best response agent
-                        sp_weight = 1 + lower_lm - upper_lm
                         ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
                         gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
                         pg_loss_1_br = ratio_br * gae_norm_br
@@ -379,19 +378,102 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                             ratio_br, 
                             1.0 - config["CLIP_EPS"], 
                             1.0 + config["CLIP_EPS"]) * gae_norm_br
-                        pg_loss_br = -jnp.mean(sp_weight * jnp.minimum(pg_loss_1_br, pg_loss_2_br))
+                        pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
 
-                        entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
-                        entropy_weight = jnp.maximum(entropy_weight, 1)
+                        # entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
+                        # entropy_weight = jnp.maximum(entropy_weight, 1)
 
-                        # Entropy for interaction with ego agent
-                        entropy_ego = entropy_weight*jnp.mean(pi_ego.entropy())
+                        # Entropy for interaction with ego agent and best response agents resp.
+                        entropy_ego = jnp.mean(pi_ego.entropy())
+                        entropy_br = jnp.mean(pi_br.entropy())
                         
-                        # Entropy for interaction with best response agent
-                        entropy_br = entropy_weight*jnp.mean(pi_br.entropy())
+                        xp_weight = upper_lm - lower_lm
+                        sp_weight = 1 + lower_lm - upper_lm
 
-                        total_loss = (pg_loss_ego + pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
+                        loss_ego = (pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego) * xp_weight
+                        loss_br = (pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br) * sp_weight
+                        total_loss = loss_ego + loss_br
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
+                    
+
+                    # def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
+                    #     # get policy and value of confederate versus ego and best response agents respectively
+
+                    #     _, (value_ego, _), pi_ego, _ = confederate_policy.get_action_value_policy(
+                    #         params=params, 
+                    #         obs=traj_batch_ego.obs, 
+                    #         done=traj_batch_ego.done,
+                    #         avail_actions=traj_batch_ego.avail_actions,
+                    #         hstate=init_conf_hstate_ego,
+                    #         rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
+                    #     )
+                    #     _, (_, value_br), pi_br, _ = confederate_policy.get_action_value_policy(
+                    #         params=params, 
+                    #         obs=traj_batch_br.obs, 
+                    #         done=traj_batch_br.done,
+                    #         avail_actions=traj_batch_br.avail_actions,
+                    #         hstate=init_conf_hstate_br,
+                    #         rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
+                    #     )
+
+                    #     log_prob_ego = pi_ego.log_prob(traj_batch_ego.action)
+                    #     log_prob_br = pi_br.log_prob(traj_batch_br.action)
+
+                    #     # Value loss for interaction with ego agent
+                    #     value_pred_ego_clipped = traj_batch_ego.value + (
+                    #         value_ego - traj_batch_ego.value
+                    #         ).clip(
+                    #         -config["CLIP_EPS"], config["CLIP_EPS"])
+                    #     value_losses_ego = jnp.square(value_ego - target_v_ego)
+                    #     value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
+                    #     value_loss_ego = (
+                    #         jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
+                    #     )
+
+                    #     # Value loss for interaction with best response agent
+                    #     value_pred_br_clipped = traj_batch_br.value + (
+                    #         value_br - traj_batch_br.value
+                    #         ).clip(
+                    #         -config["CLIP_EPS"], config["CLIP_EPS"])
+                    #     value_losses_br = jnp.square(value_br - target_v_br)
+                    #     value_losses_clipped_br = jnp.square(value_pred_br_clipped - target_v_br)
+                    #     value_loss_br = (
+                    #         jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
+                    #     )
+
+                    #     # Policy gradient loss for interaction with ego agent
+                    #     xp_weight = upper_lm - lower_lm
+                    #     ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
+                    #     gae_norm_ego = (gae_ego - gae_ego.mean()) / (gae_ego.std() + 1e-8)
+                    #     pg_loss_1_ego = ratio_ego * gae_norm_ego
+                    #     pg_loss_2_ego = jnp.clip(
+                    #         ratio_ego, 
+                    #         1.0 - config["CLIP_EPS"], 
+                    #         1.0 + config["CLIP_EPS"]) * gae_norm_ego
+                    #     pg_loss_ego = -jnp.mean(xp_weight * jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
+
+                    #     # Policy gradient loss for interaction with best response agent
+                    #     sp_weight = 1 + lower_lm - upper_lm
+                    #     ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
+                    #     gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
+                    #     pg_loss_1_br = ratio_br * gae_norm_br
+                    #     pg_loss_2_br = jnp.clip(
+                    #         ratio_br, 
+                    #         1.0 - config["CLIP_EPS"], 
+                    #         1.0 + config["CLIP_EPS"]) * gae_norm_br
+                    #     pg_loss_br = -jnp.mean(sp_weight * jnp.minimum(pg_loss_1_br, pg_loss_2_br))
+
+                    #     entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
+                    #     entropy_weight = jnp.maximum(entropy_weight, 1)
+
+                    #     # Entropy for interaction with ego agent
+                    #     entropy_ego = entropy_weight*jnp.mean(pi_ego.entropy())
+                        
+                    #     # Entropy for interaction with best response agent
+                    #     entropy_br = entropy_weight*jnp.mean(pi_br.entropy())
+
+                    #     total_loss = (pg_loss_ego + pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
+                    #     return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
