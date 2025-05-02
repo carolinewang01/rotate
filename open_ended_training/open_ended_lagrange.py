@@ -10,7 +10,7 @@ import optax
 from flax.training.train_state import TrainState
 from functools import partial
 
-from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
+from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
 from agents.population_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
@@ -60,7 +60,8 @@ def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors
     return minibatches
 
 
-def train_lagrange_partners(config, ego_params, ego_policy, env, 
+def train_lagrange_partners(config, env, 
+                            ego_params, ego_policy, 
                             conf_params, conf_policy, 
                             br_params, br_policy, partner_rng):
     '''
@@ -390,91 +391,11 @@ def train_lagrange_partners(config, ego_params, ego_policy, env,
                         xp_weight = upper_lm - lower_lm
                         sp_weight = 1 + lower_lm - upper_lm
 
-                        loss_ego = (pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego) * xp_weight
-                        loss_br = (pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br) * sp_weight
+                        loss_ego =  xp_weight * pg_loss_ego + config["VF_COEF"] * value_loss_ego -  xp_weight * config["ENT_COEF"] * entropy_ego
+                        loss_br = sp_weight * pg_loss_br + config["VF_COEF"] * value_loss_br - sp_weight * config["ENT_COEF"] * entropy_br
                         total_loss = loss_ego + loss_br
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
                     
-
-                    # def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
-                    #     # get policy and value of confederate versus ego and best response agents respectively
-
-                    #     _, (value_ego, _), pi_ego, _ = confederate_policy.get_action_value_policy(
-                    #         params=params, 
-                    #         obs=traj_batch_ego.obs, 
-                    #         done=traj_batch_ego.done,
-                    #         avail_actions=traj_batch_ego.avail_actions,
-                    #         hstate=init_conf_hstate_ego,
-                    #         rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
-                    #     )
-                    #     _, (_, value_br), pi_br, _ = confederate_policy.get_action_value_policy(
-                    #         params=params, 
-                    #         obs=traj_batch_br.obs, 
-                    #         done=traj_batch_br.done,
-                    #         avail_actions=traj_batch_br.avail_actions,
-                    #         hstate=init_conf_hstate_br,
-                    #         rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
-                    #     )
-
-                    #     log_prob_ego = pi_ego.log_prob(traj_batch_ego.action)
-                    #     log_prob_br = pi_br.log_prob(traj_batch_br.action)
-
-                    #     # Value loss for interaction with ego agent
-                    #     value_pred_ego_clipped = traj_batch_ego.value + (
-                    #         value_ego - traj_batch_ego.value
-                    #         ).clip(
-                    #         -config["CLIP_EPS"], config["CLIP_EPS"])
-                    #     value_losses_ego = jnp.square(value_ego - target_v_ego)
-                    #     value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
-                    #     value_loss_ego = (
-                    #         jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
-                    #     )
-
-                    #     # Value loss for interaction with best response agent
-                    #     value_pred_br_clipped = traj_batch_br.value + (
-                    #         value_br - traj_batch_br.value
-                    #         ).clip(
-                    #         -config["CLIP_EPS"], config["CLIP_EPS"])
-                    #     value_losses_br = jnp.square(value_br - target_v_br)
-                    #     value_losses_clipped_br = jnp.square(value_pred_br_clipped - target_v_br)
-                    #     value_loss_br = (
-                    #         jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
-                    #     )
-
-                    #     # Policy gradient loss for interaction with ego agent
-                    #     xp_weight = upper_lm - lower_lm
-                    #     ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
-                    #     gae_norm_ego = (gae_ego - gae_ego.mean()) / (gae_ego.std() + 1e-8)
-                    #     pg_loss_1_ego = ratio_ego * gae_norm_ego
-                    #     pg_loss_2_ego = jnp.clip(
-                    #         ratio_ego, 
-                    #         1.0 - config["CLIP_EPS"], 
-                    #         1.0 + config["CLIP_EPS"]) * gae_norm_ego
-                    #     pg_loss_ego = -jnp.mean(xp_weight * jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
-
-                    #     # Policy gradient loss for interaction with best response agent
-                    #     sp_weight = 1 + lower_lm - upper_lm
-                    #     ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
-                    #     gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
-                    #     pg_loss_1_br = ratio_br * gae_norm_br
-                    #     pg_loss_2_br = jnp.clip(
-                    #         ratio_br, 
-                    #         1.0 - config["CLIP_EPS"], 
-                    #         1.0 + config["CLIP_EPS"]) * gae_norm_br
-                    #     pg_loss_br = -jnp.mean(sp_weight * jnp.minimum(pg_loss_1_br, pg_loss_2_br))
-
-                    #     entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
-                    #     entropy_weight = jnp.maximum(entropy_weight, 1)
-
-                    #     # Entropy for interaction with ego agent
-                    #     entropy_ego = entropy_weight*jnp.mean(pi_ego.entropy())
-                        
-                    #     # Entropy for interaction with best response agent
-                    #     entropy_br = entropy_weight*jnp.mean(pi_br.entropy())
-
-                    #     total_loss = (pg_loss_ego + pg_loss_br) + config["VF_COEF"] * (value_loss_ego + value_loss_br) - config["ENT_COEF"] * (entropy_ego+entropy_br)
-                    #     return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
-
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
                         train_state_conf.params, 
@@ -943,23 +864,24 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     else:
         conf_params = prev_conf_params
 
-    if config["REINIT_BR"]:
+    if config["REINIT_BR_TO_BR"]:
         init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
         br_params = jax.vmap(br_policy.init_params)(init_rngs)
+    elif config["REINIT_BR_TO_EGO"]:
+        br_params = jax.tree.map(lambda x: x[jnp.newaxis, ...].repeat(config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
     else:
         br_params = prev_br_params
     
     # Train partner agents with ego_policy
-    train_out = train_lagrange_partners(config, prev_ego_params, ego_policy, env, 
-                                     conf_params, conf_policy, 
-                                     br_params, br_policy, partner_rng)
-    train_partner_params = train_out["checkpoints_conf"]
-    
-    # Reshape partner parameters for AgentPopulation
-    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-
+    train_out = train_lagrange_partners(config, env,
+                                        ego_params=prev_ego_params, ego_policy=ego_policy,
+                                        conf_params=conf_params, conf_policy=conf_policy, 
+                                        br_params=br_params, br_policy=br_policy, 
+                                        partner_rng=partner_rng)
     
     # Flatten partner parameters for AgentPopulation
+    train_partner_params = train_out["checkpoints_conf"]
+    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
     flattened_partner_params = jax.tree.map(
         lambda x: x.reshape((pop_size,) + x.shape[2:]), 
         train_partner_params
@@ -1002,10 +924,29 @@ def train_lagrange(rng, env, algorithm_config):
     init_conf_rngs = jax.random.split(init_conf_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_conf_params = jax.vmap(conf_policy.init_params)(init_conf_rngs)
 
-    br_policy = MLPActorCriticPolicy(
-        action_dim=env.action_space(env.agents[0]).n,
-        obs_dim=env.observation_space(env.agents[0]).shape[0],
-    )
+    assert not (algorithm_config["REINIT_BR_TO_EGO"] and algorithm_config["REINIT_BR_TO_BR"]), "Cannot reinitialize br to both ego and br"
+    if algorithm_config["REINIT_BR_TO_EGO"]:
+        # initialize br policy to have same architecture as ego policy
+        # a bit hacky
+        br_policy = S5ActorCriticPolicy(
+            action_dim=env.action_space(env.agents[0]).n,
+            obs_dim=env.observation_space(env.agents[0]).shape[0],
+            d_model=algorithm_config.get("S5_D_MODEL", 16),
+            ssm_size=algorithm_config.get("S5_SSM_SIZE", 16),
+            n_layers=algorithm_config.get("S5_N_LAYERS", 2),
+            blocks=algorithm_config.get("S5_BLOCKS", 1),
+            fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 64),
+            s5_activation=algorithm_config.get("S5_ACTIVATION", "full_glu"),
+            s5_do_norm=algorithm_config.get("S5_DO_NORM", True),
+            s5_prenorm=algorithm_config.get("S5_PRENORM", True),
+            s5_do_gtrxl_norm=algorithm_config.get("S5_DO_GTRXL_NORM", True),
+        )
+    else:
+        br_policy = MLPActorCriticPolicy(
+            action_dim=env.action_space(env.agents[0]).n,
+            obs_dim=env.observation_space(env.agents[0]).shape[0],
+        )
+
     init_br_rngs = jax.random.split(init_br_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
 

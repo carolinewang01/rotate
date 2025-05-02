@@ -60,7 +60,6 @@ def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors
         ), 1, 0,),
         shuffled_batch,
     )
-    # import pdb; pdb.set_trace()
     return minibatches
 
 def train_regret_maximizing_partners(config, env, 
@@ -436,7 +435,8 @@ def train_regret_maximizing_partners(config, env,
 
                         total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
                         return total_loss, (value_loss, pg_loss, entropy)
-
+                    import pdb; pdb.set_trace()
+                    # all traj_batch_br keys have shape (128, 4, ...) as does advantages and returns
                     grad_fn = jax.value_and_grad(_loss_fn_br, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
                         train_state_br.params, traj_batch_br, advantages, returns)
@@ -779,13 +779,13 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     else:
         conf_params = prev_conf_params
 
-    if config["REINIT_BR"]:
+    if config["REINIT_BR_TO_BR"]:
         init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
         br_params = jax.vmap(br_policy.init_params)(init_rngs)
+    elif config["REINIT_BR_TO_EGO"]:
+        br_params = jax.tree.map(lambda x: x[jnp.newaxis, ...].repeat(config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
     else:
         br_params = prev_br_params
-        # set br to be the same as ego
-        # br_ego_params = jax.tree.map(lambda x: x[np.newaxis, ...].repeat(config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
 
     # Train partner agents with ego_policy
     train_out = train_regret_maximizing_partners(config, env, 
@@ -842,24 +842,29 @@ def train_paired(rng, env, algorithm_config):
     init_conf_rngs = jax.random.split(init_conf_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_conf_params = jax.vmap(conf_policy.init_params)(init_conf_rngs)
 
-    # br_policy = MLPActorCriticPolicy(
-    #     action_dim=env.action_space(env.agents[0]).n,
-    #     obs_dim=env.observation_space(env.agents[0]).shape[0],
-    # )
-    # Hacky, but we're using the same policy for br and ego for now
-    br_policy = S5ActorCriticPolicy(
-        action_dim=env.action_space(env.agents[0]).n,
-        obs_dim=env.observation_space(env.agents[0]).shape[0],
-        d_model=algorithm_config.get("S5_D_MODEL", 16),
-        ssm_size=algorithm_config.get("S5_SSM_SIZE", 16),
-        n_layers=algorithm_config.get("S5_N_LAYERS", 2),
-        blocks=algorithm_config.get("S5_BLOCKS", 1),
-        fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 64),
-        s5_activation=algorithm_config.get("S5_ACTIVATION", "full_glu"),
-        s5_do_norm=algorithm_config.get("S5_DO_NORM", True),
-        s5_prenorm=algorithm_config.get("S5_PRENORM", True),
-        s5_do_gtrxl_norm=algorithm_config.get("S5_DO_GTRXL_NORM", True),
-    )
+    assert not (algorithm_config["REINIT_BR_TO_EGO"] and algorithm_config["REINIT_BR_TO_BR"]), "Cannot reinitialize br to both ego and br"
+    if algorithm_config["REINIT_BR_TO_EGO"]:
+        # initialize br policy to have same architecture as ego policy
+        # a bit hacky
+        br_policy = S5ActorCriticPolicy(
+            action_dim=env.action_space(env.agents[0]).n,
+            obs_dim=env.observation_space(env.agents[0]).shape[0],
+            d_model=algorithm_config.get("S5_D_MODEL", 16),
+            ssm_size=algorithm_config.get("S5_SSM_SIZE", 16),
+            n_layers=algorithm_config.get("S5_N_LAYERS", 2),
+            blocks=algorithm_config.get("S5_BLOCKS", 1),
+            fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 64),
+            s5_activation=algorithm_config.get("S5_ACTIVATION", "full_glu"),
+            s5_do_norm=algorithm_config.get("S5_DO_NORM", True),
+            s5_prenorm=algorithm_config.get("S5_PRENORM", True),
+            s5_do_gtrxl_norm=algorithm_config.get("S5_DO_GTRXL_NORM", True),
+        )
+    else:
+        br_policy = MLPActorCriticPolicy(
+            action_dim=env.action_space(env.agents[0]).n,
+            obs_dim=env.observation_space(env.agents[0]).shape[0],
+        )
+
     init_br_rngs = jax.random.split(init_br_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
 

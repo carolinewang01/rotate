@@ -4,7 +4,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy
+from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
 from agents.population_buffer import BufferedPopulation
 from agents.initialize_agents import initialize_s5_agent, initialize_actor_with_double_critic
 from common.plot_utils import get_metric_names
@@ -37,14 +37,17 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
         conf_params = prev_conf_params
 
     # Initialize or reuse best response parameters based on config
-    if config["REINIT_BR"]:
+    if config["REINIT_BR_TO_BR"]:
         init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
         br_params = jax.vmap(br_policy.init_params)(init_rngs)
+    elif config["REINIT_BR_TO_EGO"]:
+        br_params = jax.tree.map(lambda x: x[jnp.newaxis, ...].repeat(config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
     else:
         br_params = prev_br_params
     
     # Train partner agents with ego_policy
-    train_out = train_regret_maximizing_partners(config, ego_params=prev_ego_params, ego_policy=ego_policy, env=env, 
+    train_out = train_regret_maximizing_partners(config, env,
+                                                ego_params=prev_ego_params, ego_policy=ego_policy,
                                                 conf_params=conf_params, conf_policy=conf_policy, 
                                                 br_params=br_params, br_policy=br_policy, 
                                                 partner_rng=partner_rng)
@@ -122,11 +125,28 @@ def train_persistent(rng, env, algorithm_config):
     init_conf_rngs = jax.random.split(init_conf_rng1, algorithm_config["PARTNER_POP_SIZE"])
     init_conf_params = jax.vmap(conf_policy.init_params)(init_conf_rngs)
     
-    # Initialize best response agent
-    br_policy = MLPActorCriticPolicy(
-        action_dim=env.action_space(env.agents[0]).n,
-        obs_dim=env.observation_space(env.agents[0]).shape[0],
-    )
+    assert not (algorithm_config["REINIT_BR_TO_EGO"] and algorithm_config["REINIT_BR_TO_BR"]), "Cannot reinitialize br to both ego and br"
+    if algorithm_config["REINIT_BR_TO_EGO"]:
+        # initialize br policy to have same architecture as ego policy
+        # a bit hacky
+        br_policy = S5ActorCriticPolicy(
+            action_dim=env.action_space(env.agents[0]).n,
+            obs_dim=env.observation_space(env.agents[0]).shape[0],
+            d_model=algorithm_config.get("S5_D_MODEL", 16),
+            ssm_size=algorithm_config.get("S5_SSM_SIZE", 16),
+            n_layers=algorithm_config.get("S5_N_LAYERS", 2),
+            blocks=algorithm_config.get("S5_BLOCKS", 1),
+            fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 64),
+            s5_activation=algorithm_config.get("S5_ACTIVATION", "full_glu"),
+            s5_do_norm=algorithm_config.get("S5_DO_NORM", True),
+            s5_prenorm=algorithm_config.get("S5_PRENORM", True),
+            s5_do_gtrxl_norm=algorithm_config.get("S5_DO_GTRXL_NORM", True),
+        )
+    else:
+        br_policy = MLPActorCriticPolicy(
+            action_dim=env.action_space(env.agents[0]).n,
+            obs_dim=env.observation_space(env.agents[0]).shape[0],
+        )
     init_br_rngs = jax.random.split(init_br_rng, algorithm_config["PARTNER_POP_SIZE"])
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
     
