@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_lagrange"
-label="method-explore:scale-all-loss"
+algo="oe_persistent_lagrange"
+label="method-explore:scale-ent:regret-sched"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
@@ -24,7 +24,7 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 #     "open_ended_lagrange"
 #     "open_ended_minimax"
 #     "open_ended_paired"
-#     "oe_persistent_paired"
+#     "oe_persistent_lagrange"
 #     "paired_ued"
 #     "open_ended_fcp"
 # )
