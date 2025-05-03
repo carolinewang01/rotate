@@ -11,12 +11,19 @@ from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
-# from open_ended_training.open_ended_paired import train_regret_maximizing_partners, log_metrics # TODO: implement linear regret schedule
-from open_ended_training.open_ended_lagrange import train_lagrange_partners as train_regret_maximizing_partners, log_metrics, linear_schedule_regret
+from open_ended_training.open_ended_paired import train_regret_maximizing_partners, log_metrics
+# from open_ended_training.open_ended_lagrange import train_lagrange_partners as train_regret_maximizing_partners, log_metrics, linear_schedule_regret
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+def linear_schedule_regret(iter_idx, config):
+    '''Computes the upper and lower regret thresholds based on the iteration index. 
+    Updates the config with the next regret thresholds.'''
+    frac = iter_idx / config["NUM_OPEN_ENDED_ITERS"]
+    config["LOWER_REGRET_THRESHOLD"] = config["LOWER_REGRET_THRESHOLD_START"] + (config["LOWER_REGRET_THRESHOLD_END"] - config["LOWER_REGRET_THRESHOLD_START"]) * frac
+    config["UPPER_REGRET_THRESHOLD"] = config["UPPER_REGRET_THRESHOLD_START"] + (config["UPPER_REGRET_THRESHOLD_END"] - config["UPPER_REGRET_THRESHOLD_START"]) * frac
+    return config
 
 def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
                                         partner_population, config, env):

@@ -1,5 +1,5 @@
 defaults:
-  - oe_persistent_lagrange/_base_
+  - oe_persistent/_base_
   - _self_ # values from this file override the values from the base file
 
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
