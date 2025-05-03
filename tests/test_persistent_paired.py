@@ -5,7 +5,7 @@ from functools import partial
 
 from agents.agent_interface import ActorWithDoubleCriticPolicy
 from agents.population_buffer import BufferedPopulation, PopulationBuffer
-from open_ended_training.open_ended_persistent_lagrange import train_persistent
+from open_ended_training.open_ended_persistent import train_persistent
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 

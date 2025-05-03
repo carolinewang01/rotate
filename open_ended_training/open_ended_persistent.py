@@ -192,7 +192,7 @@ def train_persistent(rng, env, algorithm_config):
     return outs
 
 
-def run_persistent_lagrange(config, wandb_logger):
+def run_persistent(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
 
     # Create only one environment instance
