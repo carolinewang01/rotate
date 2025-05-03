@@ -4,6 +4,7 @@ import shutil
 import time
 import logging
 from functools import partial
+from typing import NamedTuple
 
 import hydra
 import jax
@@ -20,18 +21,29 @@ from common.save_load_utils import save_train_run
 from common.run_episodes import run_episodes
 from common.ppo_utils import Transition, unbatchify
 from envs import make_env
-from envs.log_wrapper import LogWrapper
+from envs.log_wrapper import LogWrapper, LogEnvState
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+class ResetTransition(NamedTuple):
+    '''Stores extra information for resetting the BR from ego agent states.'''
+    env_state: LogEnvState
+    conf_obs: jnp.ndarray
+    ego_obs: jnp.ndarray
+    conf_done: jnp.ndarray
+    ego_done: jnp.ndarray
+    conf_hstate: jnp.ndarray
+    ego_hstate: jnp.ndarray
+
 def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
     """Create minibatches for PPO updates, where each leaf has shape 
         (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
-    This function ensures that the rollout (time) dimension is kept separate from the minibatch and num_actors 
-    dimensions, so that the minibatches are compatible with recurrent ActorCritics.
+    This function creates minibatches shuffled only over the num_actors = num_envs * num_agents_per_env
+    dimension, thus ensuring that the rollout (time) dimension is preserved. 
+    This makes the minibatches compatible with recurrent ActorCritics.
     """
     # Create batch containing trajectory, advantages, and targets
 
@@ -44,8 +56,8 @@ def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors
 
     permutation = jax.random.permutation(perm_rng, num_actors)
 
-    # each leaf of shuffled batch has shape (rollout_len, num_actors, feat_shape)
-    # except for init_hstate which has shape (1, num_actors, hidden_dim)
+    # each leaf of shuffled batch has shape (rollout_len, num_actors=num_envs*num_agents_per_env, feat_shape)
+    # except for init_hstate which has shape (1, num_actors=num_envs*num_agents_per_env, hidden_dim)
     shuffled_batch = jax.tree.map(
         lambda x: jnp.take(x, permutation, axis=1), batch
     )
@@ -117,7 +129,7 @@ def train_regret_maximizing_partners(config, env,
             )
 
             # --------------------------
-            # 3b) Init envs and hidden states
+            # Init envs
             # --------------------------
             rng, reset_rng_ego, reset_rng_br = jax.random.split(rng, 3)
             reset_rngs_ego = jax.random.split(reset_rng_ego, config["NUM_ENVS"])
@@ -125,13 +137,21 @@ def train_regret_maximizing_partners(config, env,
 
             obsv_ego, env_state_ego = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_ego)
             obsv_br, env_state_br = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_br)
+
+            # Initialize hidden states
+            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_conf_hstate_ego = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_conf_hstate_br = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+
             # --------------------------
             # 3c) Define env step
             # --------------------------
             def _env_step_ego(runner_state, unused):
                 """
                 agent_0 = confederate, agent_1 = ego
-                Returns updated runner_state, and a Transition for agent_0.
+                Returns updated runner_state, a Transition for agent_0, 
+                and a ResetTransition for resetting to env states encountered here.
                 """
                 train_state_conf, env_state, last_obs, last_dones, last_conf_h, last_ego_h, rng = runner_state
                 rng, act_rng, partner_rng, step_rng = jax.random.split(rng, 4)
@@ -148,7 +168,7 @@ def train_regret_maximizing_partners(config, env,
                 act_0, (val_0, _), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
                     params=train_state_conf.params,
                     obs=obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
-                    done=last_dones["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),  # confederate has same done status
+                    done=last_dones["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
                     avail_actions=jax.lax.stop_gradient(avail_actions_0),
                     hstate=last_conf_h,
                     rng=act_rng
@@ -194,19 +214,86 @@ def train_regret_maximizing_partners(config, env,
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
+                reset_transition = ResetTransition(
+                    # all of these are from before env step
+                    env_state=env_state,
+                    conf_obs=obs_0,
+                    ego_obs=obs_1,
+                    conf_done=last_dones["agent_0"],
+                    ego_done=last_dones["agent_1"],
+                    conf_hstate=last_conf_h,
+                    ego_hstate=last_ego_h
+                )
                 new_runner_state = (train_state_conf, env_state_next, obs_next, done, new_conf_h, new_ego_h, rng)
-                return new_runner_state, transition
+                return new_runner_state, (transition, reset_transition)
             
             def _env_step_br(runner_state, unused):
                 """
                 agent_0 = confederate, agent_1 = best response
                 Returns updated runner_state, and a Transition for agent_0 and agent_1.
                 """
-                train_state_conf, train_state_br, env_state, last_obs, last_dones, last_conf_h, last_br_h, rng = runner_state
+                train_state_conf, train_state_br, env_state, last_obs, last_dones, \
+                    last_conf_h, last_br_h, reset_traj_batch, rng = runner_state
                 rng, conf_rng, br_rng, step_rng = jax.random.split(rng, 4)
+                
+                def gather_sampled(data_pytree, flat_indices, first_nonbatch_dim: int):
+                    '''Will treat all dimensions up to the first_nonbatch_dim as batch dimensions. '''
+                    batch_size = config["ROLLOUT_LENGTH"] * config["NUM_ENVS"]
+                    flat_data = jax.tree.map(lambda x: x.reshape(batch_size, *x.shape[first_nonbatch_dim:]), data_pytree)
+                    sampled_data = jax.tree.map(lambda x: x[flat_indices], flat_data) # Shape (N, ...)
+                    return sampled_data
 
-                obs_0 = last_obs["agent_0"]
-                obs_1 = last_obs["agent_1"]
+                # Reset conf-br data collection from conf-ego states
+                if config["RESET_CONF_BR_TO_EGO_STATES"]:
+
+                    rng, sample_rng = jax.random.split(rng)
+                    needs_resample = last_dones["__all__"] # shape (N,) bool
+
+                    total_reset_states = config["ROLLOUT_LENGTH"] * config["NUM_ENVS"]
+                    sampled_indices = jax.random.randint(sample_rng, shape=(config["NUM_ENVS"],), minval=0, 
+                                                         maxval=total_reset_states)
+                    
+                    # Gather sampled leaves from each data pytree
+                    sampled_env_state = gather_sampled(reset_traj_batch.env_state, sampled_indices, first_nonbatch_dim=2)
+                    sampled_conf_obs = gather_sampled(reset_traj_batch.conf_obs, sampled_indices, first_nonbatch_dim=2)
+                    sampled_br_obs = gather_sampled(reset_traj_batch.ego_obs, sampled_indices, first_nonbatch_dim=2)
+                    sampled_conf_done = gather_sampled(reset_traj_batch.conf_done, sampled_indices, first_nonbatch_dim=2)
+                    sampled_br_done = gather_sampled(reset_traj_batch.ego_done, sampled_indices, first_nonbatch_dim=2)
+                    
+                    # for done environments, select data corresponding to the reset_traj_batch states
+                    env_state = jax.tree.map(
+                        lambda sampled, original: jnp.where(
+                            needs_resample.reshape((-1,) + (1,) * (original.ndim - 1)), 
+                            sampled, original
+                        ),
+                        sampled_env_state, 
+                        env_state
+                    )
+                    obs_0 = jnp.where(needs_resample[:, jnp.newaxis], sampled_conf_obs, last_obs["agent_0"])
+                    obs_1 = jnp.where(needs_resample[:, jnp.newaxis], sampled_br_obs, last_obs["agent_1"])
+
+                    dones_0 = jnp.where(needs_resample, sampled_conf_done, last_dones["agent_0"])
+                    dones_1 = jnp.where(needs_resample, sampled_br_done, last_dones["agent_1"])
+
+                    if last_conf_h is not None: # has a leading (1, ) dimension
+                         sampled_conf_hstate = gather_sampled(reset_traj_batch.conf_hstate, sampled_indices, first_nonbatch_dim=3)
+                         sampled_conf_hstate = jax.tree.map(lambda x: x[jnp.newaxis, ...], sampled_conf_hstate)
+                         last_conf_h = jax.tree.map(lambda sampled, original: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
+                                                                                        sampled, original), sampled_conf_hstate, last_conf_h)
+                    
+                    if last_br_h is not None: # has a leading (1, ) dimension
+                        if config["REINIT_BR_TO_EGO"]:   
+                            sample_br_hstate = gather_sampled(reset_traj_batch.ego_hstate, sampled_indices, first_nonbatch_dim=3)                     
+                            sample_br_hstate = jax.tree.map(lambda x: x[jnp.newaxis, ...], sample_br_hstate)
+                        else:
+                            sample_br_hstate = init_br_hstate # Use the initial state passed in
+
+                        last_br_h = jax.tree.map(lambda sampled, original: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
+                                                                                     sampled, original), sample_br_hstate, last_br_h)
+
+                else: # Original logic if not resetting
+                    obs_0, obs_1 = last_obs["agent_0"], last_obs["agent_1"]
+                    dones_0, dones_1 = last_dones["agent_0"], last_dones["agent_1"]
 
                 # Get available actions for agent 0 from environment state
                 avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
@@ -217,7 +304,7 @@ def train_regret_maximizing_partners(config, env,
                 act_0, (_, val_0), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
                     params=train_state_conf.params,
                     obs=obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
-                    done=last_dones["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),  # Get done flag with right shape
+                    done=dones_0.reshape(1, config["NUM_CONTROLLED_ACTORS"]),
                     avail_actions=jax.lax.stop_gradient(avail_actions_0),
                     hstate=last_conf_h,
                     rng=conf_rng
@@ -232,7 +319,7 @@ def train_regret_maximizing_partners(config, env,
                 act_1, val_1, pi_1, new_br_h = br_policy.get_action_value_policy(
                     params=train_state_br.params,
                     obs=obs_1.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
-                    done=last_dones["agent_1"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),  # Get done flag with right shape
+                    done=dones_1.reshape(1, config["NUM_CONTROLLED_ACTORS"]),
                     avail_actions=jax.lax.stop_gradient(avail_actions_1),
                     hstate=last_br_h,
                     rng=br_rng
@@ -242,6 +329,7 @@ def train_regret_maximizing_partners(config, env,
                 act_1 = act_1.squeeze()
                 logp_1 = logp_1.squeeze()
                 val_1 = val_1.squeeze()
+
                 # Combine actions into the env format
                 combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
                 env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
@@ -277,7 +365,8 @@ def train_regret_maximizing_partners(config, env,
                     info=info_1,
                     avail_actions=avail_actions_1
                 )
-                new_runner_state = (train_state_conf, train_state_br, env_state_next, obs_next, done, new_conf_h, new_br_h, rng)
+                # Pass reset_traj_batch and init_br_hstate through unchanged in the state tuple
+                new_runner_state = (train_state_conf, train_state_br, env_state_next, obs_next, done, new_conf_h, new_br_h, reset_traj_batch, rng)
                 return new_runner_state, (transition_0, transition_1)
 
             # --------------------------
@@ -435,7 +524,7 @@ def train_regret_maximizing_partners(config, env,
 
                         total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
                         return total_loss, (value_loss, pg_loss, entropy)
-                    import pdb; pdb.set_trace()
+
                     # all traj_batch_br keys have shape (128, 4, ...) as does advantages and returns
                     grad_fn = jax.value_and_grad(_loss_fn_br, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
@@ -500,25 +589,23 @@ def train_regret_maximizing_partners(config, env,
                 ) = update_runner_state
 
                 # 1) rollout for interactions against ego agent
-                runner_state_ego = (train_state_conf, env_state_ego, last_obs_ego, last_dones_ego, 
+                runner_state_ego = (train_state_conf, env_state_ego, last_obs_ego, last_dones_ego,
                                     conf_hstate_ego, ego_hstate, rng_ego)
-                runner_state_ego, traj_batch_ego = jax.lax.scan(
+                runner_state_ego, (traj_batch_ego, reset_traj_batch_ego) = jax.lax.scan(
                     _env_step_ego, runner_state_ego, None, config["ROLLOUT_LENGTH"])
                 (train_state_conf, env_state_ego, last_obs_ego, last_dones_ego, 
                  conf_hstate_ego, ego_hstate, rng_ego) = runner_state_ego
 
                 # 2) rollout for interactions against br agent
                 runner_state_br = (train_state_conf, train_state_br, env_state_br, last_obs_br, 
-                                   last_dones_br, conf_hstate_br, br_hstate, rng_br)
-                runner_state_br, traj_batch_br = jax.lax.scan(
+                                   last_dones_br, conf_hstate_br, br_hstate, reset_traj_batch_ego, rng_br)
+                runner_state_br, (traj_batch_br_0, traj_batch_br_1) = jax.lax.scan(
                     _env_step_br, runner_state_br, None, config["ROLLOUT_LENGTH"])
-                (train_state_conf, train_state_br, env_state_br, last_obs_br, last_dones_br, 
-                conf_hstate_br, br_hstate, rng_br) = runner_state_br
-
-                traj_batch_br_0, traj_batch_br_1 = traj_batch_br
+                (train_state_conf, train_state_br, env_state_br, last_obs_br, last_dones_br,
+                conf_hstate_br, br_hstate, _, rng_br) = runner_state_br
 
                 # 3a) compute advantage for confederate agent from interaction with ego agent
-
+                
                 # Get available actions for agent 0 from environment state
                 avail_actions_0_ego = jax.vmap(env.get_avail_actions)(env_state_ego.env_state)["agent_0"].astype(jnp.float32)
                 
@@ -712,22 +799,15 @@ def train_regret_maximizing_partners(config, env,
                 agent_1_param=ego_params, agent_1_policy=ego_policy, 
                 max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"])
 
-            # Initialize hidden states
-            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_conf_hstate_ego = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_conf_hstate_br = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-
-
             # Initialize done flags
             init_dones_ego = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
             init_dones_br = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
 
             rng, rng_ego, rng_br = jax.random.split(rng, 3)
             update_runner_state = (
-                train_state_conf, train_state_br, env_state_ego, env_state_br, 
-                obsv_ego, obsv_br, init_dones_ego, init_dones_br, 
-                init_conf_hstate_ego, init_ego_hstate, init_conf_hstate_br, init_br_hstate, 
+                train_state_conf, train_state_br, env_state_ego, env_state_br,
+                obsv_ego, obsv_br, init_dones_ego, init_dones_br,
+                init_conf_hstate_ego, init_ego_hstate, init_conf_hstate_br, init_br_hstate,
                 rng_ego, rng_br, update_steps
             )
             state_with_ckpt = (
