@@ -435,7 +435,7 @@ def train_regret_maximizing_partners(config, env,
 
                         total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
                         return total_loss, (value_loss, pg_loss, entropy)
-                    import pdb; pdb.set_trace()
+
                     # all traj_batch_br keys have shape (128, 4, ...) as does advantages and returns
                     grad_fn = jax.value_and_grad(_loss_fn_br, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(

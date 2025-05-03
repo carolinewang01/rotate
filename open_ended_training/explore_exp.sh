@@ -33,7 +33,7 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 tasks=(
     # "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
-    "overcooked/counter_circuit"
+    # "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
     "lbf"
