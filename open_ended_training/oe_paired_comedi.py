@@ -92,7 +92,9 @@ def train_regret_maximizing_partners(config, env,
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
-        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 2 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
+        # TODO: enable using a different number of rollouts for each of the 4 types of interactions.
+        # Dividing by 3 for now for simplicity. 
+        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 3 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
         config["MINIBATCH_SIZE"] = config["ROLLOUT_LENGTH"] * config["NUM_CONTROLLED_ACTORS"]
 
         assert config["MINIBATCH_SIZE"] % config["NUM_MINIBATCHES"] == 0, "MINIBATCH_SIZE must be divisible by NUM_MINIBATCHES"
@@ -528,10 +530,10 @@ def train_regret_maximizing_partners(config, env,
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
                         mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
                         # TODO: add hyperparameter for comedi weights 
-                        xp_weight = 1 - config["CONF_BR_WEIGHT"]
-                        sp_weight = 0.5 * config["CONF_BR_WEIGHT"]
-                        mp2_weight = 0.5 * config["CONF_BR_WEIGHT"]
-                        total_loss = xp_weight * xp_loss + sp_weight * sp_loss + mp2_weight * mp2_loss
+                        xp_weight = - config["XP_WEIGHT"]
+                        sp_weight = 1.0 
+                        mp2_weight = config["MP_WEIGHT"]
+                        total_loss = sp_weight * sp_loss + xp_weight * xp_loss + mp2_weight * mp2_loss
                         return total_loss, (value_loss_xp, value_loss_sp, value_loss_mp2, 
                                             pg_loss_xp, pg_loss_sp, pg_loss_mp2, 
                                             entropy_xp, entropy_sp, entropy_mp2)
@@ -584,8 +586,8 @@ def train_regret_maximizing_partners(config, env,
                         entropy_sp = jnp.mean(pi_sp.entropy())
                         entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
-                        sp_weight = 0.5
-                        mp2_weight = 0.5
+                        sp_weight = 1.0
+                        mp2_weight = config["MP_WEIGHT"]
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
                         mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
 
