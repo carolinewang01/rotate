@@ -1,5 +1,4 @@
-'''Same as open_ended_paired.py, but doesn't reset the conf and br policies and 
-supports recurrent conf/br policies.'''
+'''Open ended PAIRED with CoMeDi style mixed play rollouts.'''
 import shutil
 import time
 import logging
@@ -29,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class ResetTransition(NamedTuple):
-    '''Stores extra information for resetting the BR from ego agent states.'''
+    '''Stores extra information for resetting agents to a point in some trajectory.'''
     env_state: LogEnvState
     conf_obs: jnp.ndarray
     partner_obs: jnp.ndarray
@@ -225,9 +224,9 @@ def train_regret_maximizing_partners(config, env,
                     # Gather sampled leaves from each data pytree
                     sampled_env_state = gather_sampled(reset_traj_batch.env_state, sampled_indices, first_nonbatch_dim=2)
                     sampled_conf_obs = gather_sampled(reset_traj_batch.conf_obs, sampled_indices, first_nonbatch_dim=2)
-                    sampled_br_obs = gather_sampled(reset_traj_batch.ego_obs, sampled_indices, first_nonbatch_dim=2)
+                    sampled_br_obs = gather_sampled(reset_traj_batch.partner_obs, sampled_indices, first_nonbatch_dim=2)
                     sampled_conf_done = gather_sampled(reset_traj_batch.conf_done, sampled_indices, first_nonbatch_dim=2)
-                    sampled_br_done = gather_sampled(reset_traj_batch.ego_done, sampled_indices, first_nonbatch_dim=2)
+                    sampled_br_done = gather_sampled(reset_traj_batch.partner_done, sampled_indices, first_nonbatch_dim=2)
                     
                     # for done environments, select data corresponding to the reset_traj_batch states
                     env_state = jax.tree.map(
@@ -252,7 +251,7 @@ def train_regret_maximizing_partners(config, env,
                     
                     if last_br_h is not None: # has a leading (1, ) dimension
                         if config["REINIT_BR_TO_EGO"]:   
-                            sample_br_hstate = gather_sampled(reset_traj_batch.ego_hstate, sampled_indices, first_nonbatch_dim=3)                     
+                            sample_br_hstate = gather_sampled(reset_traj_batch.partner_hstate, sampled_indices, first_nonbatch_dim=3)                     
                             sample_br_hstate = jax.tree.map(lambda x: x[jnp.newaxis, ...], sample_br_hstate)
                         else:
                             sample_br_hstate = init_br_hstate # Use the initial state passed in
@@ -386,15 +385,14 @@ def train_regret_maximizing_partners(config, env,
                     hstate=last_br_h,
                     rng=br_act_rng
                 )
-
+                act_ego = act_ego.squeeze()
+                act_br = act_br.squeeze()
                 # Agent 1 (ego or best response) action - choose between ego and best response
-                partner_choice = jax.random.randint(partner_choice_rng, shape=(config["NUM_ENVS"], 1), minval=0, maxval=2)
+                partner_choice = jax.random.randint(partner_choice_rng, shape=(config["NUM_ENVS"],), minval=0, maxval=2)
                 act_1 = jnp.where(partner_choice == 0, act_ego, act_br)
                 
-                act_1 = act_1.squeeze()
-
                 # Combine actions into the env format
-                combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
+                combined_actions = jnp.concatenate([act_0, act_1], axis=0)
                 env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
                 env_act = {k: v.flatten() for k, v in env_act.items()}
 
@@ -661,7 +659,7 @@ def train_regret_maximizing_partners(config, env,
                 2. Collect confederate-br rollout (SP).
                 3. Collect mixed rollout, sampling between ego and br actions (MP1).
                 4. Collect confederate-br rollout using mixed rollout states (MP2). 
-                5. Compute advantages for ego-conf and conf-br interactions.
+                5. Compute advantages for XP, SP, MP2 interactions.
                 6. PPO updates for best response and confederate policies.
                 """
                 (
@@ -673,8 +671,10 @@ def train_regret_maximizing_partners(config, env,
                     conf_hstate_sp, br_hstate_sp, 
                     conf_hstate_mp1, ego_hstate_mp1, br_hstate_mp1, 
                     conf_hstate_mp2, br_hstate_mp2, 
-                    rng_xp, rng_sp, rng_mp1, rng_mp2, update_steps
+                    rng_update, update_steps
                 ) = update_runner_state
+
+                rng_update, rng_xp, rng_sp, rng_mp1, rng_mp2 = jax.random.split(rng_update, 5)
 
                 # 1) rollout for conf-ego interaction (XP)
                 runner_state_xp = (train_state_conf, env_state_xp, last_obs_xp, last_dones_xp,
@@ -753,13 +753,13 @@ def train_regret_maximizing_partners(config, env,
                     last_obs_mp2, last_dones_mp2, traj_batch_mp2_br, "agent_1", value_idx=None)
 
                 # 3) PPO update
-                rng, update_rng = jax.random.split(rng_xp, 2)
+                rng_update, sub_rng = jax.random.split(rng_update, 2)
                 update_state = (
                     train_state_conf, train_state_br, 
                     traj_batch_xp, traj_batch_sp_conf, traj_batch_sp_br, traj_batch_mp2_conf, traj_batch_mp2_br, 
                     advantages_xp_conf, advantages_sp_conf, advantages_sp_br, advantages_mp2_conf, advantages_mp2_br,
                     targets_xp_conf, targets_sp_conf, targets_sp_br, targets_mp2_conf, targets_mp2_br, 
-                    update_rng
+                    sub_rng
                 )
                 update_state, all_losses = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
@@ -796,7 +796,6 @@ def train_regret_maximizing_partners(config, env,
                 metric["average_rewards_br_sp"] = jnp.mean(traj_batch_sp_br.reward)
                 metric["average_rewards_br_mp2"] = jnp.mean(traj_batch_mp2_br.reward)
 
-                #value_loss_br, pg_loss_br, entropy_loss_br = total_loss_br[1]
                 metric["value_loss_br_sp"] = br_value_loss_sp
                 metric["value_loss_br_mp2"] = br_value_loss_mp2
 
@@ -815,7 +814,7 @@ def train_regret_maximizing_partners(config, env,
                     conf_hstate_sp, br_hstate_sp, 
                     conf_hstate_mp1, ego_hstate_mp1, br_hstate_mp1, 
                     conf_hstate_mp2, br_hstate_mp2, 
-                    rng_xp, rng_sp, rng_mp1, rng_mp2, update_steps + 1
+                    rng_update, update_steps + 1
                 )
                 return (new_update_runner_state, metric)
 
@@ -937,16 +936,21 @@ def train_regret_maximizing_partners(config, env,
             init_dones_mp2 = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
             
             # Initialize update runner state
-            rng, rng_xp, rng_sp, rng_mp1, rng_mp2 = jax.random.split(rng, 5)
+            rng, rng_update = jax.random.split(rng, 2)
             update_steps = 0
-            # TODO: carefully check that this is correct
+
             update_runner_state = (
-                train_state_conf, train_state_br, env_state_xp, env_state_sp, env_state_mp1, env_state_mp2,
+                train_state_conf, train_state_br, 
+                env_state_xp, env_state_sp, env_state_mp1, env_state_mp2,
                 obsv_xp, obsv_sp, obsv_mp1, obsv_mp2, 
                 init_dones_xp, init_dones_sp, init_dones_mp1, init_dones_mp2,
-                init_conf_hstate, init_ego_hstate, init_conf_hstate, init_br_hstate,
-                rng_xp, rng_sp, rng_mp1, rng_mp2, update_steps
+                init_conf_hstate, init_ego_hstate, # hstates for conf-ego XP interaction
+                init_conf_hstate, init_br_hstate, # hstates for conf-br SP interaction
+                init_conf_hstate, init_ego_hstate, init_br_hstate, # hstates for conf-ego-br MP1 interaction
+                init_conf_hstate, init_br_hstate, # hstates for conf-br MP2 interaction
+                rng_update, update_steps
             )
+
             state_with_ckpt = (
                 update_runner_state, checkpoint_array_conf, checkpoint_array_br, 
                 ckpt_idx, ep_infos_br, ep_infos_ego
@@ -1117,7 +1121,7 @@ def run_paired(config, wandb_logger):
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
 
 
-    log.info("Starting open-ended PAIRED training...")
+    log.info("Starting open-ended PAIRED (CoMeDi) training...")
     start_time = time.time()
 
     DEBUG = False
@@ -1130,7 +1134,7 @@ def run_paired(config, wandb_logger):
         outs = train_fn(rngs)
     
     end_time = time.time()
-    log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
+    log.info(f"Open-ended PAIRED (CoMeDi) training completed in {end_time - start_time} seconds.")
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])

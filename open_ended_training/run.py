@@ -6,6 +6,7 @@ from common.plot_utils import get_metric_names
 from common.wandb_visualizations import Logger
 from open_ended_minimax import run_minimax
 from open_ended_paired import run_paired
+from oe_paired_comedi import run_paired as run_paired_comedi
 from open_ended_training.open_ended_persistent import run_persistent
 from open_ended_fcp import run_fcp
 from open_ended_lagrange import run_lagrange
@@ -22,6 +23,8 @@ def run_training(cfg):
         ego_policy, final_ego_params, init_ego_params = run_paired(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "oe_persistent":
         ego_policy, final_ego_params, init_ego_params = run_persistent(cfg, wandb_logger)
+    elif cfg.algorithm["ALG"] == "oe_paired_comedi":
+        ego_policy, final_ego_params, init_ego_params = run_paired_comedi(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "paired_ued":
         ego_policy, final_ego_params, init_ego_params = run_paired_ued(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "open_ended_fcp":
