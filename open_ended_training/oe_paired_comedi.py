@@ -529,10 +529,11 @@ def train_regret_maximizing_partners(config, env,
                         xp_loss = pg_loss_xp + config["VF_COEF"] * value_loss_xp - config["ENT_COEF"] * entropy_xp
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
                         mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
-                        # TODO: add hyperparameter for comedi weights 
-                        xp_weight = - config["XP_WEIGHT"]
+
+                        xp_weight = config["XP_WEIGHT"]
                         sp_weight = 1.0 
                         mp2_weight = config["MP_WEIGHT"]
+                        # note that the reward was already negated in the conf-ego interaction
                         total_loss = sp_weight * sp_loss + xp_weight * xp_loss + mp2_weight * mp2_loss
                         return total_loss, (value_loss_xp, value_loss_sp, value_loss_mp2, 
                                             pg_loss_xp, pg_loss_sp, pg_loss_mp2, 
@@ -779,7 +780,6 @@ def train_regret_maximizing_partners(config, env,
                  br_entropy_sp, br_entropy_mp2) = br_losses[1]
                 
                 # Metrics
-                # TODO: check loss logging carefully!
                 metric = traj_batch_xp.info
                 metric["update_steps"] = update_steps
                 metric["value_loss_conf_against_ego"] = conf_value_loss_xp
@@ -903,7 +903,6 @@ def train_regret_maximizing_partners(config, env,
             reset_rngs_mp1 = jax.random.split(reset_rng_mp1, config["NUM_ENVS"])
             reset_rngs_mp2 = jax.random.split(reset_rng_mp2, config["NUM_ENVS"])
 
-            # TODO: check where we've used env_state_ego and env_state_br
             obsv_xp, env_state_xp = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_xp)
             obsv_sp, env_state_sp = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_sp)
             obsv_mp1, env_state_mp1 = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_mp1)
@@ -991,7 +990,6 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     '''
     Train the ego agent against the regret-maximizing partners. 
     Note: Currently training fcp agent against **all** adversarial partner checkpoints
-    TODO: Limit training against the last adversarial checkpoints instead.
     '''
     prev_ego_params, prev_conf_params, prev_br_params, rng = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
