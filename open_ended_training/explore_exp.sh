@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_lagrange"
-label="method-explore:mixed-play0:pop"
+algo="oe_paired_comedi"
+label="method-explore:comedi"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
