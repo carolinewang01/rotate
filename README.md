@@ -9,9 +9,6 @@
     - Figure out how to return regret-maximizing teammates that don't sabotage
 
 ### Method Exploration: 
-- OE-Lagrange: 
-    - Hyperparameter tuning for lower and upper regret bounds, LM leraning rates 
-    - Implement no-reset for BR and confederate; try decreasing the number of steps for the conf learning rate
 - BufferedPopulation
     - Try using regret-based scores
     - Try decreasing the population size / increasing ego agent learning time

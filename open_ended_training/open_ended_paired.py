@@ -448,7 +448,7 @@ def train_regret_maximizing_partners(config, env,
 
                         # Policy gradient loss for interaction with ego agent
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
-                        regret_ego_data = value_br_conf_ego_data - (
+                        regret_ego_data = config["REGRET_SP_WEIGHT"] * value_br_conf_ego_data - (
                             value_ego_conf_ego_data + advantages_ego
                         )
 
@@ -462,7 +462,7 @@ def train_regret_maximizing_partners(config, env,
 
                         # Policy gradient loss for interaction with best response agent
                         ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
-                        regret_br_data = (
+                        regret_br_data = config["REGRET_SP_WEIGHT"] * (
                             value_br_conf_br_data + advantages_br
                         ) - value_ego_conf_br_data
 
@@ -480,9 +480,9 @@ def train_regret_maximizing_partners(config, env,
                         # Entropy for interaction with best response agent
                         entropy_br = jnp.mean(pi_br.entropy())
 
-                        ego_loss = pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
-                        br_loss =  pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br
-                        total_loss = (1 - config["CONF_BR_WEIGHT"]) * ego_loss + config["CONF_BR_WEIGHT"] * br_loss
+                        xp_loss = pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
+                        sp_loss =  pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br
+                        total_loss = xp_loss + config["CONF_BR_WEIGHT"] * sp_loss
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
