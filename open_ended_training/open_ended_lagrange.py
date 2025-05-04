@@ -444,6 +444,7 @@ def train_lagrange_partners(config, env,
                         # Policy gradient loss for interaction with ego agent
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
                         ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
+
                         regret_ego_data = value_br_conf_ego_data - (
                             value_ego_conf_ego_data + advantages_ego
                         )
@@ -451,15 +452,25 @@ def train_lagrange_partners(config, env,
                             value_br_conf_br_data + advantages_br
                         ) - value_ego_conf_br_data
 
+                        conf_br_return_to_go_br_data = value_br_conf_br_data + advantages_br
+
                         # Policy gradient loss for interaction with best response agent
 
-                        gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
-                        pg_loss_1_br = ratio_br * gae_norm_br
+                        conf_br_return_norm = (conf_br_return_to_go_br_data - conf_br_return_to_go_br_data.mean()) / (conf_br_return_to_go_br_data.std() + 1e-8)
+                        pg_loss_1_br = ratio_br * conf_br_return_norm
                         pg_loss_2_br = jnp.clip(
                             ratio_br, 
                             1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm_br
+                            1.0 + config["CLIP_EPS"]) * conf_br_return_norm
                         pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
+
+                        norm_value_br_conf_ego_data = (value_br_conf_ego_data - value_br_conf_ego_data.mean()) / (value_br_conf_ego_data.std() + 1e-8)
+                        pg_loss_1_ego_opt = ratio_ego * norm_value_br_conf_ego_data
+                        pg_loss_2_ego_opt = jnp.clip(
+                            ratio_ego, 
+                            1.0 - config["CLIP_EPS"], 
+                            1.0 + config["CLIP_EPS"]) * norm_value_br_conf_ego_data
+                        pg_loss_ego_opt = -jnp.mean(jnp.minimum(pg_loss_1_ego_opt, pg_loss_2_ego_opt))
 
                         upper_lagrange_dual_diff_ego = config["UPPER_REGRET_THRESHOLD"] - regret_ego_data
                         lower_lagrange_dual_diff_ego = regret_ego_data - config["LOWER_REGRET_THRESHOLD"]
@@ -510,7 +521,7 @@ def train_lagrange_partners(config, env,
                         pg_loss_ego_regret = upper_lm * pg_loss_ego_regret_upper + lower_lm * pg_loss_ego_regret_lower
                         pg_loss_br_regret = upper_lm * pg_loss_br_regret_upper + lower_lm * pg_loss_br_regret_lower
                         
-                        loss_ego =  pg_loss_ego_regret + config["VF_COEF"] * value_loss_ego -  total_weight * config["ENT_COEF"] * entropy_ego
+                        loss_ego =  pg_loss_ego_opt + pg_loss_ego_regret + config["VF_COEF"] * value_loss_ego -  total_weight * config["ENT_COEF"] * entropy_ego
                         loss_br = pg_loss_br + pg_loss_br_regret + config["VF_COEF"] * value_loss_br - total_weight * config["ENT_COEF"] * entropy_br
                         total_loss = loss_ego + loss_br
                         return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego_regret, pg_loss_br, entropy_ego, entropy_br)
