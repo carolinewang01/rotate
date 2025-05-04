@@ -343,7 +343,6 @@ def train_regret_maximizing_partners(config, env,
                 agent_0 = confederate, agent_1 = ego OR best response
                 Returns a ResetTransition for resetting to env states encountered here.
                 """
-                # TODO: pass br h through the runner state 
                 train_state_conf, env_state, last_obs, last_dones, last_conf_h, last_ego_h, last_br_h, rng = runner_state
                 rng, act_rng, ego_act_rng, br_act_rng, partner_choice_rng, step_rng = jax.random.split(rng, 6)
 
@@ -473,11 +472,6 @@ def train_regret_maximizing_partners(config, env,
                     return pg_loss
 
                 def _update_minbatch_conf(train_state_conf, batch_infos):
-                    # TODO: figure out weights on SP, XP and MP rollouts
-                    # minbatch_ego, minbatch_br, minbatch_mp2_conf = batch_infos
-                    # init_conf_hstate, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
-                    # init_conf_hstate, traj_batch_br, advantages_br, returns_br = minbatch_br
-
                     minbatch_xp, minbatch_sp, minbatch_mp2 = batch_infos
                     init_conf_hstate, traj_batch_xp, advantages_xp, returns_xp = minbatch_xp
                     init_conf_hstate, traj_batch_sp, advantages_sp, returns_sp = minbatch_sp
@@ -535,7 +529,7 @@ def train_regret_maximizing_partners(config, env,
                         xp_loss = pg_loss_xp + config["VF_COEF"] * value_loss_xp - config["ENT_COEF"] * entropy_xp
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
                         mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
-                        # TODO: decide on correct weights
+                        # TODO: add hyperparameter for comedi weights 
                         xp_weight = 1 - config["CONF_BR_WEIGHT"]
                         sp_weight = 0.5 * config["CONF_BR_WEIGHT"]
                         mp2_weight = 0.5 * config["CONF_BR_WEIGHT"]
@@ -1167,7 +1161,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     num_partner_updates = teammate_metrics["returned_episode_returns"].shape[3]
 
     ### Process/extract PAIRED-specific losses    
-
+    # TODO: add mp2 losses for br and conf
     # Conf vs ego, conf vs br, br losses
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates, num_eval_episodes, num_agents_per_env)
     teammate_mean_dims = (0, 2, 4, 5)
@@ -1176,19 +1170,20 @@ def log_metrics(config, logger, outs, metric_names: tuple):
 
     #  shape (num_open_ended_iters, num_partner_seeds, num_partner_updates, update_epochs, num_minibatches)
     avg_value_losses_teammate_against_ego = np.asarray(teammate_metrics["value_loss_conf_against_ego"]).mean(axis=teammate_mean_dims)
-    avg_value_losses_teammate_against_br = np.asarray(teammate_metrics["value_loss_conf_against_br"]).mean(axis=teammate_mean_dims) 
-    avg_value_losses_br = np.asarray(teammate_metrics["value_loss_br"]).mean(axis=teammate_mean_dims)
+    avg_value_losses_teammate_against_br = np.asarray(teammate_metrics["value_loss_conf_against_br_sp"]).mean(axis=teammate_mean_dims) 
+    avg_value_losses_br = np.asarray(teammate_metrics["value_loss_br_sp"]).mean(axis=teammate_mean_dims)
     
+    # conf losses 
     avg_actor_losses_teammate_against_ego = np.asarray(teammate_metrics["pg_loss_conf_against_ego"]).mean(axis=teammate_mean_dims) 
-    avg_actor_losses_teammate_against_br = np.asarray(teammate_metrics["pg_loss_conf_against_br"]).mean(axis=teammate_mean_dims)
-    avg_actor_losses_br = np.asarray(teammate_metrics["pg_loss_br"]).mean(axis=teammate_mean_dims)
+    avg_actor_losses_teammate_against_br = np.asarray(teammate_metrics["pg_loss_conf_against_br_sp"]).mean(axis=teammate_mean_dims)
+    avg_actor_losses_br = np.asarray(teammate_metrics["pg_loss_br_sp"]).mean(axis=teammate_mean_dims)
     
     avg_entropy_losses_teammate_against_ego = np.asarray(teammate_metrics["entropy_conf_against_ego"]).mean(axis=teammate_mean_dims)
-    avg_entropy_losses_teammate_against_br = np.asarray(teammate_metrics["entropy_conf_against_br"]).mean(axis=teammate_mean_dims)
-    avg_entropy_losses_br = np.asarray(teammate_metrics["entropy_loss_br"]).mean(axis=teammate_mean_dims)
+    avg_entropy_losses_teammate_against_br = np.asarray(teammate_metrics["entropy_conf_against_br_sp"]).mean(axis=teammate_mean_dims)
+    avg_entropy_losses_br = np.asarray(teammate_metrics["entropy_loss_br_sp"]).mean(axis=teammate_mean_dims)
     
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates)
-    avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br"]).mean(axis=(0, 2))
+    avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br_sp"]).mean(axis=(0, 2))
     avg_rewards_teammate_against_ego = np.asarray(teammate_metrics["average_rewards_ego"]).mean(axis=(0, 2))
     
     # Process ego-specific metrics
@@ -1219,25 +1214,25 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             # Log paired-specific metrics
             # Eval metrics
             logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
-            logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
+            logger.log_item("Eval/ConfReturn-Against-BR-SP", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/EgoRegret", avg_teammate_sp_returns[iter_idx][step] - avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfActorLoss-Against-Ego", avg_actor_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfEntropy-Against-Ego", avg_entropy_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             
-            logger.log_item("Losses/ConfValLoss-Against-BR", avg_value_losses_teammate_against_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/ConfActorLoss-Against-BR", avg_actor_losses_teammate_against_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/ConfEntropy-Against-BR", avg_entropy_losses_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/ConfValLoss-Against-BR-SP", avg_value_losses_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/ConfActorLoss-Against-BR-SP", avg_actor_losses_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/ConfEntropy-Against-BR-SP", avg_entropy_losses_teammate_against_br[iter_idx][step], train_step=global_step)
             
             # Best response losses
-            logger.log_item("Losses/BRValLoss", avg_value_losses_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/BRActorLoss", avg_actor_losses_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/BREntropyLoss", avg_entropy_losses_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/BRValLoss-SP", avg_value_losses_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/BRActorLoss-SP", avg_actor_losses_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/BREntropyLoss-SP", avg_entropy_losses_br[iter_idx][step], train_step=global_step)
         
             # Rewards
             logger.log_item("Losses/AvgConfEgoRewards", avg_rewards_teammate_against_ego[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/AvgConfBRRewards", avg_rewards_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/AvgConfBRRewards-SP", avg_rewards_teammate_against_br[iter_idx][step], train_step=global_step)
 
         ### Ego metrics processing
         for step in range(num_ego_updates):
