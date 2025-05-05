@@ -5,6 +5,7 @@ defaults:
 TIMESTEPS_PER_ITER_PARTNER: 1.5e6
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
+REGRET_SP_WEIGHT: 3.0 # weight on the SP term in the perstep regret loss
 LR: .0001
 NUM_MINIBATCHES: 8
 CLIP_EPS: 0.2

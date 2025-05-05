@@ -1,14 +1,12 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_paired"
-label="method-explore:rxp2:perstep-regret"
+algo="oe_persistent"
+label="hyperparam:pop"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-conf_br_weight=1.0 # weight on conf-br (SP) loss
-regret_sp_weight=2.0 # weight on the SP term in the perstep regret loss
 
 # DEBUG COMMAND
 # CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=open_ended_paired/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=d
@@ -33,8 +31,8 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    # "overcooked/asymm_advantages"
-    # "overcooked/coord_ring"
+    "overcooked/asymm_advantages"
+    "overcooked/coord_ring"
     "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
@@ -59,8 +57,6 @@ for task in "${tasks[@]}"; do
     if python open_ended_training/run.py algorithm="${algo}/${task}" \
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
-        algorithm.CONF_BR_WEIGHT="${conf_br_weight}" \
-        algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

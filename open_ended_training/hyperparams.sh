@@ -2,48 +2,36 @@
 
 # Algorithm to run
 algo="open_ended_lagrange"
-label="hyperparam:no-reset:lr-0.1:ur-0.3" # lr-0.1:ur-0.3
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-# hyperparams
-# lower_regret_bound=0.1
-# upper_regret_bound=0.3
-# reinit_conf=false
-# reinit_br=false
-# timesteps_per_iter_ego=1500000 # 1.5M
-# timesteps_per_iter_partner=1000000 # 1M
 
-# DEBUG COMMAND
-# python open_ended_training/run.py algorithm=open_ended_lagrange/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=8e4 algorithm.TIMESTEPS_PER_ITER_EGO=8e4 label=debug algorithm.NUM_SEEDS=1
+# Define hyperparameters for each task
+# Format: key=task_name, value="[start1,end1] [start2,end2] ..."
+declare -A task_hyperparams
+task_hyperparams["lbf"]="[-0.2,0] [-0.2,-0.1]"
+task_hyperparams["overcooked/cramped_room"]="[-250,-150] [-200,-150]"
+task_hyperparams["overcooked/counter_circuit"]="[-250,-50] [-150,-60]"
+task_hyperparams["overcooked/forced_coord"]="[-25,0] [-10,0]"
+
 
 # Create log directory if it doesn't exist
-mkdir -p results/oe_logs/${algo}/${label}
+log_dir_base="results/oe_logs/${algo}"
+mkdir -p "${log_dir_base}"
 
 # Get current timestamp for log file
 timestamp=$(date +"%Y%m%d_%H%M%S")
-log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
-
-# Available algorithms (commented out for reference)
-# algorithms=(
-#     "open_ended_lagrange"
-#     "open_ended_minimax"
-#     "open_ended_paired"
-#     "oe_paired_reset"
-#     "oe_persistent_paired"
-#     "paired_ued"
-#     "open_ended_fcp"
-# )
+log_file="${log_dir_base}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
     # "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
-    # "overcooked/counter_circuit"
-    # "overcooked/cramped_room"
-    # "overcooked/forced_coord"
     "lbf"
+    "overcooked/counter_circuit"
+    "overcooked/cramped_room"
+    "overcooked/forced_coord"
 )
 
 # Function to log messages
@@ -59,31 +47,47 @@ failure_count=0
 
 # Run experiments for each task
 for task in "${tasks[@]}"; do
-    log "Starting task: ${algo}/${task}"
-    
-    if python open_ended_training/run.py algorithm="${algo}/${task}" \
-        task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
-        algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
-        algorithm.LOWER_REGRET_THRESHOLD="${lower_regret_bound}" \
-        algorithm.UPPER_REGRET_THRESHOLD="${upper_regret_bound}" \
-        algorithm.REINIT_CONF="${reinit_conf}" \
-        algorithm.REINIT_BR="${reinit_br}" \
-        algorithm.TIMESTEPS_PER_ITER_EGO="${timesteps_per_iter_ego}" \
-        algorithm.TIMESTEPS_PER_ITER_PARTNER="${timesteps_per_iter_partner}" \
-        logger.log_train_out="${log_train_out}" \
-        logger.log_eval_out="${log_eval_out}" \
-        2>> "${log_file}"; then
-        log "✅ Successfully completed task: ${algo}/${task}"
-        ((success_count++))
+    if [[ -v task_hyperparams["$task"] ]]; then
+        log "Starting task: ${algo}/${task} with specific hyperparameters"
+        hyperparam_pairs=${task_hyperparams["$task"]}
+        for pair in $hyperparam_pairs; do
+            # Extract start and end values from the pair string like "[-0.2,0]"
+            current_lrs=$(echo "$pair" | sed 's/\[//; s/\].*//; s/,.*//')
+            current_lre=$(echo "$pair" | sed 's/.*,//; s/\]//')
+
+            # Define label dynamically: hyperparam:task_name:lrs-X:lre-Y
+            # Replace / with _ in task name for label compatibility
+            safe_task_name=$(echo "$task" | tr '/' '_')
+            label="hyperparam:${safe_task_name}:lrs-${current_lrs}:lre-${current_lre}"
+            task_log_dir="${log_dir_base}/${label}"
+            mkdir -p "${task_log_dir}"
+            task_log_file="${task_log_dir}/run_${timestamp}.log"
+
+            log "--- Running with LRS: ${current_lrs}, LRE: ${current_lre}, Label: ${label} ---"
+
+            if python open_ended_training/run.py algorithm="${algo}/${task}" \
+                task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
+                algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
+                algorithm.LOWER_REGRET_THRESHOLD_START="${current_lrs}" \
+                algorithm.LOWER_REGRET_THRESHOLD_END="${current_lre}" \
+                logger.log_train_out="${log_train_out}" \
+                logger.log_eval_out="${log_eval_out}" \
+                >> "${task_log_file}" 2>&1; then
+                log "✅ Successfully completed task: ${algo}/${task} with LRS=${current_lrs}, LRE=${current_lre}"
+                ((success_count++))
+            else
+                log "❌ Failed to complete task: ${algo}/${task} with LRS=${current_lrs}, LRE=${current_lre}. Check log: ${task_log_file}"
+                ((failure_count++))
+            fi
+        done
     else
-        log "❌ Failed to complete task: ${algo}/${task}"
-        ((failure_count++))
+        log "⚠️ No specific hyperparameters defined for task: ${algo}/${task}. Skipping."
     fi
 done
 
 # Print final summary
 log "Experiment Summary:"
-log "Total tasks attempted: ${#tasks[@]}"
+log "Total hyperparameter combinations attempted: $((success_count + failure_count))"
 log "Successful tasks: ${success_count}"
 log "Failed tasks: ${failure_count}"
 
