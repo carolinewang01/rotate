@@ -189,7 +189,7 @@ def train_regret_maximizing_partners(config, env,
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=-reward["agent_1"],
+                    reward=reward["agent_1"],
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -530,7 +530,7 @@ def train_regret_maximizing_partners(config, env,
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
                         mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
 
-                        xp_weight = config["XP_WEIGHT"]
+                        xp_weight = - config["XP_WEIGHT"] # negate to minimize the ego agent's objective
                         sp_weight = 1.0 
                         mp2_weight = config["MP_WEIGHT"]
                         # note that the reward was already negated in the conf-ego interaction

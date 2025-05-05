@@ -141,7 +141,7 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=-reward["agent_1"],
+                    reward=reward["agent_1"],
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -218,7 +218,8 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
                         # Entropy for interaction with ego agent
                         entropy_ego = jnp.mean(pi_ego.entropy())
 
-                        total_loss = pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
+                        # We negate the pg loss to minimize the ego agent's objective
+                        total_loss = -pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
                         return total_loss, (value_loss_ego, pg_loss_ego, entropy_ego)
 
                     grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
