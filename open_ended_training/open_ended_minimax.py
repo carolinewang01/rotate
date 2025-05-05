@@ -393,7 +393,7 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
                     # run eval episodes
                     rng, eval_rng, = jax.random.split(rng)
                     # conf vs ego
-                    last_ep_info_with_ego = run_episodes(rng, env, 
+                    last_ep_info_with_ego = run_episodes(eval_rng, env, 
                         agent_0_param=train_state_conf.params, agent_0_policy=confederate_policy,
                         agent_1_param=ego_params, agent_1_policy=ego_policy, 
                         max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"]

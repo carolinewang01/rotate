@@ -1,5 +1,4 @@
-'''Same as open_ended_paired.py, but doesn't reset the conf and br policies and 
-supports recurrent conf/br policies.'''
+'''Open ended PAIRED with CoMeDi style mixed play rollouts.'''
 import shutil
 import time
 import logging
@@ -29,14 +28,14 @@ logging.basicConfig(level=logging.INFO)
 
 
 class ResetTransition(NamedTuple):
-    '''Stores extra information for resetting the BR from ego agent states.'''
+    '''Stores extra information for resetting agents to a point in some trajectory.'''
     env_state: LogEnvState
     conf_obs: jnp.ndarray
-    ego_obs: jnp.ndarray
+    partner_obs: jnp.ndarray
     conf_done: jnp.ndarray
-    ego_done: jnp.ndarray
+    partner_done: jnp.ndarray
     conf_hstate: jnp.ndarray
-    ego_hstate: jnp.ndarray
+    partner_hstate: jnp.ndarray
 
 def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
     """Create minibatches for PPO updates, where each leaf has shape 
@@ -93,7 +92,9 @@ def train_regret_maximizing_partners(config, env,
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
-        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 2 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
+        # TODO: enable using a different number of rollouts for each of the 4 types of interactions.
+        # Dividing by 3 for now for simplicity. 
+        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 3 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
         config["MINIBATCH_SIZE"] = config["ROLLOUT_LENGTH"] * config["NUM_CONTROLLED_ACTORS"]
 
         assert config["MINIBATCH_SIZE"] % config["NUM_MINIBATCHES"] == 0, "MINIBATCH_SIZE must be divisible by NUM_MINIBATCHES"
@@ -128,30 +129,10 @@ def train_regret_maximizing_partners(config, env,
                 tx=tx_br,
             )
 
-            # --------------------------
-            # Init envs
-            # --------------------------
-            rng, reset_rng_ego, reset_rng_br = jax.random.split(rng, 3)
-            reset_rngs_ego = jax.random.split(reset_rng_ego, config["NUM_ENVS"])
-            reset_rngs_br = jax.random.split(reset_rng_br, config["NUM_ENVS"])
-
-            obsv_ego, env_state_ego = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_ego)
-            obsv_br, env_state_br = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_br)
-
-            # Initialize hidden states
-            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_conf_hstate_ego = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_conf_hstate_br = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-
-            # --------------------------
-            # 3c) Define env step
-            # --------------------------
-            def _env_step_ego(runner_state, unused):
+            def _env_step_conf_ego(runner_state, unused):
                 """
                 agent_0 = confederate, agent_1 = ego
-                Returns updated runner_state, a Transition for agent_0, 
-                and a ResetTransition for resetting to env states encountered here.
+                Returns updated runner_state and a Transition for the confederate.
                 """
                 train_state_conf, env_state, last_obs, last_dones, last_conf_h, last_ego_h, rng = runner_state
                 rng, act_rng, partner_rng, step_rng = jax.random.split(rng, 4)
@@ -214,23 +195,13 @@ def train_regret_maximizing_partners(config, env,
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
-                reset_transition = ResetTransition(
-                    # all of these are from before env step
-                    env_state=env_state,
-                    conf_obs=obs_0,
-                    ego_obs=obs_1,
-                    conf_done=last_dones["agent_0"],
-                    ego_done=last_dones["agent_1"],
-                    conf_hstate=last_conf_h,
-                    ego_hstate=last_ego_h
-                )
                 new_runner_state = (train_state_conf, env_state_next, obs_next, done, new_conf_h, new_ego_h, rng)
-                return new_runner_state, (transition, reset_transition)
+                return new_runner_state, transition
             
-            def _env_step_br(runner_state, unused):
+            def _env_step_conf_br(runner_state, unused):
                 """
                 agent_0 = confederate, agent_1 = best response
-                Returns updated runner_state, and a Transition for agent_0 and agent_1.
+                Returns updated runner_state, and Transitions for the confederate and best response.
                 """
                 train_state_conf, train_state_br, env_state, last_obs, last_dones, \
                     last_conf_h, last_br_h, reset_traj_batch, rng = runner_state
@@ -244,8 +215,7 @@ def train_regret_maximizing_partners(config, env,
                     return sampled_data
 
                 # Reset conf-br data collection from conf-ego states
-                if config["RESET_CONF_BR_TO_EGO_STATES"]:
-
+                if reset_traj_batch is not None:
                     rng, sample_rng = jax.random.split(rng)
                     needs_resample = last_dones["__all__"] # shape (N,) bool
 
@@ -256,9 +226,9 @@ def train_regret_maximizing_partners(config, env,
                     # Gather sampled leaves from each data pytree
                     sampled_env_state = gather_sampled(reset_traj_batch.env_state, sampled_indices, first_nonbatch_dim=2)
                     sampled_conf_obs = gather_sampled(reset_traj_batch.conf_obs, sampled_indices, first_nonbatch_dim=2)
-                    sampled_br_obs = gather_sampled(reset_traj_batch.ego_obs, sampled_indices, first_nonbatch_dim=2)
+                    sampled_br_obs = gather_sampled(reset_traj_batch.partner_obs, sampled_indices, first_nonbatch_dim=2)
                     sampled_conf_done = gather_sampled(reset_traj_batch.conf_done, sampled_indices, first_nonbatch_dim=2)
-                    sampled_br_done = gather_sampled(reset_traj_batch.ego_done, sampled_indices, first_nonbatch_dim=2)
+                    sampled_br_done = gather_sampled(reset_traj_batch.partner_done, sampled_indices, first_nonbatch_dim=2)
                     
                     # for done environments, select data corresponding to the reset_traj_batch states
                     env_state = jax.tree.map(
@@ -283,7 +253,7 @@ def train_regret_maximizing_partners(config, env,
                     
                     if last_br_h is not None: # has a leading (1, ) dimension
                         if config["REINIT_BR_TO_EGO"]:   
-                            sample_br_hstate = gather_sampled(reset_traj_batch.ego_hstate, sampled_indices, first_nonbatch_dim=3)                     
+                            sample_br_hstate = gather_sampled(reset_traj_batch.partner_hstate, sampled_indices, first_nonbatch_dim=3)                     
                             sample_br_hstate = jax.tree.map(lambda x: x[jnp.newaxis, ...], sample_br_hstate)
                         else:
                             sample_br_hstate = init_br_hstate # Use the initial state passed in
@@ -369,6 +339,85 @@ def train_regret_maximizing_partners(config, env,
                 new_runner_state = (train_state_conf, train_state_br, env_state_next, obs_next, done, new_conf_h, new_br_h, reset_traj_batch, rng)
                 return new_runner_state, (transition_0, transition_1)
 
+            def _env_step_mixed(runner_state, unused):
+                """
+                agent_0 = confederate, agent_1 = ego OR best response
+                Returns a ResetTransition for resetting to env states encountered here.
+                """
+                train_state_conf, env_state, last_obs, last_dones, last_conf_h, last_ego_h, last_br_h, rng = runner_state
+                rng, act_rng, ego_act_rng, br_act_rng, partner_choice_rng, step_rng = jax.random.split(rng, 6)
+
+                obs_0 = last_obs["agent_0"]
+                obs_1 = last_obs["agent_1"]
+
+                # Get available actions for agent 0 from environment state
+                avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
+                avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
+
+                # Agent_0 (confederate) action using policy interface
+                act_0, (val_0, _), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
+                    params=train_state_conf.params,
+                    obs=obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
+                    done=last_dones["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
+                    avail_actions=jax.lax.stop_gradient(avail_actions_0),
+                    hstate=last_conf_h,
+                    rng=act_rng
+                )
+                logp_0 = pi_0.log_prob(act_0)
+
+                act_0 = act_0.squeeze()
+                logp_0 = logp_0.squeeze()
+                val_0 = val_0.squeeze()
+
+                ### Compute both the ego action and the best response action
+                act_ego, _, _, new_ego_h = ego_policy.get_action_value_policy(
+                    params=ego_params,
+                    obs=obs_1.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
+                    done=last_dones["agent_1"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
+                    avail_actions=jax.lax.stop_gradient(avail_actions_1),
+                    hstate=last_ego_h,
+                    rng=ego_act_rng
+                )
+                act_br, _, _, new_br_h = br_policy.get_action_value_policy(
+                    params=train_state_br.params,
+                    obs=obs_1.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
+                    done=last_dones["agent_1"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
+                    avail_actions=jax.lax.stop_gradient(avail_actions_1),
+                    hstate=last_br_h,
+                    rng=br_act_rng
+                )
+                act_ego = act_ego.squeeze()
+                act_br = act_br.squeeze()
+                # Agent 1 (ego or best response) action - choose between ego and best response
+                partner_choice = jax.random.randint(partner_choice_rng, shape=(config["NUM_ENVS"],), minval=0, maxval=2)
+                act_1 = jnp.where(partner_choice == 0, act_ego, act_br)
+                
+                # Combine actions into the env format
+                combined_actions = jnp.concatenate([act_0, act_1], axis=0)
+                env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
+                env_act = {k: v.flatten() for k, v in env_act.items()}
+
+                # Step env
+                step_rngs = jax.random.split(step_rng, config["NUM_ENVS"])
+                obs_next, env_state_next, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
+                    step_rngs, env_state, env_act
+                )
+
+                reset_transition = ResetTransition(
+                    # all of these are from before env step
+                    env_state=env_state,
+                    conf_obs=obs_0,
+                    partner_obs=obs_1,
+                    conf_done=last_dones["agent_0"],
+                    partner_done=last_dones["agent_1"],
+                    conf_hstate=last_conf_h,
+                    # we record the best response hstate because we use it to reset the best response
+                    partner_hstate=last_br_h 
+                )
+                new_runner_state = (train_state_conf, env_state_next, obs_next, done, new_conf_h, new_ego_h, new_br_h, rng)
+                return new_runner_state, reset_transition
+            
             # --------------------------
             # 3d) GAE & update step
             # --------------------------
@@ -397,307 +446,379 @@ def train_regret_maximizing_partners(config, env,
                 return advantages, advantages + traj_batch.value
 
             def _update_epoch(update_state, unused):
+                def _compute_ppo_value_loss(pred_value, traj_batch, target_v):
+                    '''Value loss function for PPO'''
+                    value_pred_clipped = traj_batch.value + (
+                        pred_value - traj_batch.value
+                        ).clip(
+                        -config["CLIP_EPS"], config["CLIP_EPS"])
+                    value_losses = jnp.square(pred_value - target_v)
+                    value_losses_clipped = jnp.square(value_pred_clipped - target_v)
+                    value_loss = (
+                        jnp.maximum(value_losses, value_losses_clipped).mean()
+                    )
+                    return value_loss
+            
+                def _compute_ppo_pg_loss(log_prob, traj_batch, gae):
+                    '''Policy gradient loss function for PPO'''
+                    ratio = jnp.exp(log_prob - traj_batch.log_prob)
+                    gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
+                    pg_loss_1 = ratio * gae_norm
+                    pg_loss_2 = jnp.clip(
+                        ratio, 
+                        1.0 - config["CLIP_EPS"], 
+                        1.0 + config["CLIP_EPS"]) * gae_norm
+                    pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
+                    return pg_loss
+
                 def _update_minbatch_conf(train_state_conf, batch_infos):
-                    minbatch_ego, minbatch_br = batch_infos
-                    init_conf_hstate_ego, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
-                    init_conf_hstate_br, traj_batch_br, advantages_br, returns_br = minbatch_br
+                    minbatch_xp, minbatch_sp, minbatch_mp2 = batch_infos
+                    init_conf_hstate, traj_batch_xp, advantages_xp, returns_xp = minbatch_xp
+                    init_conf_hstate, traj_batch_sp, advantages_sp, returns_sp = minbatch_sp
+                    init_conf_hstate, traj_batch_mp2, advantages_mp2, returns_mp2 = minbatch_mp2
 
-                    def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
+                    def _loss_fn_conf(params, traj_batch_xp, gae_xp, target_v_xp, 
+                                      traj_batch_sp, gae_sp, target_v_sp, 
+                                      traj_batch_mp2, gae_mp2, target_v_mp2):
                         # get policy and value of confederate versus ego and best response agents respectively
-                        _, (value_ego_conf_ego_data, value_br_conf_ego_data), pi_ego, _ = confederate_policy.get_action_value_policy(
+                        _, (value_xp, _), pi_xp, _ = confederate_policy.get_action_value_policy(
                             params=params, 
-                            obs=traj_batch_ego.obs, 
-                            done=traj_batch_ego.done,
-                            avail_actions=traj_batch_ego.avail_actions,
-                            hstate=init_conf_hstate_ego,
+                            obs=traj_batch_xp.obs, 
+                            done=traj_batch_xp.done,
+                            avail_actions=traj_batch_xp.avail_actions,
+                            hstate=init_conf_hstate,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
-                        _, (value_ego_conf_br_data, value_br_conf_br_data), pi_br, _ = confederate_policy.get_action_value_policy(
+                        _, (_, value_sp), pi_sp, _ = confederate_policy.get_action_value_policy(
                             params=params, 
-                            obs=traj_batch_br.obs, 
-                            done=traj_batch_br.done,
-                            avail_actions=traj_batch_br.avail_actions,
-                            hstate=init_conf_hstate_br,
+                            obs=traj_batch_sp.obs, 
+                            done=traj_batch_sp.done,
+                            avail_actions=traj_batch_sp.avail_actions,
+                            hstate=init_conf_hstate,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
 
-                        log_prob_ego = pi_ego.log_prob(traj_batch_ego.action)
-                        log_prob_br = pi_br.log_prob(traj_batch_br.action)
-
-                        # Value loss for interaction with ego agent
-                        value_pred_ego_clipped = traj_batch_ego.value + (
-                            value_ego_conf_ego_data - traj_batch_ego.value
-                            ).clip(
-                            -config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses_ego = jnp.square(value_ego_conf_ego_data - target_v_ego)
-                        value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
-                        value_loss_ego = (
-                            0.5 * jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
+                        _, (_, value_mp2), pi_mp2, _ = confederate_policy.get_action_value_policy(
+                            params=params, 
+                            obs=traj_batch_mp2.obs, 
+                            done=traj_batch_mp2.done,
+                            avail_actions=traj_batch_mp2.avail_actions,
+                            hstate=init_conf_hstate,
+                            rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
 
-                        # Value loss for interaction with best response agent
-                        value_pred_br_clipped = traj_batch_br.value + (
-                            value_br_conf_br_data - traj_batch_br.value
-                            ).clip(
-                            -config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses_br = jnp.square(value_br_conf_br_data - target_v_br)
-                        value_losses_clipped_br = jnp.square(value_pred_br_clipped - target_v_br)
-                        value_loss_br = (
-                            0.5 * jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
-                        )
+                        log_prob_xp = pi_xp.log_prob(traj_batch_xp.action)
+                        log_prob_sp = pi_sp.log_prob(traj_batch_sp.action)
+                        log_prob_mp2 = pi_mp2.log_prob(traj_batch_mp2.action)
 
-                        # Policy gradient loss for interaction with ego agent
-                        ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
-                        regret_ego_data = config["REGRET_SP_WEIGHT"] * value_br_conf_ego_data - (
-                            value_ego_conf_ego_data + advantages_ego
-                        )
+                        
+                        value_loss_xp = _compute_ppo_value_loss(value_xp, traj_batch_xp, target_v_xp)
+                        value_loss_sp = _compute_ppo_value_loss(value_sp, traj_batch_sp, target_v_sp)
+                        value_loss_mp2 = _compute_ppo_value_loss(value_mp2, traj_batch_mp2, target_v_mp2)
 
-                        gae_norm_ego = (regret_ego_data - regret_ego_data.mean()) / (regret_ego_data.std() + 1e-8)
-                        pg_loss_1_ego = ratio_ego * gae_norm_ego
-                        pg_loss_2_ego = jnp.clip(
-                            ratio_ego, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm_ego
-                        pg_loss_ego = -jnp.mean(jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
+                        pg_loss_xp = _compute_ppo_pg_loss(log_prob_xp, traj_batch_xp, gae_xp)
+                        pg_loss_sp = _compute_ppo_pg_loss(log_prob_sp, traj_batch_sp, gae_sp)
+                        pg_loss_mp2 = _compute_ppo_pg_loss(log_prob_mp2, traj_batch_mp2, gae_mp2)
 
-                        # Policy gradient loss for interaction with best response agent
-                        ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
-                        regret_br_data = config["REGRET_SP_WEIGHT"] * (
-                            value_br_conf_br_data + advantages_br
-                        ) - value_ego_conf_br_data
-
-                        gae_norm_br = (regret_br_data - regret_br_data.mean()) / (regret_br_data.std() + 1e-8)
-                        pg_loss_1_br = ratio_br * gae_norm_br
-                        pg_loss_2_br = jnp.clip(
-                            ratio_br, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm_br
-                        pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
 
                         # Entropy for interaction with ego agent
-                        entropy_ego = jnp.mean(pi_ego.entropy())
-                        
-                        # Entropy for interaction with best response agent
-                        entropy_br = jnp.mean(pi_br.entropy())
+                        entropy_xp = jnp.mean(pi_xp.entropy())
+                        entropy_sp = jnp.mean(pi_sp.entropy())
+                        entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
-                        xp_loss = pg_loss_ego + config["VF_COEF"] * value_loss_ego - config["ENT_COEF"] * entropy_ego
-                        sp_loss =  pg_loss_br + config["VF_COEF"] * value_loss_br - config["ENT_COEF"] * entropy_br
-                        total_loss = xp_loss + config["CONF_BR_WEIGHT"] * sp_loss
-                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
+                        xp_loss = pg_loss_xp + config["VF_COEF"] * value_loss_xp - config["ENT_COEF"] * entropy_xp
+                        sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
+                        mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
+
+                        xp_weight = config["XP_WEIGHT"]
+                        sp_weight = 1.0 
+                        mp2_weight = config["MP_WEIGHT"]
+                        # note that the reward was already negated in the conf-ego interaction
+                        total_loss = sp_weight * sp_loss + xp_weight * xp_loss + mp2_weight * mp2_loss
+                        return total_loss, (value_loss_xp, value_loss_sp, value_loss_mp2, 
+                                            pg_loss_xp, pg_loss_sp, pg_loss_mp2, 
+                                            entropy_xp, entropy_sp, entropy_mp2)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
                         train_state_conf.params, 
-                        traj_batch_ego, advantages_ego, returns_ego, 
-                        traj_batch_br, advantages_br, returns_br)
+                        traj_batch_xp, advantages_xp, returns_xp, 
+                        traj_batch_sp, advantages_sp, returns_sp, 
+                        traj_batch_mp2, advantages_mp2, returns_mp2)
                     train_state_conf = train_state_conf.apply_gradients(grads=grads)
                     return train_state_conf, (loss_val, aux_vals)
                 
-                def _update_minbatch_br(train_state_br, batch_info):
-                    init_br_hstate, traj_batch_br, advantages, returns = batch_info
-                    def _loss_fn_br(params, traj_batch_br, gae, target_v):
-                        _, value, pi, _ = br_policy.get_action_value_policy(
+                def _update_minbatch_br(train_state_br, batch_infos):
+                    minbatch_sp, minbatch_mp2 = batch_infos
+                    init_br_hstate, traj_batch_sp, advantages_sp, returns_sp = minbatch_sp
+                    init_br_hstate, traj_batch_mp2, advantages_mp2, returns_mp2 = minbatch_mp2
+
+                    def _loss_fn_br(params, traj_batch_sp, gae_sp, target_v_sp, 
+                                    traj_batch_mp2, gae_mp2, target_v_mp2):
+                        _, value_sp, pi_sp, _ = br_policy.get_action_value_policy(
                             params=params, 
-                            obs=traj_batch_br.obs, 
-                            done=traj_batch_br.done,
-                            avail_actions=traj_batch_br.avail_actions,
+                            obs=traj_batch_sp.obs, 
+                            done=traj_batch_sp.done,
+                            avail_actions=traj_batch_sp.avail_actions,
                             hstate=init_br_hstate,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
-                        log_prob = pi.log_prob(traj_batch_br.action)
 
-                        # Value loss
-                        value_pred_clipped = traj_batch_br.value + (
-                            value - traj_batch_br.value
-                            ).clip(
-                            -config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses = jnp.square(value - target_v)
-                        value_losses_clipped = jnp.square(value_pred_clipped - target_v)
-                        value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+                        _, value_mp2, pi_mp2, _ = br_policy.get_action_value_policy(
+                            params=params, 
+                            obs=traj_batch_mp2.obs, 
+                            done=traj_batch_mp2.done,
+                            avail_actions=traj_batch_mp2.avail_actions,
+                            hstate=init_br_hstate,
+                            rng=jax.random.PRNGKey(0)
                         )
 
-                        # Policy gradient loss
-                        ratio = jnp.exp(log_prob - traj_batch_br.log_prob)
-                        gae_norm = (gae - gae.mean()) / (gae.std() + 1e-8)
-                        pg_loss_1 = ratio * gae_norm
-                        pg_loss_2 = jnp.clip(
-                            ratio, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm
-                        pg_loss = -jnp.mean(jnp.minimum(pg_loss_1, pg_loss_2))
+                        log_prob_sp = pi_sp.log_prob(traj_batch_sp.action)
+                        log_prob_mp2 = pi_mp2.log_prob(traj_batch_mp2.action)
+
+                        # Value loss
+                        value_loss_sp = _compute_ppo_value_loss(value_sp, traj_batch_sp, target_v_sp)
+                        value_loss_mp2 = _compute_ppo_value_loss(value_mp2, traj_batch_mp2, target_v_mp2)
+
+                        pg_loss_sp = _compute_ppo_pg_loss(log_prob_sp, traj_batch_sp, gae_sp)
+                        pg_loss_mp2 = _compute_ppo_pg_loss(log_prob_mp2, traj_batch_mp2, gae_mp2)
 
                         # Entropy
-                        entropy = jnp.mean(pi.entropy())
+                        entropy_sp = jnp.mean(pi_sp.entropy())
+                        entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
-                        total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
-                        return total_loss, (value_loss, pg_loss, entropy)
+                        sp_weight = 1.0
+                        mp2_weight = config["MP_WEIGHT"]
+                        sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
+                        mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
+
+                        total_loss = sp_weight * sp_loss + mp2_weight * mp2_loss
+                        return total_loss, (value_loss_sp, value_loss_mp2, 
+                                            pg_loss_sp, pg_loss_mp2, 
+                                            entropy_sp, entropy_mp2)
 
                     # all traj_batch_br keys have shape (128, 4, ...) as does advantages and returns
                     grad_fn = jax.value_and_grad(_loss_fn_br, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
-                        train_state_br.params, traj_batch_br, advantages, returns)
+                        train_state_br.params, 
+                        traj_batch_sp, advantages_sp, returns_sp, 
+                        traj_batch_mp2, advantages_mp2, returns_mp2)
                     train_state_br = train_state_br.apply_gradients(grads=grads)
                     return train_state_br, (loss_val, aux_vals)
 
-
+                
                 (
                     train_state_conf, train_state_br, 
-                    traj_batch_ego, traj_batch_br_0, traj_batch_br_1, 
-                    advantages_conf_ego, advantages_conf_br, advantages_br, 
-                    targets_conf_ego, targets_conf_br, targets_br, 
-                    rng_ego, rng_br
+                    traj_batch_xp, traj_batch_sp_conf, traj_batch_sp_br, traj_batch_mp2_conf, traj_batch_mp2_br, 
+                    advantages_xp_conf, advantages_sp_conf, advantages_sp_br, advantages_mp2_conf, advantages_mp2_br,
+                    targets_xp_conf, targets_sp_conf, targets_sp_br, targets_mp2_conf, targets_mp2_br, 
+                    rng
                 ) = update_state
 
-                rng_ego, perm_rng_ego, perm_rng_br0, perm_rng_br1 = jax.random.split(rng_ego, 4)
+                rng, perm_rng_xp, perm_rng_sp_conf, perm_rng_sp_br, perm_rng_mp2_conf, perm_rng_mp2_br = jax.random.split(rng, 6)
 
                 # Create minibatches for each agent and interaction type
-                minibatches_ego = _create_minibatches(
-                    traj_batch_ego, advantages_conf_ego, targets_conf_ego, init_conf_hstate_ego, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_ego
+                minibatches_xp = _create_minibatches(
+                    traj_batch_xp, advantages_xp_conf, targets_xp_conf, init_conf_hstate, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_xp
                 )
-                minibatches_br0 = _create_minibatches(
-                    traj_batch_br_0, advantages_conf_br, targets_conf_br, init_conf_hstate_br, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br0
+                minibatches_sp_conf = _create_minibatches(
+                    traj_batch_sp_conf, advantages_sp_conf, targets_sp_conf, init_conf_hstate, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_sp_conf
                 )
-                minibatches_br1 = _create_minibatches(
-                    traj_batch_br_1, advantages_br, targets_br, init_br_hstate, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br1
+                minibatches_sp_br = _create_minibatches(
+                    traj_batch_sp_br, advantages_sp_br, targets_sp_br, init_br_hstate, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_sp_br
+                )
+                minibatches_mp2_conf = _create_minibatches(
+                    traj_batch_mp2_conf, advantages_mp2_conf, targets_mp2_conf, init_conf_hstate, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_mp2_conf
+                )
+                minibatches_mp2_br = _create_minibatches(
+                    traj_batch_mp2_br, advantages_mp2_br, targets_mp2_br, init_br_hstate, 
+                    config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_mp2_br
                 )
 
                 # Update confederate
-                train_state_conf, total_loss = jax.lax.scan(
-                    _update_minbatch_conf, train_state_conf, (minibatches_ego, minibatches_br0)
+                train_state_conf, total_loss_conf = jax.lax.scan(
+                    _update_minbatch_conf, train_state_conf, (minibatches_xp, minibatches_sp_conf, minibatches_mp2_conf)
                 )
 
                 # Update best response
                 train_state_br, total_loss_br = jax.lax.scan(
-                    _update_minbatch_br, train_state_br, minibatches_br1
+                    _update_minbatch_br, train_state_br, (minibatches_sp_br, minibatches_mp2_br)
                 )
 
                 update_state = (train_state_conf, train_state_br, 
-                    traj_batch_ego, traj_batch_br_0, traj_batch_br_1, 
-                    advantages_conf_ego, advantages_conf_br, advantages_br,
-                    targets_conf_ego, targets_conf_br, targets_br, 
-                    rng_ego, rng_br)
-                return update_state, (total_loss, total_loss_br)
+                    traj_batch_xp, traj_batch_sp_conf, traj_batch_sp_br, traj_batch_mp2_conf, traj_batch_mp2_br, 
+                    advantages_xp_conf, advantages_sp_conf, advantages_sp_br, advantages_mp2_conf, advantages_mp2_br,
+                    targets_xp_conf, targets_sp_conf, targets_sp_br, targets_mp2_conf, targets_mp2_br, 
+                    rng)
+                return update_state, (total_loss_conf, total_loss_br)
 
             def _update_step(update_runner_state, unused):
                 """
-                1. Collect rollout for interactions against ego agent.
-                2. Collect rollout for interactions against br agent.
-                3. Compute advantages for ego-conf and conf-br interactions.
-                4. PPO updates for best response and confederate policies.
+                1. Collect confederate-ego rollout (XP).
+                2. Collect confederate-br rollout (SP).
+                3. Collect mixed rollout, sampling between ego and br actions (MP1).
+                4. Collect confederate-br rollout using mixed rollout states (MP2). 
+                5. Compute advantages for XP, SP, MP2 interactions.
+                6. PPO updates for best response and confederate policies.
                 """
                 (
                     train_state_conf, train_state_br, 
-                    env_state_ego, env_state_br,
-                    last_obs_ego, last_obs_br, 
-                    last_dones_ego, last_dones_br, 
-                    conf_hstate_ego, ego_hstate, 
-                    conf_hstate_br, br_hstate, 
-                    rng_ego, rng_br, update_steps
+                    env_state_xp, env_state_sp, env_state_mp1, env_state_mp2, 
+                    last_obs_xp, last_obs_sp, last_obs_mp1, last_obs_mp2, 
+                    last_dones_xp, last_dones_sp, last_dones_mp1, last_dones_mp2, 
+                    conf_hstate_xp, ego_hstate_xp, 
+                    conf_hstate_sp, br_hstate_sp, 
+                    conf_hstate_mp1, ego_hstate_mp1, br_hstate_mp1, 
+                    conf_hstate_mp2, br_hstate_mp2, 
+                    rng_update, update_steps
                 ) = update_runner_state
 
-                # 1) rollout for interactions against ego agent
-                runner_state_ego = (train_state_conf, env_state_ego, last_obs_ego, last_dones_ego,
-                                    conf_hstate_ego, ego_hstate, rng_ego)
-                runner_state_ego, (traj_batch_ego, reset_traj_batch_ego) = jax.lax.scan(
-                    _env_step_ego, runner_state_ego, None, config["ROLLOUT_LENGTH"])
-                (train_state_conf, env_state_ego, last_obs_ego, last_dones_ego, 
-                 conf_hstate_ego, ego_hstate, rng_ego) = runner_state_ego
+                rng_update, rng_xp, rng_sp, rng_mp1, rng_mp2 = jax.random.split(rng_update, 5)
 
-                # 2) rollout for interactions against br agent
-                runner_state_br = (train_state_conf, train_state_br, env_state_br, last_obs_br, 
-                                   last_dones_br, conf_hstate_br, br_hstate, reset_traj_batch_ego, rng_br)
-                runner_state_br, (traj_batch_br_0, traj_batch_br_1) = jax.lax.scan(
-                    _env_step_br, runner_state_br, None, config["ROLLOUT_LENGTH"])
-                (train_state_conf, train_state_br, env_state_br, last_obs_br, last_dones_br,
-                conf_hstate_br, br_hstate, _, rng_br) = runner_state_br
-
-                # 3a) compute advantage for confederate agent from interaction with ego agent
+                # 1) rollout for conf-ego interaction (XP)
+                runner_state_xp = (train_state_conf, env_state_xp, last_obs_xp, last_dones_xp,
+                                    conf_hstate_xp, ego_hstate_xp, rng_xp)
+                runner_state_xp, traj_batch_xp = jax.lax.scan(
+                    _env_step_conf_ego, runner_state_xp, None, config["ROLLOUT_LENGTH"])
+                (train_state_conf, env_state_xp, last_obs_xp, last_dones_xp, 
+                 conf_hstate_xp, ego_hstate_xp, rng_xp) = runner_state_xp
+            
+                # 2) rollout for conf-br interaction (SP)
+                runner_state_sp = (train_state_conf, train_state_br, env_state_sp, last_obs_sp, 
+                                   last_dones_sp, conf_hstate_sp, br_hstate_sp, None, rng_sp)
+                runner_state_sp, (traj_batch_sp_conf, traj_batch_sp_br) = jax.lax.scan(
+                    _env_step_conf_br, runner_state_sp, None, config["ROLLOUT_LENGTH"])
+                (train_state_conf, train_state_br, env_state_sp, last_obs_sp, last_dones_sp,
+                conf_hstate_sp, br_hstate_sp, _, rng_sp) = runner_state_sp
                 
-                # Get available actions for agent 0 from environment state
-                avail_actions_0_ego = jax.vmap(env.get_avail_actions)(env_state_ego.env_state)["agent_0"].astype(jnp.float32)
+                # 3) mixed rollout for conf-ego and conf-br interactions (MP1)
+                runner_state_mp1 = (train_state_conf, env_state_mp1, last_obs_mp1, last_dones_mp1,
+                                    conf_hstate_mp1, ego_hstate_mp1, br_hstate_mp1, rng_mp1)
+                runner_state_mp1, reset_traj_batch_mp1 = jax.lax.scan(
+                    _env_step_mixed, runner_state_mp1, None, config["ROLLOUT_LENGTH"])
+                (train_state_conf, env_state_mp1, last_obs_mp1, last_dones_mp1, 
+                 conf_hstate_mp1, ego_hstate_mp1, br_hstate_mp1, rng_mp1) = runner_state_mp1
+
+                # 4) rollout for conf-br interaction using mixed rollout states (MP2)
+                runner_state_mp2 = (train_state_conf, train_state_br, env_state_mp2, last_obs_mp2, 
+                                    last_dones_mp2, conf_hstate_mp2, br_hstate_mp2, 
+                                    reset_traj_batch_mp1, rng_mp2)
+                runner_state_mp2, (traj_batch_mp2_conf, traj_batch_mp2_br) = jax.lax.scan(
+                    _env_step_conf_br, runner_state_mp2, None, config["ROLLOUT_LENGTH"])
+                (train_state_conf, train_state_br, env_state_mp2, last_obs_mp2, last_dones_mp2,
+                 conf_hstate_mp2, br_hstate_mp2, _, rng_mp2) = runner_state_mp2
+
+                def _compute_advantages_and_targets(env_state, policy, policy_params, policy_hstate, 
+                                                   last_obs, last_dones, traj_batch, agent_name, value_idx=None):
+                    '''Value_idx argument is to support the ActorWithDoubleCritic (confederate) policy, which 
+                    has two value heads. Value head 0 models the ego agent while value head 1 models the best response.'''
+                    avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)[agent_name].astype(jnp.float32)
+                    _, vals, _, _ = policy.get_action_value_policy(
+                        params=policy_params,
+                        obs=last_obs[agent_name].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
+                        done=last_dones[agent_name].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
+                        avail_actions=jax.lax.stop_gradient(avail_actions),
+                        hstate=policy_hstate,
+                        rng=jax.random.PRNGKey(0)  # dummy key as we don't sample actions
+                    )
+                    if value_idx is None:
+                        last_val = vals.squeeze()
+                    else:
+                        last_val = vals[value_idx].squeeze()
+                    advantages, targets = _calculate_gae(traj_batch, last_val)
+                    return advantages, targets
                 
-                # Get last value
-                _, (last_val_0_ego, _), _, _ = confederate_policy.get_action_value_policy(
-                    params=train_state_conf.params,
-                    obs=last_obs_ego["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1), 
-                    done=last_dones_ego["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
-                    avail_actions=jax.lax.stop_gradient(avail_actions_0_ego),
-                    hstate=conf_hstate_ego,
-                    rng=jax.random.PRNGKey(0)  # dummy key as we don't sample actions
-                )
-                last_val_0_ego = last_val_0_ego.squeeze()
-                advantages_conf_ego, targets_conf_ego = _calculate_gae(traj_batch_ego, last_val_0_ego)
+                # 5a) Compute conf advantages for XP (conf-ego) interaction
+                advantages_xp_conf, targets_xp_conf = _compute_advantages_and_targets(
+                    env_state_xp, conf_policy, train_state_conf.params, conf_hstate_xp, 
+                    last_obs_xp, last_dones_xp, traj_batch_xp, "agent_0", value_idx=0)
 
-                # 3b) compute advantage for confederate agent from interaction with br policy
-
-                # Get available actions for agent 0 from environment state
-                avail_actions_0_br = jax.vmap(env.get_avail_actions)(env_state_br.env_state)["agent_0"].astype(jnp.float32)
+                # 5b) Compute conf and br advantages for SP (conf-br) interaction
+                advantages_sp_conf, targets_sp_conf = _compute_advantages_and_targets(
+                    env_state_sp, conf_policy, train_state_conf.params, conf_hstate_sp, 
+                    last_obs_sp, last_dones_sp, traj_batch_sp_conf, "agent_0", value_idx=1)
                 
-                # Get last value using agent interface
-                _, (_, last_val_0_br), _, _ = confederate_policy.get_action_value_policy(
-                    params=train_state_conf.params,
-                    obs=last_obs_br["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
-                    done=last_dones_br["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
-                    avail_actions=jax.lax.stop_gradient(avail_actions_0_br),
-                    hstate=conf_hstate_br,
-                    rng=jax.random.PRNGKey(0)  # dummy key as we don't sample actions
-                )
-                last_val_0_br = last_val_0_br.squeeze()
-                advantages_conf_br, targets_conf_br = _calculate_gae(traj_batch_br_0, last_val_0_br)
+                advantages_sp_br, targets_sp_br = _compute_advantages_and_targets(
+                    env_state_sp, br_policy, train_state_br.params, br_hstate_sp, 
+                    last_obs_sp, last_dones_sp, traj_batch_sp_br, "agent_1", value_idx=None)
+                
+                # 5c) Compute conf advantages for MP2 (conf-br) interaction
+                advantages_mp2_conf, targets_mp2_conf = _compute_advantages_and_targets(
+                    env_state_mp2, conf_policy, train_state_conf.params, conf_hstate_mp2, 
+                    last_obs_mp2, last_dones_mp2, traj_batch_mp2_conf, "agent_0", value_idx=1)
 
-                # 3c) compute advantage for br policy from interaction with confederate agent
-
-                avail_actions_1_br = jax.vmap(env.get_avail_actions)(env_state_br.env_state)["agent_1"].astype(jnp.float32)
-                # Get last value using agent interface
-                _, last_val_1_br, _, _ = br_policy.get_action_value_policy(
-                    params=train_state_br.params,
-                    obs=last_obs_br["agent_1"].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
-                    done=last_dones_br["agent_1"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
-                    avail_actions=jax.lax.stop_gradient(avail_actions_1_br),
-                    hstate=br_hstate,
-                    rng=jax.random.PRNGKey(0)  # dummy key as we don't sample actions
-                )
-                last_val_1_br = last_val_1_br.squeeze()
-                advantages_br, targets_br = _calculate_gae(traj_batch_br_1, last_val_1_br)
+                advantages_mp2_br, targets_mp2_br = _compute_advantages_and_targets(
+                    env_state_mp2, br_policy, train_state_br.params, br_hstate_mp2, 
+                    last_obs_mp2, last_dones_mp2, traj_batch_mp2_br, "agent_1", value_idx=None)
 
                 # 3) PPO update
+                rng_update, sub_rng = jax.random.split(rng_update, 2)
                 update_state = (
                     train_state_conf, train_state_br, 
-                    traj_batch_ego, traj_batch_br_0, traj_batch_br_1, 
-                    advantages_conf_ego, advantages_conf_br, advantages_br,
-                    targets_conf_ego, targets_conf_br, targets_br, 
-                    rng_ego, rng_br
+                    traj_batch_xp, traj_batch_sp_conf, traj_batch_sp_br, traj_batch_mp2_conf, traj_batch_mp2_br, 
+                    advantages_xp_conf, advantages_sp_conf, advantages_sp_br, advantages_mp2_conf, advantages_mp2_br,
+                    targets_xp_conf, targets_sp_conf, targets_sp_br, targets_mp2_conf, targets_mp2_br, 
+                    sub_rng
                 )
                 update_state, all_losses = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state_conf = update_state[0]
                 train_state_br = update_state[1]
 
+                conf_losses, br_losses = all_losses
+
+                (conf_value_loss_xp, conf_value_loss_sp, conf_value_loss_mp2, 
+                 conf_pg_loss_xp, conf_pg_loss_sp, conf_pg_loss_mp2, 
+                 conf_entropy_xp, conf_entropy_sp, conf_entropy_mp2) = conf_losses[1]
+
+                (br_value_loss_sp, br_value_loss_mp2, 
+                 br_pg_loss_sp, br_pg_loss_mp2, 
+                 br_entropy_sp, br_entropy_mp2) = br_losses[1]
+                
                 # Metrics
-                metric = traj_batch_ego.info
+                metric = traj_batch_xp.info
                 metric["update_steps"] = update_steps
-                metric["value_loss_conf_against_ego"] = all_losses[0][1][0]
-                metric["value_loss_conf_against_br"] = all_losses[0][1][1]
-                metric["pg_loss_conf_against_ego"] = all_losses[0][1][2]
-                metric["pg_loss_conf_against_br"] = all_losses[0][1][3]
-                metric["entropy_conf_against_ego"] = all_losses[0][1][4]
-                metric["entropy_conf_against_br"] = all_losses[0][1][5]
-                metric["average_rewards_br"] = jnp.mean(traj_batch_br_0.reward)
-                metric["average_rewards_ego"] = jnp.mean(traj_batch_ego.reward)
+                metric["value_loss_conf_against_ego"] = conf_value_loss_xp
+                metric["value_loss_conf_against_br_sp"] = conf_value_loss_sp
+                metric["value_loss_conf_against_br_mp2"] = conf_value_loss_mp2
 
-                #value_loss_br, pg_loss_br, entropy_loss_br = total_loss_br[1]
-                metric["value_loss_br"] = all_losses[1][1][0]
-                metric["pg_loss_br"] = all_losses[1][1][1]
-                metric["entropy_loss_br"] = all_losses[1][1][2]
+                metric["pg_loss_conf_against_ego"] = conf_pg_loss_xp
+                metric["pg_loss_conf_against_br_sp"] = conf_pg_loss_sp
+                metric["pg_loss_conf_against_br_mp2"] = conf_pg_loss_mp2
 
-                new_runner_state = (
-                    train_state_conf, train_state_br, env_state_ego, env_state_br, 
-                    last_obs_ego, last_obs_br, last_dones_ego, last_dones_br, 
-                    conf_hstate_ego, ego_hstate, conf_hstate_br, br_hstate,  
-                    rng_ego, rng_br, update_steps + 1
+                metric["entropy_conf_against_ego"] = conf_entropy_xp
+                metric["entropy_conf_against_br_sp"] = conf_entropy_sp
+                metric["entropy_conf_against_br_mp2"] = conf_entropy_mp2
+                
+                metric["average_rewards_ego"] = jnp.mean(traj_batch_sp_conf.reward)
+                metric["average_rewards_br_sp"] = jnp.mean(traj_batch_sp_br.reward)
+                metric["average_rewards_br_mp2"] = jnp.mean(traj_batch_mp2_br.reward)
+
+                metric["value_loss_br_sp"] = br_value_loss_sp
+                metric["value_loss_br_mp2"] = br_value_loss_mp2
+
+                metric["pg_loss_br_sp"] = br_pg_loss_sp
+                metric["pg_loss_br_mp2"] = br_pg_loss_mp2
+
+                metric["entropy_loss_br_sp"] = br_entropy_sp
+                metric["entropy_loss_br_mp2"] = br_entropy_mp2
+
+                new_update_runner_state = (
+                    train_state_conf, train_state_br, 
+                    env_state_xp, env_state_sp, env_state_mp1, env_state_mp2, 
+                    last_obs_xp, last_obs_sp, last_obs_mp1, last_obs_mp2, 
+                    last_dones_xp, last_dones_sp, last_dones_mp1, last_dones_mp2, 
+                    conf_hstate_xp, ego_hstate_xp, 
+                    conf_hstate_sp, br_hstate_sp, 
+                    conf_hstate_mp1, ego_hstate_mp1, br_hstate_mp1, 
+                    conf_hstate_mp2, br_hstate_mp2, 
+                    rng_update, update_steps + 1
                 )
-                return (new_runner_state, metric)
+                return (new_update_runner_state, metric)
 
             # --------------------------
             # PPO Update and Checkpoint saving
@@ -712,29 +833,16 @@ def train_regret_maximizing_partners(config, env,
                     params_pytree)
         
             def _update_step_with_ckpt(state_with_ckpt, unused):
-                ((
-                    train_state_conf, train_state_br, env_state_ego, env_state_br, 
-                    last_obs_ego, last_obs_br , last_dones_ego, last_dones_br, 
-                    conf_hstate_ego, ego_hstate, conf_hstate_br, br_hstate, 
-                    rng_ego, rng_br, update_steps
-                ), checkpoint_array_conf, checkpoint_array_br, ckpt_idx, 
+                (update_runner_state, checkpoint_array_conf, checkpoint_array_br, ckpt_idx, 
                     eval_info_br, eval_info_ego) = state_with_ckpt
 
                 # Single PPO update
-                (new_runner_state, metric) = _update_step(
-                    (train_state_conf, train_state_br, env_state_ego, env_state_br, 
-                    last_obs_ego, last_obs_br, last_dones_ego, last_dones_br, 
-                    conf_hstate_ego, ego_hstate, conf_hstate_br, br_hstate, 
-                    rng_ego, rng_br, update_steps),
+                (new_update_runner_state, metric) = _update_step(
+                    update_runner_state,
                     None
                 )
 
-                (
-                    train_state_conf, train_state_br, env_state_ego, env_state_br,
-                    last_obs_ego, last_obs_br, last_dones_ego, last_dones_br, 
-                    conf_hstate_ego, ego_hstate, conf_hstate_br, br_hstate, 
-                    rng_ego, rng_br, update_steps
-                ) = new_runner_state
+                rng, update_steps = new_update_runner_state[-2], new_update_runner_state[-1]
 
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
@@ -770,32 +878,47 @@ def train_regret_maximizing_partners(config, env,
 
                 def skip_ckpt(args):
                     return args
-
-                (checkpoint_array_and_infos, rng_ego, ckpt_idx) = jax.lax.cond(
+                rng, store_and_eval_rng = jax.random.split(rng, 2)
+                (checkpoint_array_and_infos, store_and_eval_rng, ckpt_idx) = jax.lax.cond(
                     to_store, 
                     store_and_eval_ckpt, 
                     skip_ckpt, 
-                    ((checkpoint_array_conf, checkpoint_array_br, eval_info_br, eval_info_ego), rng_ego, ckpt_idx)
+                    ((checkpoint_array_conf, checkpoint_array_br, eval_info_br, eval_info_ego), store_and_eval_rng, ckpt_idx)
                 )
                 checkpoint_array_conf, checkpoint_array_br, ep_info_br, ep_info_ego = checkpoint_array_and_infos
                 
                 metric["eval_ep_last_info_br"] = ep_info_br
                 metric["eval_ep_last_info_ego"] = ep_info_ego
 
-                return ((train_state_conf, train_state_br, env_state_ego, env_state_br, 
-                         last_obs_ego, last_obs_br, last_dones_ego, last_dones_br, 
-                         conf_hstate_ego, ego_hstate, conf_hstate_br, br_hstate, 
-                         rng_ego, rng_br, update_steps),
-                         checkpoint_array_conf, checkpoint_array_br, ckpt_idx, 
-                         ep_info_br, ep_info_ego), metric
+                return (new_update_runner_state,
+                        checkpoint_array_conf, checkpoint_array_br, ckpt_idx, 
+                        ep_info_br, ep_info_ego), metric
+
+            # --------------------------
+            # Init all variables for train loop
+            # --------------------------
+            rng, reset_rng_xp, reset_rng_sp, reset_rng_mp1, reset_rng_mp2 = jax.random.split(rng, 5)
+            reset_rngs_xp = jax.random.split(reset_rng_xp, config["NUM_ENVS"])
+            reset_rngs_sp = jax.random.split(reset_rng_sp, config["NUM_ENVS"])
+            reset_rngs_mp1 = jax.random.split(reset_rng_mp1, config["NUM_ENVS"])
+            reset_rngs_mp2 = jax.random.split(reset_rng_mp2, config["NUM_ENVS"])
+
+            obsv_xp, env_state_xp = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_xp)
+            obsv_sp, env_state_sp = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_sp)
+            obsv_mp1, env_state_mp1 = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_mp1)
+            obsv_mp2, env_state_mp2 = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_mp2)
+
+            # Initialize hidden states
+            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_conf_hstate = confederate_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
 
             # init checkpoint array
             checkpoint_array_conf = init_ckpt_array(train_state_conf.params)
             checkpoint_array_br = init_ckpt_array(train_state_br.params)
             ckpt_idx = 0
 
-            # initial state for scan over _update_step_with_ckpt
-            update_steps = 0
+            # initial ep_infos for scan over _update_step_with_ckpt
             rng, rng_eval_ego, rng_eval_br = jax.random.split(rng, 3)
             ep_infos_ego = run_episodes(rng_eval_ego, env, 
                 agent_0_param=train_state_conf.params, agent_0_policy=confederate_policy,
@@ -808,16 +931,27 @@ def train_regret_maximizing_partners(config, env,
                 max_episode_steps=config["ROLLOUT_LENGTH"], num_eps=config["NUM_EVAL_EPISODES"])
 
             # Initialize done flags
-            init_dones_ego = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
-            init_dones_br = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+            init_dones_xp = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+            init_dones_sp = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+            init_dones_mp1 = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+            init_dones_mp2 = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+            
+            # Initialize update runner state
+            rng, rng_update = jax.random.split(rng, 2)
+            update_steps = 0
 
-            rng, rng_ego, rng_br = jax.random.split(rng, 3)
             update_runner_state = (
-                train_state_conf, train_state_br, env_state_ego, env_state_br,
-                obsv_ego, obsv_br, init_dones_ego, init_dones_br,
-                init_conf_hstate_ego, init_ego_hstate, init_conf_hstate_br, init_br_hstate,
-                rng_ego, rng_br, update_steps
+                train_state_conf, train_state_br, 
+                env_state_xp, env_state_sp, env_state_mp1, env_state_mp2,
+                obsv_xp, obsv_sp, obsv_mp1, obsv_mp2, 
+                init_dones_xp, init_dones_sp, init_dones_mp1, init_dones_mp2,
+                init_conf_hstate, init_ego_hstate, # hstates for conf-ego XP interaction
+                init_conf_hstate, init_br_hstate, # hstates for conf-br SP interaction
+                init_conf_hstate, init_ego_hstate, init_br_hstate, # hstates for conf-ego-br MP1 interaction
+                init_conf_hstate, init_br_hstate, # hstates for conf-br MP2 interaction
+                rng_update, update_steps
             )
+
             state_with_ckpt = (
                 update_runner_state, checkpoint_array_conf, checkpoint_array_br, 
                 ckpt_idx, ep_infos_br, ep_infos_ego
@@ -856,7 +990,6 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     '''
     Train the ego agent against the regret-maximizing partners. 
     Note: Currently training fcp agent against **all** adversarial partner checkpoints
-    TODO: Limit training against the last adversarial checkpoints instead.
     '''
     prev_ego_params, prev_conf_params, prev_br_params, rng = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
@@ -988,7 +1121,7 @@ def run_paired(config, wandb_logger):
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
 
 
-    log.info("Starting open-ended PAIRED training...")
+    log.info("Starting open-ended PAIRED (CoMeDi) training...")
     start_time = time.time()
 
     DEBUG = False
@@ -1001,7 +1134,7 @@ def run_paired(config, wandb_logger):
         outs = train_fn(rngs)
     
     end_time = time.time()
-    log.info(f"Open-ended PAIRED training completed in {end_time - start_time} seconds.")
+    log.info(f"Open-ended PAIRED (CoMeDi) training completed in {end_time - start_time} seconds.")
 
     # Log metrics
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
@@ -1032,7 +1165,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     num_partner_updates = teammate_metrics["returned_episode_returns"].shape[3]
 
     ### Process/extract PAIRED-specific losses    
-
+    # TODO: add mp2 losses for br and conf
     # Conf vs ego, conf vs br, br losses
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates, num_eval_episodes, num_agents_per_env)
     teammate_mean_dims = (0, 2, 4, 5)
@@ -1041,19 +1174,20 @@ def log_metrics(config, logger, outs, metric_names: tuple):
 
     #  shape (num_open_ended_iters, num_partner_seeds, num_partner_updates, update_epochs, num_minibatches)
     avg_value_losses_teammate_against_ego = np.asarray(teammate_metrics["value_loss_conf_against_ego"]).mean(axis=teammate_mean_dims)
-    avg_value_losses_teammate_against_br = np.asarray(teammate_metrics["value_loss_conf_against_br"]).mean(axis=teammate_mean_dims) 
-    avg_value_losses_br = np.asarray(teammate_metrics["value_loss_br"]).mean(axis=teammate_mean_dims)
+    avg_value_losses_teammate_against_br = np.asarray(teammate_metrics["value_loss_conf_against_br_sp"]).mean(axis=teammate_mean_dims) 
+    avg_value_losses_br = np.asarray(teammate_metrics["value_loss_br_sp"]).mean(axis=teammate_mean_dims)
     
+    # conf losses 
     avg_actor_losses_teammate_against_ego = np.asarray(teammate_metrics["pg_loss_conf_against_ego"]).mean(axis=teammate_mean_dims) 
-    avg_actor_losses_teammate_against_br = np.asarray(teammate_metrics["pg_loss_conf_against_br"]).mean(axis=teammate_mean_dims)
-    avg_actor_losses_br = np.asarray(teammate_metrics["pg_loss_br"]).mean(axis=teammate_mean_dims)
+    avg_actor_losses_teammate_against_br = np.asarray(teammate_metrics["pg_loss_conf_against_br_sp"]).mean(axis=teammate_mean_dims)
+    avg_actor_losses_br = np.asarray(teammate_metrics["pg_loss_br_sp"]).mean(axis=teammate_mean_dims)
     
     avg_entropy_losses_teammate_against_ego = np.asarray(teammate_metrics["entropy_conf_against_ego"]).mean(axis=teammate_mean_dims)
-    avg_entropy_losses_teammate_against_br = np.asarray(teammate_metrics["entropy_conf_against_br"]).mean(axis=teammate_mean_dims)
-    avg_entropy_losses_br = np.asarray(teammate_metrics["entropy_loss_br"]).mean(axis=teammate_mean_dims)
+    avg_entropy_losses_teammate_against_br = np.asarray(teammate_metrics["entropy_conf_against_br_sp"]).mean(axis=teammate_mean_dims)
+    avg_entropy_losses_br = np.asarray(teammate_metrics["entropy_loss_br_sp"]).mean(axis=teammate_mean_dims)
     
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates)
-    avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br"]).mean(axis=(0, 2))
+    avg_rewards_teammate_against_br = np.asarray(teammate_metrics["average_rewards_br_sp"]).mean(axis=(0, 2))
     avg_rewards_teammate_against_ego = np.asarray(teammate_metrics["average_rewards_ego"]).mean(axis=(0, 2))
     
     # Process ego-specific metrics
@@ -1084,25 +1218,25 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             # Log paired-specific metrics
             # Eval metrics
             logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
-            logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
+            logger.log_item("Eval/ConfReturn-Against-BR-SP", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/EgoRegret", avg_teammate_sp_returns[iter_idx][step] - avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfActorLoss-Against-Ego", avg_actor_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfEntropy-Against-Ego", avg_entropy_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             
-            logger.log_item("Losses/ConfValLoss-Against-BR", avg_value_losses_teammate_against_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/ConfActorLoss-Against-BR", avg_actor_losses_teammate_against_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/ConfEntropy-Against-BR", avg_entropy_losses_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/ConfValLoss-Against-BR-SP", avg_value_losses_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/ConfActorLoss-Against-BR-SP", avg_actor_losses_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/ConfEntropy-Against-BR-SP", avg_entropy_losses_teammate_against_br[iter_idx][step], train_step=global_step)
             
             # Best response losses
-            logger.log_item("Losses/BRValLoss", avg_value_losses_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/BRActorLoss", avg_actor_losses_br[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/BREntropyLoss", avg_entropy_losses_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/BRValLoss-SP", avg_value_losses_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/BRActorLoss-SP", avg_actor_losses_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/BREntropyLoss-SP", avg_entropy_losses_br[iter_idx][step], train_step=global_step)
         
             # Rewards
             logger.log_item("Losses/AvgConfEgoRewards", avg_rewards_teammate_against_ego[iter_idx][step], train_step=global_step)
-            logger.log_item("Losses/AvgConfBRRewards", avg_rewards_teammate_against_br[iter_idx][step], train_step=global_step)
+            logger.log_item("Losses/AvgConfBRRewards-SP", avg_rewards_teammate_against_br[iter_idx][step], train_step=global_step)
 
         ### Ego metrics processing
         for step in range(num_ego_updates):
