@@ -445,6 +445,7 @@ def train_lagrange_partners(config, env,
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
                         ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
 
+                        # Compute regret-related terms
                         regret_ego_data = value_br_conf_ego_data - (
                             value_ego_conf_ego_data + advantages_ego
                         )
@@ -452,79 +453,45 @@ def train_lagrange_partners(config, env,
                             value_br_conf_br_data + advantages_br
                         ) - value_ego_conf_br_data
 
-                        conf_br_return_to_go_br_data = value_br_conf_br_data + advantages_br
-
-                        # Policy gradient loss for interaction with best response agent
-
-                        conf_br_return_norm = (conf_br_return_to_go_br_data - conf_br_return_to_go_br_data.mean()) / (conf_br_return_to_go_br_data.std() + 1e-8)
-                        pg_loss_1_br = ratio_br * conf_br_return_norm
-                        pg_loss_2_br = jnp.clip(
-                            ratio_br, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * conf_br_return_norm
-                        pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
-
-                        norm_value_br_conf_ego_data = (value_br_conf_ego_data - value_br_conf_ego_data.mean()) / (value_br_conf_ego_data.std() + 1e-8)
-                        pg_loss_1_ego_opt = ratio_ego * norm_value_br_conf_ego_data
-                        pg_loss_2_ego_opt = jnp.clip(
-                            ratio_ego, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * norm_value_br_conf_ego_data
-                        pg_loss_ego_opt = -jnp.mean(jnp.minimum(pg_loss_1_ego_opt, pg_loss_2_ego_opt))
-
                         upper_lagrange_dual_diff_ego = config["UPPER_REGRET_THRESHOLD"] - regret_ego_data
                         lower_lagrange_dual_diff_ego = regret_ego_data - config["LOWER_REGRET_THRESHOLD"]
                         upper_lagrange_dual_diff_br = config["UPPER_REGRET_THRESHOLD"] - regret_br_data
                         lower_lagrange_dual_diff_br = regret_br_data - config["LOWER_REGRET_THRESHOLD"]
 
-                        lagrange_dual_norm_br_upper = (upper_lagrange_dual_diff_br - upper_lagrange_dual_diff_br.mean()) / (upper_lagrange_dual_diff_br.std() + 1e-8)
-                        lagrange_dual_norm_br_lower = (lower_lagrange_dual_diff_br - lower_lagrange_dual_diff_br.mean()) / (lower_lagrange_dual_diff_br.std() + 1e-8)
-                        lagrange_dual_norm_ego_upper = (upper_lagrange_dual_diff_ego - upper_lagrange_dual_diff_ego.mean()) / (upper_lagrange_dual_diff_ego.std() + 1e-8)
-                        lagrange_dual_norm_ego_lower = (lower_lagrange_dual_diff_ego - lower_lagrange_dual_diff_ego.mean()) / (lower_lagrange_dual_diff_ego.std() + 1e-8)
+                        # Compute predicted SP returns based on conf-BR data
+                        conf_br_return_to_go_br_data = value_br_conf_br_data + advantages_br
 
-                        pg_loss_1_ego_regret_upper = ratio_ego * lagrange_dual_norm_ego_upper
-                        pg_loss_2_ego_regret_upper = jnp.clip(
-                            ratio_ego, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * lagrange_dual_norm_ego_upper
-                        pg_loss_ego_regret_upper = -jnp.mean(jnp.minimum(pg_loss_1_ego_regret_upper, pg_loss_2_ego_regret_upper))
+                        total_br_objective = conf_br_return_to_go_br_data + upper_lm * upper_lagrange_dual_diff_br + lower_lm * lower_lagrange_dual_diff_br
+                        total_ego_objective = value_br_conf_ego_data + upper_lm * upper_lagrange_dual_diff_ego + lower_lm * lower_lagrange_dual_diff_ego
 
-                        pg_loss_1_ego_regret_lower = ratio_ego * lagrange_dual_norm_ego_lower
-                        pg_loss_2_ego_regret_lower = jnp.clip(
-                            ratio_ego, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * lagrange_dual_norm_ego_lower
-                        pg_loss_ego_regret_lower = -jnp.mean(jnp.minimum(pg_loss_1_ego_regret_lower, pg_loss_2_ego_regret_lower))
+                        # Policy gradient loss for interaction with best response agent
+                        normalized_total_br_objective = (total_br_objective - total_br_objective.mean()) / (total_br_objective.std() + 1e-8)
+                        normalized_total_ego_objective = (total_ego_objective - total_ego_objective.mean()) / (total_ego_objective.std() + 1e-8)
 
-                        pg_loss_1_br_regret_upper = ratio_br * lagrange_dual_norm_br_upper
-                        pg_loss_2_br_regret_upper = jnp.clip(
+                        pg_loss_1_br = ratio_br * normalized_total_br_objective
+                        pg_loss_2_br = jnp.clip(
                             ratio_br, 
                             1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * lagrange_dual_norm_br_upper
-                        pg_loss_br_regret_upper = -jnp.mean(jnp.minimum(pg_loss_1_br_regret_upper, pg_loss_2_br_regret_upper))
+                            1.0 + config["CLIP_EPS"]) * normalized_total_br_objective
+                        pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
 
-                        pg_loss_1_br_regret_lower = ratio_br * lagrange_dual_norm_br_lower
-                        pg_loss_2_br_regret_lower = jnp.clip(
-                            ratio_br, 
+                        pg_loss_1_ego_opt = ratio_ego * normalized_total_ego_objective
+                        pg_loss_2_ego_opt = jnp.clip(
+                            ratio_ego, 
                             1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * lagrange_dual_norm_br_lower
-                        pg_loss_br_regret_lower = -jnp.mean(jnp.minimum(pg_loss_1_br_regret_lower, pg_loss_2_br_regret_lower))
-
-                        # entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
-                        # entropy_weight = jnp.maximum(entropy_weight, 1)
+                            1.0 + config["CLIP_EPS"]) * normalized_total_ego_objective
+                        pg_loss_ego_opt = -jnp.mean(jnp.minimum(pg_loss_1_ego_opt, pg_loss_2_ego_opt))
 
                         # Entropy for interaction with ego agent and best response agents resp.
                         entropy_ego = jnp.mean(pi_ego.entropy())
                         entropy_br = jnp.mean(pi_br.entropy())
                         
                         total_weight = 1 + upper_lm + lower_lm
-                        pg_loss_ego_regret = upper_lm * pg_loss_ego_regret_upper + lower_lm * pg_loss_ego_regret_lower
-                        pg_loss_br_regret = upper_lm * pg_loss_br_regret_upper + lower_lm * pg_loss_br_regret_lower
                         
-                        loss_ego =  pg_loss_ego_opt + pg_loss_ego_regret + config["VF_COEF"] * value_loss_ego -  total_weight * config["ENT_COEF"] * entropy_ego
-                        loss_br = pg_loss_br + pg_loss_br_regret + config["VF_COEF"] * value_loss_br - total_weight * config["ENT_COEF"] * entropy_br
+                        loss_ego =  pg_loss_ego_opt  + config["VF_COEF"] * value_loss_ego -  total_weight * config["ENT_COEF"] * entropy_ego
+                        loss_br = pg_loss_br + config["VF_COEF"] * value_loss_br - total_weight * config["ENT_COEF"] * entropy_br
                         total_loss = loss_ego + loss_br
-                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego_regret, pg_loss_br, entropy_ego, entropy_br)
+                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego_opt, pg_loss_br, entropy_ego, entropy_br)
                     
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
