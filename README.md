@@ -27,6 +27,7 @@ During rebuttal phase:
 - In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
 - Open-ended learning implementations
     - Remove conf-br weight argument from paired-style methods
+    - Rename reinit-conf, reinit br/ego arguments
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
     - Consider making ego and br nets the same 

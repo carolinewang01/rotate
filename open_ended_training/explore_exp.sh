@@ -1,13 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-<<<<<<< HEAD
-algo="oe_persistent"
-label="hyperparam:pop"
-=======
-algo="oe_paired_comedi"
-label="method-explore:comedi"
->>>>>>> main
+algo="open_ended_lagrange"
+label="method-explore:gae-obj:normfix"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
@@ -36,13 +31,13 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
-    "overcooked/counter_circuit"
+    # "overcooked/asymm_advantages"
+    # "overcooked/coord_ring"
+    # "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
-    "lbf"
-)j
+    # "lbf"
+)
 
 # Function to log messages
 log() {

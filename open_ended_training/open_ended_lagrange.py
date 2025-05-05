@@ -395,7 +395,6 @@ def train_lagrange_partners(config, env,
                     init_conf_hstate_ego, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
                     init_conf_hstate_br, traj_batch_br, advantages_br, returns_br = minbatch_br
 
-
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
 
@@ -445,24 +444,24 @@ def train_lagrange_partners(config, env,
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
                         ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
 
+                        # Compute return-to-gos
+                        conf_br_return_to_go_br_data = value_br_conf_br_data + advantages_br
+                        conf_ego_return_to_go_ego_data = value_ego_conf_ego_data + advantages_ego
+
                         # Compute regret-related terms
-                        regret_ego_data = value_br_conf_ego_data - (
-                            value_ego_conf_ego_data + advantages_ego
-                        )
-                        regret_br_data = (
-                            value_br_conf_br_data + advantages_br
-                        ) - value_ego_conf_br_data
+                        regret_ego_data = value_br_conf_ego_data - conf_ego_return_to_go_ego_data
+                        regret_br_data = conf_br_return_to_go_br_data - value_ego_conf_br_data
 
                         upper_lagrange_dual_diff_ego = config["UPPER_REGRET_THRESHOLD"] - regret_ego_data
                         lower_lagrange_dual_diff_ego = regret_ego_data - config["LOWER_REGRET_THRESHOLD"]
                         upper_lagrange_dual_diff_br = config["UPPER_REGRET_THRESHOLD"] - regret_br_data
                         lower_lagrange_dual_diff_br = regret_br_data - config["LOWER_REGRET_THRESHOLD"]
 
-                        # Compute predicted SP returns based on conf-BR data
-                        conf_br_return_to_go_br_data = value_br_conf_br_data + advantages_br
+                        # total_br_objective = conf_br_return_to_go_br_data + upper_lm * upper_lagrange_dual_diff_br + lower_lm * lower_lagrange_dual_diff_br
+                        # total_ego_objective = value_br_conf_ego_data + upper_lm * upper_lagrange_dual_diff_ego + lower_lm * lower_lagrange_dual_diff_ego
 
-                        total_br_objective = conf_br_return_to_go_br_data + upper_lm * upper_lagrange_dual_diff_br + lower_lm * lower_lagrange_dual_diff_br
-                        total_ego_objective = value_br_conf_ego_data + upper_lm * upper_lagrange_dual_diff_ego + lower_lm * lower_lagrange_dual_diff_ego
+                        total_br_objective = gae_br + upper_lm * upper_lagrange_dual_diff_br + lower_lm * lower_lagrange_dual_diff_br
+                        total_ego_objective = gae_ego + upper_lm * upper_lagrange_dual_diff_ego + lower_lm * lower_lagrange_dual_diff_ego
 
                         # Policy gradient loss for interaction with best response agent
                         normalized_total_br_objective = (total_br_objective - total_br_objective.mean()) / (total_br_objective.std() + 1e-8)

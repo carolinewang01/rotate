@@ -867,7 +867,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     else:
         conf_params = prev_conf_params
 
-    if config["REINIT_BR_TO_BR"]:
+    if config["REINIT_BR_TO_BR"]: # TODO: rename this!
         init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
         br_params = jax.vmap(br_policy.init_params)(init_rngs)
     elif config["REINIT_BR_TO_EGO"]:

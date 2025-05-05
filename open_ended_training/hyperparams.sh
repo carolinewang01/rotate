@@ -2,6 +2,7 @@
 
 # Algorithm to run
 algo="open_ended_lagrange"
+experiment_name="gae-obj:normfix"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
@@ -10,14 +11,14 @@ log_eval_out=false
 # Define hyperparameters for each task
 # Format: key=task_name, value="[start1,end1] [start2,end2] ..."
 declare -A task_hyperparams
-task_hyperparams["lbf"]="[-0.2,0] [-0.2,-0.1]"
-task_hyperparams["overcooked/cramped_room"]="[-250,-150] [-200,-150]"
-task_hyperparams["overcooked/counter_circuit"]="[-250,-50] [-150,-60]"
-task_hyperparams["overcooked/forced_coord"]="[-25,0] [-10,0]"
+# task_hyperparams["lbf"]="[-0.2,0] [-0.2,-0.1]"
+task_hyperparams["overcooked/cramped_room"]="[-250,-150]" #  [-200,-150]
+# task_hyperparams["overcooked/counter_circuit"]="[-250,-50] [-150,-60]"
+task_hyperparams["overcooked/forced_coord"]="[-25,0]" # [-10,0]
 
 
 # Create log directory if it doesn't exist
-log_dir_base="results/oe_logs/${algo}"
+log_dir_base="results/oe_logs/${algo}/${experiment_name}"
 mkdir -p "${log_dir_base}"
 
 # Get current timestamp for log file
@@ -55,10 +56,7 @@ for task in "${tasks[@]}"; do
             current_lrs=$(echo "$pair" | sed 's/\[//; s/\].*//; s/,.*//')
             current_lre=$(echo "$pair" | sed 's/.*,//; s/\]//')
 
-            # Define label dynamically: hyperparam:task_name:lrs-X:lre-Y
-            # Replace / with _ in task name for label compatibility
-            safe_task_name=$(echo "$task" | tr '/' '_')
-            label="hyperparam:${safe_task_name}:lrs-${current_lrs}:lre-${current_lre}"
+            label="hyperparam:${experiment_name}:lrs-${current_lrs}:lre-${current_lre}"
             task_log_dir="${log_dir_base}/${label}"
             mkdir -p "${task_log_dir}"
             task_log_file="${task_log_dir}/run_${timestamp}.log"
