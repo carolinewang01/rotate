@@ -7,8 +7,8 @@ TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
 NUM_CHECKPOINTS: 5 # per iter of open-ended training
 PARTNER_POP_SIZE: 1 # true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS per iter of open-ended training
-XP_WEIGHT: 1.0 # weight on the conf-ego loss, comedi alpha
-MP_WEIGHT: 0.5 # weight on the conf-br loss, comedi beta
+XP_WEIGHT: 1.0 # weight on the conf-ego loss, comedi alpha > 0
+MP_WEIGHT: 0.5 # weight on the conf-br loss, comedi beta > 0
 REINIT_CONF: true # whether to reinitialize the confederate policy each iteration of open-ended training
 REINIT_BR_TO_BR: true # whether to reinitialize the br policy each iteration of open-ended training
 REINIT_BR_TO_EGO: false # whether to reinitialize the br policy to the ego params each iteration of open-ended training

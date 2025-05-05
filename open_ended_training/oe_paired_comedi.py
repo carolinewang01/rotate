@@ -526,15 +526,15 @@ def train_regret_maximizing_partners(config, env,
                         entropy_sp = jnp.mean(pi_sp.entropy())
                         entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
-                        xp_loss = pg_loss_xp + config["VF_COEF"] * value_loss_xp - config["ENT_COEF"] * entropy_xp
-                        sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
-                        mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
+                        xp_pg_weight = - config["XP_WEIGHT"] # negate to minimize the ego agent's PG objective
+                        sp_pg_weight = 1.0 
+                        mp2_pg_weight = config["MP_WEIGHT"]
 
-                        xp_weight = - config["XP_WEIGHT"] # negate to minimize the ego agent's objective
-                        sp_weight = 1.0 
-                        mp2_weight = config["MP_WEIGHT"]
-                        # note that the reward was already negated in the conf-ego interaction
-                        total_loss = sp_weight * sp_loss + xp_weight * xp_loss + mp2_weight * mp2_loss
+                        xp_loss = xp_pg_weight * pg_loss_xp + config["VF_COEF"] * value_loss_xp - config["ENT_COEF"] * entropy_xp
+                        sp_loss = sp_pg_weight * pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
+                        mp2_loss = mp2_pg_weight * pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
+
+                        total_loss = sp_loss + xp_loss + mp2_loss
                         return total_loss, (value_loss_xp, value_loss_sp, value_loss_mp2, 
                                             pg_loss_xp, pg_loss_sp, pg_loss_mp2, 
                                             entropy_xp, entropy_sp, entropy_mp2)
