@@ -37,7 +37,7 @@ tasks=(
     "overcooked/cramped_room"
     "overcooked/forced_coord"
     "lbf"
-)
+)j
 
 # Function to log messages
 log() {
