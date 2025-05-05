@@ -1,0 +1,11 @@
+defaults:
+  - oe_paired_comedi/_base_
+  - _self_ # values from this file override the values from the base file
+
+TIMESTEPS_PER_ITER_PARTNER: 1.5e6
+TIMESTEPS_PER_ITER_EGO: 1e6
+NUM_OPEN_ENDED_ITERS: 30
+LR: .0001
+NUM_MINIBATCHES: 8
+CLIP_EPS: 0.3
+ENT_COEF: 0.01

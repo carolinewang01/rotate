@@ -1,8 +1,13 @@
 #!/bin/bash
 
 # Algorithm to run
+<<<<<<< HEAD
 algo="oe_persistent"
 label="hyperparam:pop"
+=======
+algo="oe_paired_comedi"
+label="method-explore:comedi"
+>>>>>>> main
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
