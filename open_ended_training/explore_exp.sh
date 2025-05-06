@@ -1,12 +1,14 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_lagrange"
-label="method-explore:gae-obj:normfix"
+algo="oe_paired_resets"
+label="method-explore:symm_resets:targ"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
+regret_sp_weight=1.0
+conf_obj_type="per_state_regret_target"
 
 # DEBUG COMMAND
 # CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=open_ended_paired/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=d
@@ -31,12 +33,12 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    # "overcooked/asymm_advantages"
-    # "overcooked/coord_ring"
-    # "overcooked/counter_circuit"
+    "lbf"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
-    # "lbf"
+    "overcooked/asymm_advantages"
+    "overcooked/coord_ring"
+    "overcooked/counter_circuit"
 )
 
 # Function to log messages
@@ -57,6 +59,8 @@ for task in "${tasks[@]}"; do
     if python open_ended_training/run.py algorithm="${algo}/${task}" \
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
+        algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
+        algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

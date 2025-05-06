@@ -34,6 +34,17 @@ class ResetTransition(NamedTuple):
     conf_hstate: jnp.ndarray
     partner_hstate: jnp.ndarray
 
+class ConfTransition(NamedTuple):
+    done: jnp.ndarray
+    action: jnp.ndarray
+    value: jnp.ndarray
+    other_value: jnp.ndarray
+    reward: jnp.ndarray
+    log_prob: jnp.ndarray
+    obs: jnp.ndarray
+    info: jnp.ndarray
+    avail_actions: jnp.ndarray
+
 def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
     """Create minibatches for PPO updates, where each leaf has shape 
         (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
@@ -132,7 +143,7 @@ def train_regret_maximizing_partners(config, env,
 
                 def gather_sampled(data_pytree, flat_indices, first_nonbatch_dim: int):
                     '''Will treat all dimensions up to the first_nonbatch_dim as batch dimensions. '''
-                    batch_size = config["ROLLOUT_LENGTH"] * config["NUM_ENVS"] # TODO: batch size should be an input to this function
+                    batch_size = config["ROLLOUT_LENGTH"] * config["NUM_ENVS"]
                     flat_data = jax.tree.map(lambda x: x.reshape(batch_size, *x.shape[first_nonbatch_dim:]), data_pytree)
                     sampled_data = jax.tree.map(lambda x: x[flat_indices], flat_data) # Shape (N, ...)
                     return sampled_data
@@ -186,7 +197,7 @@ def train_regret_maximizing_partners(config, env,
             def _env_step_conf_ego(runner_state, unused):
                 """
                 agent_0 = confederate, agent_1 = ego
-                Returns updated runner_state, a Transition for the confederate, and a ResetTransition.
+                Returns updated runner_state, a ConfTransition for the confederate, and a ResetTransition.
                 """
                 train_state_conf, env_state, last_obs, last_dones, last_conf_h, last_ego_h, reset_traj_batch, rng = runner_state
                 rng, act_rng, partner_rng, step_rng = jax.random.split(rng, 4)
@@ -206,7 +217,7 @@ def train_regret_maximizing_partners(config, env,
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
 
                 # Agent_0 (confederate) action using policy interface
-                act_0, (val_0, _), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
+                act_0, (val_ego, val_br), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
                     params=train_state_conf.params,
                     obs=obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
                     done=dones_0.reshape(1, config["NUM_CONTROLLED_ACTORS"]),
@@ -218,7 +229,8 @@ def train_regret_maximizing_partners(config, env,
 
                 act_0 = act_0.squeeze()
                 logp_0 = logp_0.squeeze()
-                val_0 = val_0.squeeze()
+                val_ego = val_ego.squeeze()
+                val_br = val_br.squeeze()
 
                 # Agent_1 (ego) action using policy interface
                 act_1, _, _, new_ego_h = ego_policy.get_action_value_policy(
@@ -245,10 +257,11 @@ def train_regret_maximizing_partners(config, env,
                 info_0 = jax.tree.map(lambda x: x[:, 0], info)
 
                 # Store agent_0 data in transition
-                transition = Transition(
+                transition = ConfTransition(
                     done=done["agent_0"],
                     action=act_0,
-                    value=val_0,
+                    value=val_ego,
+                    other_value=val_br,
                     reward=reward["agent_1"],
                     log_prob=logp_0,
                     obs=obs_0,
@@ -272,8 +285,8 @@ def train_regret_maximizing_partners(config, env,
             def _env_step_conf_br(runner_state, unused):
                 """
                 agent_0 = confederate, agent_1 = best response
-                Returns updated runner_state, Transitions for the confederate and best response, 
-                and a ResetTransition.
+                Returns updated runner_state, ConfTransition for the confederate, 
+                Transition for the best response, and a ResetTransition.
                 """
                 train_state_conf, train_state_br, env_state, last_obs, last_dones, \
                     last_conf_h, last_br_h, reset_traj_batch, rng = runner_state
@@ -294,7 +307,7 @@ def train_regret_maximizing_partners(config, env,
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
 
                 # Agent_0 (confederate) action
-                act_0, (_, val_0), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
+                act_0, (val_ego, val_br), pi_0, new_conf_h = confederate_policy.get_action_value_policy(
                     params=train_state_conf.params,
                     obs=obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
                     done=dones_0.reshape(1, config["NUM_CONTROLLED_ACTORS"]),
@@ -306,7 +319,8 @@ def train_regret_maximizing_partners(config, env,
 
                 act_0 = act_0.squeeze()
                 logp_0 = logp_0.squeeze()
-                val_0 = val_0.squeeze()
+                val_ego = val_ego.squeeze()
+                val_br = val_br.squeeze()
 
                 # Agent 1 (best response) action
                 act_1, val_1, pi_1, new_br_h = br_policy.get_action_value_policy(
@@ -337,10 +351,11 @@ def train_regret_maximizing_partners(config, env,
                 info_1 = jax.tree.map(lambda x: x[:, 1], info)
 
                 # Store agent_0 (confederate) data in transition
-                transition_0 = Transition(
+                transition_0 = ConfTransition(
                     done=done["agent_0"],
                     action=act_0,
-                    value=val_0,
+                    value=val_br,
+                    other_value=val_ego,
                     reward=reward["agent_0"],
                     log_prob=logp_0,
                     obs=obs_0,
@@ -467,6 +482,14 @@ def train_regret_maximizing_partners(config, env,
                             total_xp_objective = regret_xp_data
                             total_sp_objective = regret_sp_data
 
+                        elif config["CONF_OBJ_TYPE"] == "per_state_regret_target":
+                            # use target returns and values to compute the objectives
+                            regret_xp_data = config["REGRET_SP_WEIGHT"] * traj_batch_xp.other_value - target_v_xp
+                            regret_sp_data = config["REGRET_SP_WEIGHT"] * target_v_sp - traj_batch_sp.other_value
+
+                            total_xp_objective = regret_xp_data
+                            total_sp_objective = regret_sp_data
+
                         elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
                             total_xp_objective = -gae_xp
                             total_sp_objective = gae_sp
@@ -509,12 +532,8 @@ def train_regret_maximizing_partners(config, env,
 
                         log_prob_sp = pi_sp.log_prob(traj_batch_sp.action)
 
-                        # Value loss
                         value_loss_sp = _compute_ppo_value_loss(value_sp, traj_batch_sp, target_v_sp)
-
                         pg_loss_sp = _compute_ppo_pg_loss(gae_sp, log_prob_sp, traj_batch_sp)
-
-                        # Entropy
                         entropy_sp = jnp.mean(pi_sp.entropy())
 
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
