@@ -11,8 +11,7 @@ regret_sp_weight=1.0
 conf_obj_type="per_state_regret_target"
 
 # DEBUG COMMAND
-# CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=open_ended_paired/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=d
-# ebug logger.mode=offline algorithm.NUM_SEEDS=1
+# CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=oe_paired_resets/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=debug logger.mode=offline algorithm.NUM_SEEDS=1
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}
