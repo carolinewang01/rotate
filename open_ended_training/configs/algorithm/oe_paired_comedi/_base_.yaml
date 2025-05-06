@@ -2,7 +2,7 @@
 # ^ tells hydra to place these value directly under algorithm key
 
 ALG: oe_paired_comedi
-TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
+TIMESTEPS_PER_ITER_PARTNER: 2.0e6 # per iter of open-ended training, divided between 4 types of rollouts and all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
 NUM_CHECKPOINTS: 5 # per iter of open-ended training

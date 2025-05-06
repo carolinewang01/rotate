@@ -92,9 +92,8 @@ def train_regret_maximizing_partners(config, env,
         config["NUM_CONTROLLED_ACTORS"] = config["NUM_ENVS"]
         config["NUM_UNCONTROLLED_AGENTS"] = config["NUM_ENVS"]
 
-        # TODO: enable using a different number of rollouts for each of the 4 types of interactions.
-        # Dividing by 3 for now for simplicity. 
-        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 3 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
+        # Divide by 4 because there are 4 types of rollouts 
+        config["NUM_UPDATES"] = config["TIMESTEPS_PER_ITER_PARTNER"] // (config["ROLLOUT_LENGTH"] * 4 * config["NUM_ENVS"] * config["PARTNER_POP_SIZE"])
         config["MINIBATCH_SIZE"] = config["ROLLOUT_LENGTH"] * config["NUM_CONTROLLED_ACTORS"]
 
         assert config["MINIBATCH_SIZE"] % config["NUM_MINIBATCHES"] == 0, "MINIBATCH_SIZE must be divisible by NUM_MINIBATCHES"
