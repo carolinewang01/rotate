@@ -34,10 +34,10 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 tasks=(
     "lbf"
     "overcooked/cramped_room"
-    "overcooked/forced_coord"
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
     "overcooked/counter_circuit"
+    # "overcooked/forced_coord"
+    # "overcooked/asymm_advantages"
+    # "overcooked/coord_ring"
 )
 
 # Function to log messages
