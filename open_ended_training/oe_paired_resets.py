@@ -757,7 +757,6 @@ def train_regret_maximizing_partners(config, env,
                     advantages, targets = _calculate_gae(traj_batch, last_val)
                     return advantages, targets
                 
-                # TODO: double check the indices for value head!
                 # 5a) Compute conf advantages for XP (conf-ego) interaction
                 advantages_xp_conf, targets_xp_conf = _compute_advantages_and_targets(
                     config["NUM_CONTROLLED_ACTORS"],
@@ -804,7 +803,7 @@ def train_regret_maximizing_partners(config, env,
                     targets_sp_br, targets_sxp_br,
                 )
                 rng_update, sub_rng = jax.random.split(rng_update, 2)
-                # TODO: update PPO update_state unpacking
+
                 update_state = (
                     train_state_conf, train_state_br, 
                     conf_update_data, br_update_data,
