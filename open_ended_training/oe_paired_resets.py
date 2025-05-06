@@ -506,17 +506,17 @@ def train_regret_maximizing_partners(config, env,
                             sxp_return_to_go_sxp_data = value_sp_on_sxp_data + gae_sxp
                             # regret as the total objective
                             total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
-                            total_sp_objective = config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
+                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
                             total_xsp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xsp_data - xsp_return_to_go_xsp_data
-                            total_sxp_objective = config["REGRET_SP_WEIGHT"] * sxp_return_to_go_sxp_data - value_xp_on_sxp_data
+                            total_sxp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sxp_return_to_go_sxp_data - value_xp_on_sxp_data
 
                         # optimize per-state regret for all interaction types   
                         elif config["CONF_OBJ_TYPE"] == "per_state_regret_target":
                             # use target returns and values to compute the regret objective
                             total_xp_objective = config["REGRET_SP_WEIGHT"] * traj_batch_xp.other_value - target_v_xp
-                            total_sp_objective = config["REGRET_SP_WEIGHT"] * target_v_sp - traj_batch_sp.other_value
+                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * target_v_sp - traj_batch_sp.other_value
                             total_xsp_objective = config["REGRET_SP_WEIGHT"] * traj_batch_xsp.other_value - target_v_xsp
-                            total_sxp_objective = config["REGRET_SP_WEIGHT"] * target_v_sxp - traj_batch_sxp.other_value
+                            total_sxp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * target_v_sxp - traj_batch_sxp.other_value
                         
                         # optimize per-state regret for both types of ego interactions, return for both types of br interactions
                         elif config["CONF_OBJ_TYPE"] == "sreg-xp_ret-sp_sreg-xsp_ret-sxp":
@@ -524,25 +524,25 @@ def train_regret_maximizing_partners(config, env,
                             xsp_return_to_go_xsp_data = value_xp_on_xsp_data + gae_xsp
 
                             total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
-                            total_sp_objective = gae_sp
+                            total_sp_objective = config["SP_WEIGHT"] * gae_sp
                             total_xsp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xsp_data - xsp_return_to_go_xsp_data
-                            total_sxp_objective = gae_sxp
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize per-state regret on ego rollouts only, return for both types of br interactions
                         elif config["CONF_OBJ_TYPE"] == "sreg-xp_ret-sp_ret-sxp":
                             xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
 
                             total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
-                            total_sp_objective = gae_sp
+                            total_sp_objective = config["SP_WEIGHT"] * gae_sp
                             total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
-                            total_sxp_objective = gae_sxp
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize trajectory-level regret for all interaction types
                         elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
                             total_xp_objective = -gae_xp
-                            total_sp_objective = gae_sp
+                            total_sp_objective = config["SP_WEIGHT"] * gae_sp
                             total_xsp_objective = -gae_xsp
-                            total_sxp_objective = gae_sxp
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         pg_loss_xp = _compute_ppo_pg_loss(total_xp_objective, log_prob_xp, traj_batch_xp)
                         pg_loss_sp = _compute_ppo_pg_loss(total_sp_objective, log_prob_sp, traj_batch_sp)
@@ -559,7 +559,7 @@ def train_regret_maximizing_partners(config, env,
                         xsp_loss = pg_loss_xsp + config["VF_COEF"] * value_loss_xsp - config["ENT_COEF"] * entropy_xsp
                         sxp_loss = pg_loss_sxp + config["VF_COEF"] * value_loss_sxp - config["ENT_COEF"] * entropy_sxp
 
-                        total_loss = config["CONF_BR_WEIGHT"] * sp_loss + xp_loss + xsp_loss + sxp_loss
+                        total_loss = sp_loss + xp_loss + xsp_loss + sxp_loss
 
                         return total_loss, ((value_loss_xp, pg_loss_xp, entropy_xp),
                                              (value_loss_sp, pg_loss_sp, entropy_sp),

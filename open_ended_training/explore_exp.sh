@@ -2,13 +2,13 @@
 
 # Algorithm to run
 algo="oe_paired_resets"
-label="method-explore:symm_resets:targ"
+label="method-explore:ego-reg-conf-ret:symm_resets"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
 regret_sp_weight=1.0
-conf_obj_type="per_state_regret_target"
+conf_obj_type="sreg-xp_ret-sp_sreg-xsp_ret-sxp" # sreg-xp_ret-sp_ret-sxp
 
 # DEBUG COMMAND
 # CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=oe_paired_resets/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=debug logger.mode=offline algorithm.NUM_SEEDS=1
