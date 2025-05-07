@@ -11,6 +11,7 @@ REINIT_BR_TO_BR: true # whether to reinitialize the br policy each iteration of 
 REINIT_BR_TO_EGO: false # whether to reinitialize the br policy to the ego params each iteration of open-ended training
 RESET_CONF_BR_TO_EGO_STATES: false # whether to initialize conf-br data collection from conf-ego states
 CONF_OBJ_TYPE: per_state_regret
+EGO_TEAMMATE: all # choices: [final, all] # whether to use the final conf params as the teammate for the ego agent, or all ckpts
 # Weights on SP loss
 SP_WEIGHT: 1.0 # weight on conf-br (SP) loss
 REGRET_SP_WEIGHT: 1.0 # weight on the SP term in the perstep regret loss

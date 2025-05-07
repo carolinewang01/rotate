@@ -891,16 +891,16 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
                                                  br_params=br_params, br_policy=br_policy,
                                                  partner_rng=partner_rng
                                                  )
-    train_partner_params = train_out["checkpoints_conf"]
-    
-    # Reshape partner parameters for AgentPopulation
-    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+    if config["EGO_TEAMMATE"] == "final":
+        train_partner_params = train_out["final_params_conf"]
 
-    # Flatten partner parameters for AgentPopulation
-    flattened_partner_params = jax.tree.map(
-        lambda x: x.reshape((pop_size,) + x.shape[2:]), 
-        train_partner_params
-    )
+    elif config["EGO_TEAMMATE"] == "all":
+        n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+        flattened_partner_ckpts = jax.tree.map(
+            lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
+            train_out["checkpoints_conf"]
+        )
+        train_partner_params = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), flattened_partner_ckpts, train_out["final_params_conf"])
     
     # Train ego agent using train_ppo_ego_agent
     config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
@@ -912,7 +912,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
         init_ego_params=prev_ego_params,
         n_ego_train_seeds=1,
         partner_population=partner_population,
-        partner_params=flattened_partner_params
+        partner_params=train_partner_params
     )
     
     updated_ego_parameters = ego_out["final_params"]
@@ -966,8 +966,15 @@ def train_paired(rng, env, algorithm_config):
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
 
     # Create partner population
+    if algorithm_config["EGO_TEAMMATE"] == "all":
+        pop_size = algorithm_config["PARTNER_POP_SIZE"] * (algorithm_config["NUM_CHECKPOINTS"] + 1)
+    elif algorithm_config["EGO_TEAMMATE"] == "final":
+        pop_size = algorithm_config["PARTNER_POP_SIZE"]
+    else:
+        raise ValueError(f"Invalid value for EGO_TEAMMATE: {algorithm_config['EGO_TEAMMATE']}")
+    
     partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        pop_size=pop_size,
         policy_cls=conf_policy
     )
 
