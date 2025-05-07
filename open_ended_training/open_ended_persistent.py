@@ -59,24 +59,21 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
                                                 conf_params=conf_params, conf_policy=conf_policy, 
                                                 br_params=br_params, br_policy=br_policy, 
                                                 partner_rng=partner_rng)
-    
-    # Add all checkpoints of each partner to the population buffer
-    pop_size = config["PARTNER_POP_SIZE"]
-    ckpt_size = config["NUM_CHECKPOINTS"]
-    
-    # Reshape parameters to flatten population and checkpoints dimensions
-    # train_partner_params shape: (pop_size, ckpt_size, ...)
-    # We need to reshape to (pop_size * ckpt_size, ...)
-    def flatten_params(params):
-        param_shape = params.shape[2:]  # shape after pop_size and ckpt_size
-        # Reshape to combine pop_size and ckpt_size
-        return params.reshape(pop_size * ckpt_size, *param_shape)
-    
-    flattened_ckpt_params = jax.tree_map(flatten_params, train_out["checkpoints_conf"])
-    all_conf_params = jax.tree_map(lambda x, y: jnp.concatenate([x, y], axis=0), 
-                                   flattened_ckpt_params,
-                                   train_out["final_params_conf"]
-    )
+        
+    if config["EGO_TEAMMATE"] == "final":
+        all_conf_params = train_out["final_params_conf"]
+        
+    elif config["EGO_TEAMMATE"] == "all":
+        n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+        flattened_ckpt_params = jax.tree.map(
+            lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
+            train_out["checkpoints_conf"]
+        )
+
+        all_conf_params = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), 
+                                    flattened_ckpt_params,
+                                    train_out["final_params_conf"]
+        )
 
     # Helper function to add each partner checkpoint to the buffer
     def add_partners_to_buffer(buffer, params_batch):
@@ -161,9 +158,15 @@ def train_persistent(rng, env, algorithm_config):
     # Create persistent partner population with BufferedPopulation
     # The max_pop_size should be large enough to hold all agents across all iterations
     # Now we need more space since we're storing all checkpoints
-    max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
-                   (algorithm_config["NUM_CHECKPOINTS"] + 1) * \
-                   algorithm_config["NUM_OPEN_ENDED_ITERS"]
+
+    if algorithm_config["EGO_TEAMMATE"] == "final":
+        max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_OPEN_ENDED_ITERS"]
+    elif algorithm_config["EGO_TEAMMATE"] == "all":
+        max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
+                       (algorithm_config["NUM_CHECKPOINTS"] + 1) * \
+                       algorithm_config["NUM_OPEN_ENDED_ITERS"]
+    else:
+        raise ValueError(f"Invalid EGO_TEAMMATE value: {algorithm_config['EGO_TEAMMATE']}")
     
     # hack to initialize the partner population's conf policy class with the right intializer shape
     conf_policy2, init_conf_params2 = initialize_actor_with_double_critic(algorithm_config, env, init_conf_rng2)
@@ -191,7 +194,6 @@ def train_persistent(rng, env, algorithm_config):
     
     # final_ego_params, final_conf_params, final_br_params, final_buffer, _ = final_carry
     return outs
-
 
 def run_persistent(config, wandb_logger):
     algorithm_config = dict(config["algorithm"])
