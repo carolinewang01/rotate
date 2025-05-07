@@ -10,7 +10,7 @@ import optax
 from flax.training.train_state import TrainState
 from envs.log_wrapper import LogWrapper
 
-from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
+from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent, initialize_pseudo_actor_with_double_critic
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
 from common.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
@@ -23,6 +23,8 @@ def initialize_agent(actor_type, algorithm_config, env, init_rng):
         policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
     elif actor_type == "rnn":
         policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)
+    elif actor_type == "pseudo_actor_with_double_critic":
+        policy, init_params = initialize_pseudo_actor_with_double_critic(algorithm_config, env, init_rng)
     return policy, init_params
 
 def make_train(config, env):

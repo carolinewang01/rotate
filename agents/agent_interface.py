@@ -133,7 +133,6 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
             activation: str, activation function to use
         """
         super().__init__(action_dim, obs_dim)
-        # self.activation = activation
         self.network = ActorWithDoubleCritic(action_dim, activation=activation)
     
     @partial(jax.jit, static_argnums=(0,))
@@ -162,6 +161,18 @@ class ActorWithDoubleCriticPolicy(AgentPolicy):
         dummy_avail = jnp.ones((self.action_dim,))
         init_x = (dummy_obs, dummy_avail)
         return self.network.init(rng, init_x)
+
+class PseudoActorWithDoubleCriticPolicy(ActorWithDoubleCriticPolicy):
+    """Enables ActorWithDoubleCritic to masquerade as an actor with a single critic."""
+    def __init__(self, action_dim, obs_dim, activation="tanh"):
+        super().__init__(action_dim, obs_dim, activation)
+
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, 
+                                aux_obs=None, env_state=None):
+        action, (val1, _), pi, hidden_state = super().get_action_value_policy(
+            params, obs, done, avail_actions, hstate, rng, 
+            aux_obs, env_state)
+        return action, val1, pi, hidden_state
 
 class ActorWithConditionalCriticPolicy(AgentPolicy):
     """Policy wrapper for ActorWithConditionalCritic

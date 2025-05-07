@@ -1,7 +1,7 @@
 import jax
 from agents.agent_interface import S5ActorCriticPolicy, \
     MLPActorCriticPolicy, RNNActorCriticPolicy, ActorWithDoubleCriticPolicy, \
-    ActorWithConditionalCriticPolicy
+    ActorWithConditionalCriticPolicy, PseudoActorWithDoubleCriticPolicy
 
 
 def initialize_s5_agent(config, env, rng):
@@ -79,6 +79,18 @@ def initialize_mlp_agent(config, env, rng):
 def initialize_actor_with_double_critic(config, env, rng):
     """Initialize an actor with double critic with the given config."""
     policy = ActorWithDoubleCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+        activation=config.get("ACTIVATION", "tanh"),
+    )
+    rng, init_rng = jax.random.split(rng)
+    init_params = policy.init_params(init_rng)
+
+    return policy, init_params
+
+def initialize_pseudo_actor_with_double_critic(config, env, rng):
+    """Initialize a pseudo actor with double critic with the given config."""
+    policy = PseudoActorWithDoubleCriticPolicy(
         action_dim=env.action_space(env.agents[0]).n,
         obs_dim=env.observation_space(env.agents[0]).shape[0],
         activation=config.get("ACTIVATION", "tanh"),
