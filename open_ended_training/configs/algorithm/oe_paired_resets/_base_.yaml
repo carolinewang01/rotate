@@ -17,7 +17,7 @@ RESET_CONF_BR_TO_EGO_STATES: false # whether to initialize conf-br data collecti
 EGO_TEAMMATE: all # choices: [final, all] # whether to use the final conf params as the teammate for the ego agent, or all ckpts
 NUM_ENVS: 16
 LR: 1.e-4
-UPDATE_EPOCHS: 15
+UPDATE_EPOCHS: 20
 NUM_MINIBATCHES: 4
 GAMMA: 0.99
 GAE_LAMBDA: 0.95
