@@ -1054,17 +1054,22 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
                                                  br_params=br_params, br_policy=br_policy,
                                                  partner_rng=partner_rng
                                                  )
-    train_partner_params = train_out["checkpoints_conf"]
-    
-    # Reshape partner parameters for AgentPopulation
-    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+    if config["EGO_TEAMMATE"] == "final":
+        train_partner_params = train_out["final_params_conf"]
+        pop_size = config["PARTNER_POP_SIZE"]
 
-    # Flatten partner parameters for AgentPopulation
-    flattened_partner_params = jax.tree.map(
-        lambda x: x.reshape((pop_size,) + x.shape[2:]), 
-        train_partner_params
-    )
-    
+    elif config["EGO_TEAMMATE"] == "all":
+        train_partner_params = train_out["checkpoints_conf"]
+        pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+
+        # Flatten partner parameters for AgentPopulation
+        train_partner_params = jax.tree.map(
+            lambda x: x.reshape((pop_size,) + x.shape[2:]), 
+            train_partner_params
+        )
+    else:
+        raise ValueError(f"Invalid value for EGO_TEAMMATE: {config['EGO_TEAMMATE']}")
+        
     # Train ego agent using train_ppo_ego_agent
     config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
@@ -1075,7 +1080,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
         init_ego_params=prev_ego_params,
         n_ego_train_seeds=1,
         partner_population=partner_population,
-        partner_params=flattened_partner_params
+        partner_params=train_partner_params
     )
     
     updated_ego_parameters = ego_out["final_params"]
