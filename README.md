@@ -9,9 +9,6 @@
     - Figure out how to return regret-maximizing teammates that don't sabotage
 
 ### Method Exploration: 
-- OE-Lagrange: 
-    - Hyperparameter tuning for lower and upper regret bounds, LM leraning rates 
-    - Implement no-reset for BR and confederate; try decreasing the number of steps for the conf learning rate
 - BufferedPopulation
     - Try using regret-based scores
     - Try decreasing the population size / increasing ego agent learning time
@@ -28,6 +25,9 @@ During rebuttal phase:
 - Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because 
  it displays the shaped return in Overcooked. We need to fix this.
 - In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
+- Open-ended learning implementations
+    - Remove conf-br weight argument from paired-style methods
+    - Rename reinit-conf, reinit br/ego arguments
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
     - Consider making ego and br nets the same 

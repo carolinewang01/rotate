@@ -214,7 +214,7 @@ def train_paired_ued(config, env, partner_rng):
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    reward=-reward["agent_1"],  # Confederate gets negative of ego reward
+                    reward=reward["agent_1"],
                     log_prob=logp_0,
                     obs=obs_0,
                     info=info_0,
@@ -425,9 +425,10 @@ def train_paired_ued(config, env, partner_rng):
                         # Entropy for interaction with best response agent
                         entropy_conf_br = jnp.mean(pi_conf_br.entropy())
 
-                        conf_ego_loss = pg_loss_conf_ego + config["VF_COEF"] * value_loss_conf_ego - config["ENT_COEF"] * entropy_conf_ego
+                        # We negate the pg_loss_conf_ego to minimize the ego agent's objective
+                        conf_ego_loss = - pg_loss_conf_ego + config["VF_COEF"] * value_loss_conf_ego - config["ENT_COEF"] * entropy_conf_ego
                         conf_br_loss = pg_loss_conf_br + config["VF_COEF"] * value_loss_conf_br - config["ENT_COEF"] * entropy_conf_br
-                        total_loss = (1 - config["CONF_BR_WEIGHT"]) * conf_ego_loss + config["CONF_BR_WEIGHT"] * conf_br_loss
+                        total_loss = (1 - config["SP_WEIGHT"]) * conf_ego_loss + config["SP_WEIGHT"] * conf_br_loss
                         return total_loss, (value_loss_conf_ego, value_loss_conf_br, pg_loss_conf_ego, pg_loss_conf_br, entropy_conf_ego, entropy_conf_br)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)

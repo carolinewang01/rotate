@@ -1,30 +1,23 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
-ALG: oe_persistent
-TIMESTEPS_PER_ITER_PARTNER: 1.5e6 # per iter of open-ended training, divided between conf-br and conf-ego and between all partner seeds
+
+ALG: oe_paired_resets
+TIMESTEPS_PER_ITER_PARTNER: 2.0e6 # per iter of open-ended training, divided between 4 types of rollouts and all partner seeds
 TIMESTEPS_PER_ITER_EGO: 1e6
 NUM_OPEN_ENDED_ITERS: 30
 NUM_CHECKPOINTS: 5 # per iter of open-ended training
 PARTNER_POP_SIZE: 1 # true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS per iter of open-ended training
-
 SP_WEIGHT: 1.0 # weight on conf-br (SP) loss
 REGRET_SP_WEIGHT: 1.0 # weight on the SP term in the perstep regret loss
 CONF_OBJ_TYPE: sreg-xp_ret-sp_sreg-xsp_ret-sxp # choices: per_state_regret, per_state_regret_target, traj_level_regret, sreg-xp_ret-sp_sreg-xsp_ret-sxp, sreg-xp_ret-sp_ret-sxp
-
 REINIT_CONF: true # whether to reinitialize the confederate policy each iteration of open-ended training
 REINIT_BR_TO_BR: true # whether to reinitialize the br policy each iteration of open-ended training
 REINIT_BR_TO_EGO: false # whether to reinitialize the br policy to the ego params each iteration of open-ended training
 RESET_CONF_BR_TO_EGO_STATES: false # whether to initialize conf-br data collection from conf-ego states
-# lagrange args
-LAGRANGE_MULTIPLIER_LR: 0.05
-LAGRANGE_USE_TARGET_RETURNS: true
-# buffer args
-SAMPLING_STRATEGY: uniform # 'plr' or 'uniform'
-STALENESS_COEF: 0.3 # used only for 'plr' sampling strategy
-SCORE_TEMP: 1.0 # used only for 'plr' sampling strategy, currently ineffective
+EGO_TEAMMATE: all # choices: [final, all] # whether to use the final conf params as the teammate for the ego agent, or all ckpts
 NUM_ENVS: 16
 LR: 1.e-4
-UPDATE_EPOCHS: 15
+UPDATE_EPOCHS: 20
 NUM_MINIBATCHES: 4
 GAMMA: 0.99
 GAE_LAMBDA: 0.95

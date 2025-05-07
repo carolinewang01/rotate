@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_paired_comedi"
-label="method-explore:comedi"
+algo="oe_paired_resets"
+label="method-explore:ego-reg-conf-ret:symm_resets"
 partner_pop_size=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-reset_conf_br_to_ego_states=true
+regret_sp_weight=1.0
+conf_obj_type="sreg-xp_ret-sp_sreg-xsp_ret-sxp" # sreg-xp_ret-sp_ret-sxp
 
 # DEBUG COMMAND
-# CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=open_ended_paired/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=d
-# ebug logger.mode=offline algorithm.NUM_SEEDS=1
+# CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=oe_paired_resets/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=debug logger.mode=offline algorithm.NUM_SEEDS=1
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}
@@ -25,19 +25,19 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 #     "open_ended_lagrange"
 #     "open_ended_minimax"
 #     "open_ended_paired"
-#     "oe_persistent_lagrange"
+#     "oe_persistent"
 #     "paired_ued"
 #     "open_ended_fcp"
 # )
 
 # Tasks to run
 tasks=(
+    "lbf"
+    "overcooked/cramped_room"
+    "overcooked/counter_circuit"
+    # "overcooked/forced_coord"
     # "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
-    "overcooked/counter_circuit"
-    "overcooked/cramped_room"
-    "overcooked/forced_coord"
-    "lbf"
 )
 
 # Function to log messages
@@ -58,7 +58,8 @@ for task in "${tasks[@]}"; do
     if python open_ended_training/run.py algorithm="${algo}/${task}" \
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
-        algorithm.RESET_CONF_BR_TO_EGO_STATES="${reset_conf_br_to_ego_states}" \
+        algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
+        algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

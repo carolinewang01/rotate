@@ -395,11 +395,10 @@ def train_lagrange_partners(config, env,
                     init_conf_hstate_ego, traj_batch_ego, advantages_ego, returns_ego = minbatch_ego
                     init_conf_hstate_br, traj_batch_br, advantages_br, returns_br = minbatch_br
 
-
                     def _loss_fn_conf(params, traj_batch_ego, gae_ego, target_v_ego, traj_batch_br, gae_br, target_v_br):
                         # get policy and value of confederate versus ego and best response agents respectively
 
-                        _, (value_ego, _), pi_ego, _ = confederate_policy.get_action_value_policy(
+                        _, (value_ego_conf_ego_data, value_br_conf_ego_data), pi_ego, _ = confederate_policy.get_action_value_policy(
                             params=params, 
                             obs=traj_batch_ego.obs, 
                             done=traj_batch_ego.done,
@@ -407,7 +406,7 @@ def train_lagrange_partners(config, env,
                             hstate=init_conf_hstate_ego,
                             rng=jax.random.PRNGKey(0) # only used for action sampling, which is not used here 
                         )
-                        _, (_, value_br), pi_br, _ = confederate_policy.get_action_value_policy(
+                        _, (value_ego_conf_br_data, value_br_conf_br_data), pi_br, _ = confederate_policy.get_action_value_policy(
                             params=params, 
                             obs=traj_batch_br.obs, 
                             done=traj_batch_br.done,
@@ -421,10 +420,10 @@ def train_lagrange_partners(config, env,
 
                         # Value loss for interaction with ego agent
                         value_pred_ego_clipped = traj_batch_ego.value + (
-                            value_ego - traj_batch_ego.value
+                            value_ego_conf_ego_data - traj_batch_ego.value
                             ).clip(
                             -config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses_ego = jnp.square(value_ego - target_v_ego)
+                        value_losses_ego = jnp.square(value_ego_conf_ego_data - target_v_ego)
                         value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
                         value_loss_ego = (
                             jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
@@ -432,10 +431,10 @@ def train_lagrange_partners(config, env,
 
                         # Value loss for interaction with best response agent
                         value_pred_br_clipped = traj_batch_br.value + (
-                            value_br - traj_batch_br.value
+                            value_br_conf_br_data - traj_batch_br.value
                             ).clip(
                             -config["CLIP_EPS"], config["CLIP_EPS"])
-                        value_losses_br = jnp.square(value_br - target_v_br)
+                        value_losses_br = jnp.square(value_br_conf_br_data - target_v_br)
                         value_losses_clipped_br = jnp.square(value_pred_br_clipped - target_v_br)
                         value_loss_br = (
                             jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
@@ -443,38 +442,61 @@ def train_lagrange_partners(config, env,
 
                         # Policy gradient loss for interaction with ego agent
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
-                        gae_norm_ego = (gae_ego - gae_ego.mean()) / (gae_ego.std() + 1e-8)
-                        pg_loss_1_ego = ratio_ego * gae_norm_ego
-                        pg_loss_2_ego = jnp.clip(
-                            ratio_ego, 
-                            1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm_ego
-                        pg_loss_ego = -jnp.mean(jnp.minimum(pg_loss_1_ego, pg_loss_2_ego))
+                        ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
+                        
+                        # Compute policy gradient objectives
+                        if config["CONF_OBJ_TYPE"] == "per_state_regret":
+                            # Compute return-to-gos
+                            conf_br_return_to_go_br_data = value_br_conf_br_data + advantages_br
+                            conf_ego_return_to_go_ego_data = value_ego_conf_ego_data + advantages_ego
+
+                            # Compute regret-related terms
+                            regret_ego_data = value_br_conf_ego_data - conf_ego_return_to_go_ego_data
+                            regret_br_data = conf_br_return_to_go_br_data - value_ego_conf_br_data
+
+                            upper_lagrange_dual_diff_ego = config["UPPER_REGRET_THRESHOLD"] - regret_ego_data
+                            lower_lagrange_dual_diff_ego = regret_ego_data - config["LOWER_REGRET_THRESHOLD"]
+                            upper_lagrange_dual_diff_br = config["UPPER_REGRET_THRESHOLD"] - regret_br_data
+                            lower_lagrange_dual_diff_br = regret_br_data - config["LOWER_REGRET_THRESHOLD"]
+
+                            # total_br_objective = conf_br_return_to_go_br_data + upper_lm * upper_lagrange_dual_diff_br + lower_lm * lower_lagrange_dual_diff_br
+                            # total_ego_objective = value_br_conf_ego_data + upper_lm * upper_lagrange_dual_diff_ego + lower_lm * lower_lagrange_dual_diff_ego
+
+                            total_br_objective = gae_br + upper_lm * upper_lagrange_dual_diff_br + lower_lm * lower_lagrange_dual_diff_br
+                            total_ego_objective = gae_ego + upper_lm * upper_lagrange_dual_diff_ego + lower_lm * lower_lagrange_dual_diff_ego
+                        
+                        elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
+                            total_br_objective = gae_br * (1 + lower_lm - upper_lm)
+                            total_ego_objective = gae_ego * (upper_lm - lower_lm)
 
                         # Policy gradient loss for interaction with best response agent
-                        ratio_br = jnp.exp(log_prob_br - traj_batch_br.log_prob)
-                        gae_norm_br = (gae_br - gae_br.mean()) / (gae_br.std() + 1e-8)
-                        pg_loss_1_br = ratio_br * gae_norm_br
+                        normalized_total_br_objective = (total_br_objective - total_br_objective.mean()) / (total_br_objective.std() + 1e-8)
+                        normalized_total_ego_objective = (total_ego_objective - total_ego_objective.mean()) / (total_ego_objective.std() + 1e-8)
+
+                        pg_loss_1_br = ratio_br * normalized_total_br_objective
                         pg_loss_2_br = jnp.clip(
                             ratio_br, 
                             1.0 - config["CLIP_EPS"], 
-                            1.0 + config["CLIP_EPS"]) * gae_norm_br
+                            1.0 + config["CLIP_EPS"]) * normalized_total_br_objective
                         pg_loss_br = -jnp.mean(jnp.minimum(pg_loss_1_br, pg_loss_2_br))
 
-                        # entropy_weight = jnp.maximum(jnp.abs(xp_weight), jnp.abs(sp_weight))
-                        # entropy_weight = jnp.maximum(entropy_weight, 1)
+                        pg_loss_1_ego_opt = ratio_ego * normalized_total_ego_objective
+                        pg_loss_2_ego_opt = jnp.clip(
+                            ratio_ego, 
+                            1.0 - config["CLIP_EPS"], 
+                            1.0 + config["CLIP_EPS"]) * normalized_total_ego_objective
+                        pg_loss_ego_opt = -jnp.mean(jnp.minimum(pg_loss_1_ego_opt, pg_loss_2_ego_opt))
 
                         # Entropy for interaction with ego agent and best response agents resp.
                         entropy_ego = jnp.mean(pi_ego.entropy())
                         entropy_br = jnp.mean(pi_br.entropy())
                         
-                        xp_weight = upper_lm - lower_lm
-                        sp_weight = 1 + lower_lm - upper_lm
-
-                        loss_ego =  xp_weight * pg_loss_ego + config["VF_COEF"] * value_loss_ego -  xp_weight * config["ENT_COEF"] * entropy_ego
-                        loss_br = sp_weight * pg_loss_br + config["VF_COEF"] * value_loss_br - sp_weight * config["ENT_COEF"] * entropy_br
+                        total_weight = 1 + upper_lm + lower_lm
+                        
+                        loss_ego =  pg_loss_ego_opt  + config["VF_COEF"] * value_loss_ego -  total_weight * config["ENT_COEF"] * entropy_ego
+                        loss_br = pg_loss_br + config["VF_COEF"] * value_loss_br - total_weight * config["ENT_COEF"] * entropy_br
                         total_loss = loss_ego + loss_br
-                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego, pg_loss_br, entropy_ego, entropy_br)
+                        return total_loss, (value_loss_ego, value_loss_br, pg_loss_ego_opt, pg_loss_br, entropy_ego, entropy_br)
                     
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                     (loss_val, aux_vals), grads = grad_fn(
@@ -957,13 +979,16 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
                                         br_params=br_params, br_policy=br_policy, 
                                         partner_rng=partner_rng)
     
-    # Flatten partner parameters for AgentPopulation
-    train_partner_params = train_out["checkpoints_conf"]
-    pop_size = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-    flattened_partner_params = jax.tree.map(
-        lambda x: x.reshape((pop_size,) + x.shape[2:]), 
-        train_partner_params
-    )
+    if config["EGO_TEAMMATE"] == "final":
+        train_partner_params = train_out["final_params_conf"]
+
+    elif config["EGO_TEAMMATE"] == "all":
+        n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+        flattened_partner_ckpts = jax.tree.map(
+            lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
+            train_out["checkpoints_conf"]
+        )
+        train_partner_params = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), flattened_partner_ckpts, train_out["final_params_conf"])
     
     # Train ego agent using train_ppo_ego_agent
     config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
@@ -975,7 +1000,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
         init_ego_params=prev_ego_params,
         n_ego_train_seeds=1,
         partner_population=partner_population,
-        partner_params=flattened_partner_params
+        partner_params=train_partner_params
     )
     
     updated_ego_parameters = ego_out["final_params"]
@@ -1029,8 +1054,15 @@ def train_lagrange(rng, env, algorithm_config):
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
 
     # Create partner population
+    if algorithm_config["EGO_TEAMMATE"] == "final":
+        pop_size = algorithm_config["PARTNER_POP_SIZE"]
+    elif algorithm_config["EGO_TEAMMATE"] == "all":
+        pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"]
+    else:
+        raise ValueError(f"Invalid value for EGO_TEAMMATE: {algorithm_config['EGO_TEAMMATE']}")
+    
     partner_population = AgentPopulation(
-        pop_size=algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"],
+        pop_size=pop_size,
         policy_cls=conf_policy
     )
     

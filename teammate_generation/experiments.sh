@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="lbrdiv"
-label="paper-v0"
+algo="fcp"
+label="paper-v0:analysis"
 num_seeds=3
 
 # Create log directory if it doesn't exist
