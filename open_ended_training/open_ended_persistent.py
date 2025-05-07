@@ -20,14 +20,18 @@ from ppo.ippo import make_train as make_ppo_train
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 def train_ippo_partners(config, partner_rng, env):
     '''
     Train a pool IPPO agents w/parameter sharing. 
     Returns out, a dictionary of the model checkpoints, final parameters, and metrics.
     '''
-    # TODO: integrate this function with train_persistent
-    config["TOTAL_TIMESTEPS"] = config["TOTAL_PRETRAIN_TIMESTEPS"] // config["NUM_PRETRAIN_AGENTS"]
-    rngs = jax.random.split(partner_rng, config["NUM_PRETRAIN_AGENTS"])
+    pretrain_config = config["PRETRAIN_ARGS"]
+    config["TOTAL_TIMESTEPS"] = pretrain_config["TOTAL_TIMESTEPS"] // pretrain_config["NUM_AGENTS"]
+    config["NUM_CHECKPOINTS"] = pretrain_config["NUM_CHECKPOINTS"]
+    config["ACTOR_TYPE"] = "pseudo_actor_with_double_critic"
+
+    rngs = jax.random.split(partner_rng, pretrain_config["NUM_AGENTS"])
     train_jit = jax.jit(jax.vmap(make_ppo_train(config, env)))
     out = train_jit(rngs)
     return out
@@ -169,7 +173,10 @@ def train_persistent(rng, env, algorithm_config):
                        algorithm_config["NUM_OPEN_ENDED_ITERS"]
     else:
         raise ValueError(f"Invalid EGO_TEAMMATE value: {algorithm_config['EGO_TEAMMATE']}")
-    
+
+    if algorithm_config["PRETRAIN_PPO"]:
+        max_pop_size += algorithm_config["PRETRAIN_ARGS"]["NUM_AGENTS"] * (algorithm_config["PRETRAIN_ARGS"]["NUM_CHECKPOINTS"] + 1)
+
     # hack to initialize the partner population's conf policy class with the right intializer shape
     conf_policy2, init_conf_params2 = initialize_actor_with_double_critic(algorithm_config, env, init_conf_rng2)
     partner_population = BufferedPopulation(
@@ -181,6 +188,20 @@ def train_persistent(rng, env, algorithm_config):
     )
     population_buffer = partner_population.reset_buffer(init_conf_params2)
     
+    if algorithm_config["PRETRAIN_PPO"]:
+        log.info("Pretraining IPPO partners...")
+        pretrain_out = train_ippo_partners(algorithm_config, train_rng, env)
+        pretrain_final_params = pretrain_out["final_params"]
+        pretrain_checkpoints = pretrain_out["checkpoints"]
+        num_ckpts = algorithm_config["PRETRAIN_ARGS"]["NUM_CHECKPOINTS"] * algorithm_config["PRETRAIN_ARGS"]["NUM_AGENTS"]
+        pretrain_checkpoints = jax.tree.map(lambda x: x.reshape((num_ckpts,) + x.shape[2:]), 
+                                          pretrain_checkpoints)
+
+        log.info("Done pretraining IPPO partners.")
+        pretrain_params_all = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), 
+                                          pretrain_checkpoints, pretrain_final_params)
+        population_buffer = add_partners_to_buffer(partner_population, population_buffer, pretrain_params_all)
+
     @jax.jit
     def open_ended_step_fn(carry, unused):
         return persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
@@ -193,8 +214,8 @@ def train_persistent(rng, env, algorithm_config):
         xs=None,
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
-    
-    # final_ego_params, final_conf_params, final_br_params, final_buffer, _ = final_carry
+    # add pretrain out to the teammate out
+    outs[0]["pretrain_out"] = pretrain_out
     return outs
 
 def run_persistent(config, wandb_logger):
@@ -225,6 +246,7 @@ def run_persistent(config, wandb_logger):
 
     # Log metrics (reusing the original PAIRED logging function)
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
+
     log_metrics(config, wandb_logger, outs, metric_names)
 
     # Prepare return values for heldout evaluation

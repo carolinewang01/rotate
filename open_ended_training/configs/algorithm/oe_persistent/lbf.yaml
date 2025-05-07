@@ -14,3 +14,7 @@ LAGRANGE_MULTIPLIER_LR: 0.01
 LR: 1e-3
 CLIP_EPS: 0.1
 ENT_COEF: 0.001
+PRETRAIN_ARGS:
+  TOTAL_TIMESTEPS: 1e6 # timesteps to split between IPPO partners
+  NUM_AGENTS: 3 # number of IPPO partners to pretrain
+  NUM_CHECKPOINTS: 2 # number of checkpoints to save for each IPPO partner

@@ -15,3 +15,8 @@ LR: 1e-3
 NUM_MINIBATCHES: 8
 CLIP_EPS: 0.1
 ENT_COEF: 0.05
+PRETRAIN_ARGS:
+  TOTAL_TIMESTEPS: 3e6 # timesteps to split between IPPO partners
+  NUM_AGENTS: 3 # number of IPPO partners to pretrain
+  NUM_CHECKPOINTS: 2 # number of checkpoints to save for each IPPO partner
+
