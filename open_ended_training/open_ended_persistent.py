@@ -5,18 +5,32 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
-from agents.population_buffer import BufferedPopulation
+from agents.population_buffer import BufferedPopulation, add_partners_to_buffer
 from agents.initialize_agents import initialize_s5_agent, initialize_actor_with_double_critic
 from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
+
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
 # from open_ended_training.open_ended_paired import train_regret_maximizing_partners, log_metrics
 from open_ended_training.oe_paired_resets import train_regret_maximizing_partners as train_regret_maximizing_partners, log_metrics
 # from open_ended_training.open_ended_lagrange import train_lagrange_partners as train_regret_maximizing_partners, log_metrics, linear_schedule_regret
+from ppo.ippo import make_train as make_ppo_train
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+def train_ippo_partners(config, partner_rng, env):
+    '''
+    Train a pool IPPO agents w/parameter sharing. 
+    Returns out, a dictionary of the model checkpoints, final parameters, and metrics.
+    '''
+    # TODO: integrate this function with train_persistent
+    config["TOTAL_TIMESTEPS"] = config["TOTAL_PRETRAIN_TIMESTEPS"] // config["NUM_PRETRAIN_AGENTS"]
+    rngs = jax.random.split(partner_rng, config["NUM_PRETRAIN_AGENTS"])
+    train_jit = jax.jit(jax.vmap(make_ppo_train(config, env)))
+    out = train_jit(rngs)
+    return out
 
 def linear_schedule_regret(iter_idx, config):
     '''Computes the upper and lower regret thresholds based on the iteration index. 
@@ -74,21 +88,9 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
                                     flattened_ckpt_params,
                                     train_out["final_params_conf"]
         )
-
-    # Helper function to add each partner checkpoint to the buffer
-    def add_partners_to_buffer(buffer, params_batch):
-        def add_single_partner(carry_buffer, params):
-            return partner_population.add_agent(carry_buffer, params), None
-        
-        new_buffer, _ = jax.lax.scan(
-            add_single_partner,
-            buffer,
-            params_batch
-        )
-        return new_buffer
     
     # Add all checkpoints and final parameters of all partners to the buffer
-    updated_buffer = add_partners_to_buffer(population_buffer, all_conf_params)
+    updated_buffer = add_partners_to_buffer(partner_population, population_buffer, all_conf_params)
 
     # Train ego agent using the population buffer
     # Sample agents from buffer for training

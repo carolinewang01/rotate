@@ -1,5 +1,5 @@
 '''
-Based on the IPPO implementation from jaxmarl. Trains a parameter-shared, MLP IPPO agent on a
+Based on the IPPO implementation from JaxMarl. Trains a parameter-shared, MLP IPPO agent on a
 fully cooperative multi-agent environment. Note that this code is only compatible with MLP policies.
 '''
 import shutil
@@ -10,12 +10,20 @@ import optax
 from flax.training.train_state import TrainState
 from envs.log_wrapper import LogWrapper
 
-from agents.mlp_actor_critic import ActorCritic
+from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
-from common.ppo_utils import Transition, batchify, unbatchify
+from common.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
 from envs import make_env
 
+def initialize_agent(actor_type, algorithm_config, env, init_rng):
+    if actor_type == "s5":
+        policy, init_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    elif actor_type == "mlp":
+        policy, init_params = initialize_mlp_agent(algorithm_config, env, init_rng)
+    elif actor_type == "rnn":
+        policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)
+    return policy, init_params
 
 def make_train(config, env):
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
@@ -32,13 +40,9 @@ def make_train(config, env):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCritic(env.action_space(env.agents[0]).n)
-        rng, _rng = jax.random.split(rng)
-        init_x = ( # init obs, avail_actions
-            jnp.zeros(env.observation_space(env.agents[0]).shape),
-            jnp.ones(env.action_space(env.agents[0]).n),
-        )
-        network_params = network.init(_rng, init_x)
+        rng, init_rng = jax.random.split(rng)
+        policy, init_params = initialize_agent(config["ACTOR_TYPE"], config, env, init_rng)
+
         if config["ANNEAL_LR"]:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -49,8 +53,8 @@ def make_train(config, env):
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]), 
                 optax.adam(config["LR"], eps=1e-5))
         train_state = TrainState.create(
-            apply_fn=network.apply,
-            params=network_params,
+            apply_fn=policy.network.apply,
+            params=init_params,
             tx=tx,
         )
 
@@ -64,20 +68,38 @@ def make_train(config, env):
             runner_state, update_steps = update_runner_state
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
-                train_state, env_state, last_obs, rng = runner_state
+                train_state, env_state, last_obs, last_done, last_hstate, rng = runner_state
 
                 # SELECT ACTION
-                rng, _rng = jax.random.split(rng)
+                rng, act_rng = jax.random.split(rng)
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+                obs_batch = obs_batch.reshape(1, config["NUM_ACTORS"], -1)
+                done_batch = batchify(last_done, env.agents, config["NUM_ACTORS"])
+                done_batch = done_batch.reshape(1, config["NUM_ACTORS"])
+
                 # Get actual available actions from environment state
-                avail_batch = jax.vmap(env.get_avail_actions)(env_state.env_state)
-                avail_batch = jax.lax.stop_gradient(batchify(avail_batch, 
+                avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
+                avail_actions = jax.lax.stop_gradient(batchify(avail_actions, 
                     env.agents, config["NUM_ACTORS"]).astype(jnp.float32))
 
-                pi, value = network.apply(train_state.params, (obs_batch, avail_batch))
-                action = pi.sample(seed=_rng)
+                # pi, value = network.apply(train_state.params, (obs_batch, avail_batch))
+                # action = pi.sample(seed=_rng)
+
+                action, value, pi, hstate = policy.get_action_value_policy(
+                    params=train_state.params,
+                    obs=obs_batch,
+                    done=done_batch,
+                    avail_actions=avail_actions,
+                    hstate=last_hstate,
+                    rng=act_rng
+                )
                 log_prob = pi.log_prob(action)
+
+                action = action.squeeze()
+                log_prob = log_prob.squeeze()
+                value = value.squeeze()
+
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 env_act = {k:v.flatten() for k,v in env_act.items()}
 
@@ -85,7 +107,7 @@ def make_train(config, env):
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
 
-                obsv, env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
+                new_obs, new_env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     rng_step, env_state, env_act
                 )
                 
@@ -93,29 +115,41 @@ def make_train(config, env):
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
 
                 transition = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(),
+                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(), # new done
                     action,
                     value,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
+                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(), # new reward
                     log_prob,
-                    obs_batch,
+                    batchify(last_obs, env.agents, config["NUM_ACTORS"]), # old obs
                     info,
-                    avail_batch
+                    avail_actions
                 )
-                runner_state = (train_state, env_state, obsv, rng)
+                runner_state = (train_state, new_env_state, new_obs, last_done, last_hstate,rng)
                 return runner_state, transition
             
             runner_state, traj_batch = jax.lax.scan(
                 _env_step, runner_state, None, config["ROLLOUT_LENGTH"]
             )
 
-            # CALCULATE ADVANTAGE
-            train_state, env_state, last_obs, rng = runner_state
+            # Get final value estimate for completed trajectory
+            train_state, env_state, last_obs, last_done, last_hstate, rng = runner_state
             last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+            last_obs_batch = last_obs_batch.reshape(1, config["NUM_ACTORS"], -1)
+            last_done_batch = batchify(last_done, env.agents, config["NUM_ACTORS"])
+            last_done_batch = last_done_batch.reshape(1, config["NUM_ACTORS"])
             last_avail_batch = jax.vmap(env.get_avail_actions)(env_state.env_state)
             last_avail_batch = jax.lax.stop_gradient(batchify(last_avail_batch, 
                 env.agents, config["NUM_ACTORS"]).astype(jnp.float32))
-            _, last_val = network.apply(train_state.params, (last_obs_batch, last_avail_batch))
+            
+            _, last_val, _, _ = policy.get_action_value_policy(
+                params=train_state.params,
+                obs=last_obs_batch,
+                done=last_done_batch,
+                avail_actions=last_avail_batch,
+                hstate=last_hstate,
+                rng=jax.random.PRNGKey(0)  # Dummy key since we're just extracting the value
+            )
+            last_val = last_val.squeeze()
 
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
@@ -143,13 +177,19 @@ def make_train(config, env):
 
             advantages, targets = _calculate_gae(traj_batch, last_val)
 
-            # UPDATE NETWORK
             def _update_epoch(update_state, unused):
                 def _update_minbatch(train_state, batch_info):
-                    traj_batch, advantages, targets = batch_info
+                    init_hstate, traj_batch, advantages, targets = batch_info
                     def _loss_fn(params, traj_batch, gae, targets):
                         # RERUN NETWORK
-                        pi, value = network.apply(params, (traj_batch.obs, traj_batch.avail_actions))
+                        _, value, pi, _ = policy.get_action_value_policy(
+                            params=params,
+                            obs=traj_batch.obs,
+                            done=traj_batch.done,
+                            avail_actions=traj_batch.avail_actions,
+                            hstate=init_hstate,
+                            rng=jax.random.PRNGKey(0) # only used for action sampling, which is unused here
+                        )
                         log_prob = pi.log_prob(traj_batch.action)
 
                         # CALCULATE VALUE LOSS
@@ -159,7 +199,7 @@ def make_train(config, env):
                         value_losses = jnp.square(value - targets)
                         value_losses_clipped = jnp.square(value_pred_clipped - targets)
                         value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+                            jnp.maximum(value_losses, value_losses_clipped).mean()
                         )
 
                         # CALCULATE ACTOR LOSS
@@ -192,33 +232,37 @@ def make_train(config, env):
                     train_state = train_state.apply_gradients(grads=grads)
                     return train_state, total_loss
 
-                train_state, traj_batch, advantages, targets, rng = update_state
-                rng, _rng = jax.random.split(rng)
-                batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
-                assert (
-                    batch_size == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"]
-                ), "batch size must be equal to number of steps * number of actors"
-                permutation = jax.random.permutation(_rng, batch_size)
-                batch = (traj_batch, advantages, targets)
-                batch = jax.tree.map(
-                    lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-                )
-                shuffled_batch = jax.tree.map(
-                    lambda x: jnp.take(x, permutation, axis=0), batch
-                )
-                minibatches = jax.tree.map(
-                    lambda x: jnp.reshape(
-                        x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                    ),
-                    shuffled_batch,
-                )
+                train_state, init_hstate, traj_batch, advantages, targets, rng = update_state
+                rng, perm_rng = jax.random.split(rng)
+                minibatches = _create_minibatches(traj_batch, advantages, targets, init_hstate, 
+                                                  config["NUM_ACTORS"], config["NUM_MINIBATCHES"], perm_rng)
+
+                # # TODO: GOT TO HERE! Create minibatches!
+                # batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
+                # assert (
+                #     batch_size == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"]
+                # ), "batch size must be equal to number of steps * number of actors"
+                # permutation = jax.random.permutation(_rng, batch_size)
+                # batch = (traj_batch, advantages, targets)
+                # batch = jax.tree.map(
+                #     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
+                # )
+                # shuffled_batch = jax.tree.map(
+                #     lambda x: jnp.take(x, permutation, axis=0), batch
+                # )
+                # minibatches = jax.tree.map(
+                #     lambda x: jnp.reshape(
+                #         x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
+                #     ),
+                #     shuffled_batch,
+                # )
                 train_state, total_loss = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
-                update_state = (train_state, traj_batch, advantages, targets, rng)
+                update_state = (train_state, init_hstate, traj_batch, advantages, targets, rng)
                 return update_state, total_loss
-
-            update_state = (train_state, traj_batch, advantages, targets, rng)
+            init_hstate = policy.init_hstate(config["NUM_ACTORS"])
+            update_state = (train_state, init_hstate, traj_batch, advantages, targets, rng)
             update_state, loss_info = jax.lax.scan(
                 _update_epoch, update_state, None, config["UPDATE_EPOCHS"]
             )
@@ -228,15 +272,13 @@ def make_train(config, env):
             
             rng = update_state[-1]
             update_steps += 1
-            runner_state = (train_state, env_state, last_obs, rng)
+            runner_state = (train_state, env_state, last_obs, last_done, last_hstate, rng)
             return (runner_state, update_steps), metric
 
         checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
         num_ckpts = config["NUM_CHECKPOINTS"]
 
-        # (3) Build a PyTree that can hold the parameters for all checkpoints.
-        #     For each leaf x in train_state.params, create an array of shape
-        #     (num_ckpts,) + x.shape to hold all saved parameter states.
+        # build a pytree that can hold the parameters for all checkpoints.
         def init_ckpt_array(params_pytree):
             return jax.tree.map(
                 lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype),
@@ -245,14 +287,11 @@ def make_train(config, env):
 
         def _update_step_with_checkpoint(update_with_ckpt_runner_state, unused):
             (update_runner_state, checkpoint_array, ckpt_idx) = update_with_ckpt_runner_state
-            # update_runner_state is ((train_state, env_state, obsv, rng), update_steps)
+            # update_runner_state is ((train_state, env_state, obs, done, hstate, rng), update_steps)
             # Run one PPO update step
             update_runner_state, metric = _update_step(update_runner_state, None)
             _, update_steps = update_runner_state
 
-            # Decide if we store a checkpoint now
-            # condition: step % checkpoint_interval == 0
-            # (You can tweak so you store at the end, or start, etc.)
             to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
 
             def store_ckpt_fn(args):
@@ -282,7 +321,9 @@ def make_train(config, env):
         # (5) Use lax.scan over NUM_UPDATES
         rng, _rng = jax.random.split(rng)
         update_steps = 0
-        update_runner_state = ((train_state, env_state, obsv, _rng), update_steps)
+        init_hstate = policy.init_hstate(config["NUM_ACTORS"])
+        init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+        update_runner_state = ((train_state, env_state, obsv, init_done, init_hstate, _rng), update_steps)
         checkpoint_array = init_ckpt_array(train_state.params)
         ckpt_idx = 0
         update_with_ckpt_runner_state = (update_runner_state, checkpoint_array, ckpt_idx)
@@ -318,6 +359,14 @@ def run_ippo(config, logger):
 
 def log_metrics(config, out, logger):
     '''Save train run output and log to wandb as artifact.'''
+
+    # # check if final ckpt is same as last 
+    # final_ckpt_leaf = jax.tree.leaves(out["checkpoints"])[0][0, -1]
+    # ckpt_leaf_mean = jax.tree.leaves(out["checkpoints"])[0].mean()
+    # final_params_leaf = jax.tree.leaves(out["final_params"])[0]
+    # is_close= jnp.allclose(final_ckpt_leaf, final_params_leaf)
+    # import pdb; pdb.set_trace()
+
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     # save artifacts
     out_savepath = save_train_run(out, savedir, savename="saved_train_run")

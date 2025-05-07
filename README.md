@@ -25,6 +25,7 @@ During rebuttal phase:
 - Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because 
  it displays the shaped return in Overcooked. We need to fix this.
 - In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
+- Final checkpoints - rather than storing this explicitly, let's modify the learning code to always store the final ckpt as the last ckpt
 - Open-ended learning implementations
     - Remove conf-br weight argument from paired-style methods
     - Rename reinit-conf, reinit br/ego arguments
@@ -33,7 +34,6 @@ During rebuttal phase:
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
 - Clean up IPPO: 
-    - Update IPPO to use the general agent interface
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
 - Heuristic agents: 
     - Enable decision-making to account for the available actions

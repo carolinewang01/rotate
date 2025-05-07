@@ -8,6 +8,20 @@ import chex
 from agents.population_interface import AgentPopulation
 
 
+def add_partners_to_buffer(population, buffer, params_batch):
+    '''
+    Add multiple partner checkpoints to the buffer.
+    '''
+    def add_single_partner(carry_buffer, params):
+        return population.add_agent(carry_buffer, params), None
+    
+    new_buffer, _ = jax.lax.scan(
+        add_single_partner,
+        buffer,
+        params_batch
+    )
+    return new_buffer
+
 class PopulationBuffer(struct.PyTreeNode):
     """PyTree structure to store population parameters with fixed buffer size."""
     params: chex.ArrayTree  # Parameters for all agents in the buffer

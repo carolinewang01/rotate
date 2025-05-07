@@ -19,6 +19,10 @@ EGO_TEAMMATE: final # choices: [final, all] # whether to use the final conf para
 # lagrange args
 LAGRANGE_MULTIPLIER_LR: 0.05
 LAGRANGE_USE_TARGET_RETURNS: true
+# IPPO pretrain partner args
+TOTAL_PRETRAIN_TIMESTEPS: 1e6 # timesteps to split between IPPO partners
+NUM_PRETRAIN_AGENTS: 1 # number of IPPO partners to pretrain
+
 # buffer args
 SAMPLING_STRATEGY: uniform # 'plr' or 'uniform'
 STALENESS_COEF: 0.3 # used only for 'plr' sampling strategy

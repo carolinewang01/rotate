@@ -6,6 +6,7 @@ ROLLOUT_LENGTH: 128 # rollout length must be greater than episode length
 ENV_KWARGS: {}
 
 TOTAL_TIMESTEPS: 5e5
+ACTOR_TYPE: mlp
 SEED: 12345
 LR: .0001
 NUM_ENVS: 8

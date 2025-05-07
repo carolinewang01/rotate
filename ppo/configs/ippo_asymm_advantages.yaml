@@ -8,6 +8,7 @@ ENV_KWARGS:
   random_obj_state: true
 
 TOTAL_TIMESTEPS: 5e5
+ACTOR_TYPE: mlp
 SEED: 12345
 LR: .0001
 NUM_ENVS: 8

@@ -244,6 +244,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                     reverse=True,
                     unroll=16,
                 )
+                
                 return advantages, advantages + traj_batch.value
 
             def _update_minbatch(train_state, batch_info):
@@ -267,7 +268,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                     value_losses = jnp.square(value - target_v)
                     value_losses_clipped = jnp.square(value_pred_clipped - target_v)
                     value_loss = (
-                        0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
+                        jnp.maximum(value_losses, value_losses_clipped).mean()
                     )
 
                     # Policy gradient loss
@@ -329,7 +330,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 done_0_reshaped = last_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"])
                 
                 # Get final value estimate for completed trajectory
-                _, last_val, _, last_hstate_0 = ego_policy.get_action_value_policy(
+                _, last_val, _, _ = ego_policy.get_action_value_policy(
                     params=train_state.params, 
                     obs=obs_0_reshaped,
                     done=done_0_reshaped,

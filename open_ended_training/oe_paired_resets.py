@@ -862,7 +862,8 @@ def train_regret_maximizing_partners(config, env,
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+            # checkpoint_interval = max(1, config["NUM_UPDATES"] // (config["NUM_CHECKPOINTS"] - 1)) # -1 because we store the final ckpt as the last ckpt
+            checkpoint_interval = max(1, config["NUM_UPDATES"] // (config["NUM_CHECKPOINTS"]))
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -885,6 +886,9 @@ def train_regret_maximizing_partners(config, env,
 
                 # Decide if we store a checkpoint
                 to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+                                          
+                # to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
+                #                           jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                 
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
@@ -1054,6 +1058,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
                                                  br_params=br_params, br_policy=br_policy,
                                                  partner_rng=partner_rng
                                                  )
+        
     if config["EGO_TEAMMATE"] == "final":
         train_partner_params = train_out["final_params_conf"]
 

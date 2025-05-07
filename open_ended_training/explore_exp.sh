@@ -2,16 +2,16 @@
 
 # Algorithm to run
 algo="oe_persistent"
-label="method-explore:pop-ckpts-1:cts-7M:2reg"
+label="method-explore:uniform:pop-final:1reg"
 partner_pop_size=1
 num_checkpoints=1
 num_seeds=1
 log_train_out=false
 log_eval_out=false
 regret_sp_weight=1.0
-timesteps_per_iter_partner=7e6 # 1.6e7
-conf_obj_type="sreg-xp_ret-sp_sreg-xsp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_ret-sp_sreg-xsp_ret-sxp
+conf_obj_type="sreg-xp_ret-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_ret-sp_sreg-xsp_ret-sxp
 ego_teammate="final" # choices: [final, all]
+sampling_strategy="uniform" # choices: plr, uniform
 
 # DEBUG COMMAND
 # CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=oe_paired_resets/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=debug logger.mode=offline algorithm.NUM_SEEDS=1
@@ -36,8 +36,8 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 # Tasks to run
 tasks=(
     "lbf"
-    # "overcooked/cramped_room"
-    # "overcooked/counter_circuit"
+    "overcooked/cramped_room"
+    "overcooked/counter_circuit"
     # "overcooked/forced_coord"
     # "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
@@ -64,8 +64,8 @@ for task in "${tasks[@]}"; do
         algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
         algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         algorithm.NUM_CHECKPOINTS="${num_checkpoints}" \
-        algorithm.TIMESTEPS_PER_ITER_PARTNER="${timesteps_per_iter_partner}" \
         algorithm.EGO_TEAMMATE="${ego_teammate}" \
+        algorithm.SAMPLING_STRATEGY="${sampling_strategy}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

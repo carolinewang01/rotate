@@ -1041,6 +1041,15 @@ def log_metrics(config, logger, outs, metric_names: tuple):
         metric_names: tuple, names of metrics to extract from training logs
     """
     teammate_outs, ego_outs = outs
+    # check if final ckpt is same as last 
+    # final_ckpt_leaf = jax.tree.leaves(teammate_outs["checkpoints_conf"])[0][0, 0, 0, -1]
+    # final_ckpt_mean = jnp.mean(final_ckpt_leaf)
+    # bias0_mean = jnp.mean(teammate_outs["checkpoints_conf"]['params']['Dense_0']['bias'])
+    # bias4_mean = jnp.mean(teammate_outs["checkpoints_conf"]['params']['Dense_4']['bias'])
+    # final_params_leaf = jax.tree.leaves(teammate_outs["final_params_conf"])[0][0, 0, 0]
+    # is_close= jnp.allclose(final_ckpt_leaf, final_params_leaf)
+    # import pdb; pdb.set_trace()
+
     teammate_metrics = teammate_outs["metrics"] # conf vs ego 
     ego_metrics = ego_outs["metrics"]
 
