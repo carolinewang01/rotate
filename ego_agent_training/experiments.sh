@@ -4,7 +4,7 @@
 algo="ppo_ego"
 config_name="ppo_ego"
 label="ego-vs-population"
-num_seeds=3
+num_seeds=2
 
 # Declare an associative array for partner paths
 declare -A partner_paths

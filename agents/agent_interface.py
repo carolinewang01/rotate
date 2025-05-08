@@ -291,8 +291,9 @@ class S5ActorCriticPolicy(AgentPolicy):
     
     def __init__(self, action_dim, obs_dim, 
                  d_model=16, ssm_size=16, 
-                 n_layers=2, blocks=1,
+                 ssm_n_layers=2, blocks=1,
                  fc_hidden_dim=64,
+                 fc_n_layers=2,
                  s5_activation="full_glu",
                  s5_do_norm=True,
                  s5_prenorm=True,
@@ -316,9 +317,10 @@ class S5ActorCriticPolicy(AgentPolicy):
         super().__init__(action_dim, obs_dim)
         self.d_model = d_model
         self.ssm_size = ssm_size
-        self.n_layers = n_layers
+        self.ssm_n_layers = ssm_n_layers
         self.blocks = blocks
         self.fc_hidden_dim = fc_hidden_dim
+        self.fc_n_layers = fc_n_layers
         self.s5_activation = s5_activation
         self.s5_do_norm = s5_do_norm
         self.s5_prenorm = s5_prenorm
@@ -348,9 +350,10 @@ class S5ActorCriticPolicy(AgentPolicy):
             action_dim,
             ssm_init_fn=self.ssm_init_fn,
             fc_hidden_dim=self.fc_hidden_dim,
+            fc_n_layers=self.fc_n_layers,
             ssm_hidden_dim=self.ssm_size,
             s5_d_model=self.d_model,
-            s5_n_layers=self.n_layers,
+            s5_n_layers=self.ssm_n_layers,
             s5_activation=self.s5_activation,
             s5_do_norm=self.s5_do_norm, 
             s5_prenorm=self.s5_prenorm,
@@ -378,7 +381,7 @@ class S5ActorCriticPolicy(AgentPolicy):
     
     def init_hstate(self, batch_size, aux_info=None):
         """Initialize hidden state for the S5 policy."""
-        return StackedEncoderModel.initialize_carry(batch_size, self.ssm_size // 2, self.n_layers)
+        return StackedEncoderModel.initialize_carry(batch_size, self.ssm_size // 2, self.ssm_n_layers)
     
     def init_params(self, rng):
         """Initialize parameters for the S5 policy."""
