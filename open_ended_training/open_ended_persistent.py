@@ -83,14 +83,9 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
         
     elif config["EGO_TEAMMATE"] == "all":
         n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-        flattened_ckpt_params = jax.tree.map(
+        all_conf_params = jax.tree.map(
             lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
             train_out["checkpoints_conf"]
-        )
-
-        all_conf_params = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), 
-                                    flattened_ckpt_params,
-                                    train_out["final_params_conf"]
         )
     
     # Add all checkpoints and final parameters of all partners to the buffer
@@ -169,13 +164,13 @@ def train_persistent(rng, env, algorithm_config):
         max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_OPEN_ENDED_ITERS"]
     elif algorithm_config["EGO_TEAMMATE"] == "all":
         max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
-                       (algorithm_config["NUM_CHECKPOINTS"] + 1) * \
+                       algorithm_config["NUM_CHECKPOINTS"] * \
                        algorithm_config["NUM_OPEN_ENDED_ITERS"]
     else:
         raise ValueError(f"Invalid EGO_TEAMMATE value: {algorithm_config['EGO_TEAMMATE']}")
 
     if algorithm_config["PRETRAIN_PPO"]:
-        max_pop_size += algorithm_config["PRETRAIN_ARGS"]["NUM_AGENTS"] * (algorithm_config["PRETRAIN_ARGS"]["NUM_CHECKPOINTS"] + 1)
+        max_pop_size += algorithm_config["PRETRAIN_ARGS"]["NUM_AGENTS"] * algorithm_config["PRETRAIN_ARGS"]["NUM_CHECKPOINTS"]
 
     # hack to initialize the partner population's conf policy class with the right intializer shape
     conf_policy2, init_conf_params2 = initialize_actor_with_double_critic(algorithm_config, env, init_conf_rng2)
@@ -191,16 +186,13 @@ def train_persistent(rng, env, algorithm_config):
     if algorithm_config["PRETRAIN_PPO"]:
         log.info("Pretraining IPPO partners...")
         pretrain_out = train_ippo_partners(algorithm_config, train_rng, env)
-        pretrain_final_params = pretrain_out["final_params"]
         pretrain_checkpoints = pretrain_out["checkpoints"]
         num_ckpts = algorithm_config["PRETRAIN_ARGS"]["NUM_CHECKPOINTS"] * algorithm_config["PRETRAIN_ARGS"]["NUM_AGENTS"]
         pretrain_checkpoints = jax.tree.map(lambda x: x.reshape((num_ckpts,) + x.shape[2:]), 
                                           pretrain_checkpoints)
 
         log.info("Done pretraining IPPO partners.")
-        pretrain_params_all = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), 
-                                          pretrain_checkpoints, pretrain_final_params)
-        population_buffer = add_partners_to_buffer(partner_population, population_buffer, pretrain_params_all)
+        population_buffer = add_partners_to_buffer(partner_population, population_buffer, pretrain_checkpoints)
 
     @jax.jit
     def open_ended_step_fn(carry, unused):
@@ -214,8 +206,10 @@ def train_persistent(rng, env, algorithm_config):
         xs=None,
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
-    # add pretrain out to the teammate out
-    outs[0]["pretrain_out"] = pretrain_out
+
+    if algorithm_config["PRETRAIN_PPO"]:
+        # add pretrain out to the teammate out
+        outs[0]["pretrain_out"] = pretrain_out
     return outs
 
 def run_persistent(config, wandb_logger):

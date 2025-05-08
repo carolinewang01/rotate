@@ -537,6 +537,16 @@ def train_regret_maximizing_partners(config, env,
                             total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
+                        # optimize per-state regret on ego and sp rollouts, return on sxp, and nothing on xsp
+                        elif config["CONF_OBJ_TYPE"] == "sreg-xp_sreg-sp_ret-sxp":
+                            xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
+                            sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
+
+                            total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
+                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
+                            total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
+
                         # optimize trajectory-level regret for all interaction types
                         elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
                             total_xp_objective = -gae_xp
@@ -862,8 +872,8 @@ def train_regret_maximizing_partners(config, env,
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            # checkpoint_interval = max(1, config["NUM_UPDATES"] // (config["NUM_CHECKPOINTS"] - 1)) # -1 because we store the final ckpt as the last ckpt
-            checkpoint_interval = max(1, config["NUM_UPDATES"] // (config["NUM_CHECKPOINTS"]))
+            checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
+            # checkpoint_interval = max(1, config["NUM_UPDATES"] // (config["NUM_CHECKPOINTS"]))
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -885,10 +895,9 @@ def train_regret_maximizing_partners(config, env,
                 rng, update_steps = new_update_runner_state[-2], new_update_runner_state[-1]
 
                 # Decide if we store a checkpoint
-                to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
-                                          
-                # to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
-                #                           jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
+                # to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)       
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
+                                          jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                 
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
@@ -1064,11 +1073,10 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
 
     elif config["EGO_TEAMMATE"] == "all":
         n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-        flattened_partner_ckpts = jax.tree.map(
+        train_partner_params = jax.tree.map(
             lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
             train_out["checkpoints_conf"]
         )
-        train_partner_params = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), flattened_partner_ckpts, train_out["final_params_conf"])
         
     # Train ego agent using train_ppo_ego_agent
     config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
@@ -1135,7 +1143,7 @@ def train_paired(rng, env, algorithm_config):
 
     # Create partner population
     if algorithm_config["EGO_TEAMMATE"] == "all":
-        pop_size = algorithm_config["PARTNER_POP_SIZE"] * (algorithm_config["NUM_CHECKPOINTS"] + 1)
+        pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"]
     elif algorithm_config["EGO_TEAMMATE"] == "final":
         pop_size = algorithm_config["PARTNER_POP_SIZE"]
     else:

@@ -782,7 +782,7 @@ def train_lagrange_partners(config, env,
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+            checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -817,7 +817,9 @@ def train_lagrange_partners(config, env,
                 ) = new_runner_state
 
                 # Decide if we store a checkpoint
-                to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+                # to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
+                                          jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                 
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
@@ -984,11 +986,10 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
 
     elif config["EGO_TEAMMATE"] == "all":
         n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-        flattened_partner_ckpts = jax.tree.map(
+        train_partner_params = jax.tree.map(
             lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
             train_out["checkpoints_conf"]
         )
-        train_partner_params = jax.tree.map(lambda x, y: jnp.concatenate([x, y], axis=0), flattened_partner_ckpts, train_out["final_params_conf"])
     
     # Train ego agent using train_ppo_ego_agent
     config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]

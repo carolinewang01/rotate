@@ -635,7 +635,7 @@ def train_brdiv_partners(train_rng, env, config):
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+            checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -663,7 +663,9 @@ def train_brdiv_partners(train_rng, env, config):
                 ) = new_runner_state
 
                 # Decide if we store a checkpoint
-                to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+                # to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
+                                          jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                 max_eval_episodes = config["NUM_EVAL_EPISODES"]
                 
                 def store_and_eval_ckpt(args):
