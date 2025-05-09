@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_paired_resets" # oe_paired_resets
-label="method-explore:bengret-s5-new"
-partner_pop_size=1
-num_checkpoints=3
+algo="oe_persistent"
+label="method-explore:1reg:rsp1" # method-explore
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp, sreg-xp_sreg-sp_-ret-xsp_ret-sxp
-ego_teammate="all" # choices: [final, all]
+conf_obj_type="sreg-xp_ret-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp
+ego_teammate="final"
+partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
+regret_sp_weight=1.0
 # pretrain_ppo=false
 
 # DEBUG COMMAND
-# CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=oe_paired_resets/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=debug logger.mode=offline algorithm.NUM_SEEDS=1
+# CUDA_VISIBLE_DEVICES=1 python open_ended_training/run.py algorithm=oe_persistent/lbf task=lbf algorithm.NUM_OPEN_ENDED_ITERS=1 algorithm.TIMESTEPS_PER_ITER_PARTNER=5e4 algorithm.TIMESTEPS_PER_ITER_EGO=5e4 label=debug logger.mode=offline algorithm.NUM_SEEDS=1 run_heldout_eval=false
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}
@@ -35,12 +35,12 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    # "lbf"
-    # "overcooked/cramped_room"
-    # "overcooked/counter_circuit"
-    "overcooked/forced_coord"
+    "lbf"
+    "overcooked/cramped_room"
+    "overcooked/counter_circuit"
+    # "overcooked/forced_coord"
     "overcooked/asymm_advantages"
-    # "overcooked/coord_ring"
+    "overcooked/coord_ring"
 )
 
 # Function to log messages
@@ -60,10 +60,10 @@ for task in "${tasks[@]}"; do
     
     if python open_ended_training/run.py algorithm="${algo}/${task}" \
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
-        algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
         algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
-        algorithm.NUM_CHECKPOINTS="${num_checkpoints}" \
         algorithm.EGO_TEAMMATE="${ego_teammate}" \
+        algorithm.PARTNER_ALGO="${partner_algo}" \
+        algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then

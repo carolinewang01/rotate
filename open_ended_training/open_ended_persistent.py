@@ -13,7 +13,8 @@ from envs import make_env
 from envs.log_wrapper import LogWrapper
 
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
-from open_ended_training.oe_paired_resets import train_regret_maximizing_partners as train_regret_maximizing_partners, log_metrics
+from open_ended_training.oe_paired_resets import train_regret_maximizing_partners as train_regret_resets_partners, log_metrics as log_regret_resets_metrics
+from open_ended_training.oe_paired_comedi import train_regret_maximizing_partners as train_oe_comedi_partners, log_metrics as log_oe_comedi_metrics
 # from open_ended_training.open_ended_lagrange import train_lagrange_partners as train_regret_maximizing_partners, log_metrics, linear_schedule_regret
 from ppo.ippo import make_train as make_ppo_train
 
@@ -72,11 +73,18 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
         br_params = prev_br_params
     
     # Train partner agents with ego_policy
-    train_out = train_regret_maximizing_partners(config, env,
-                                                ego_params=prev_ego_params, ego_policy=ego_policy,
-                                                conf_params=conf_params, conf_policy=conf_policy, 
-                                                br_params=br_params, br_policy=br_policy, 
-                                                partner_rng=partner_rng)
+    if config["PARTNER_ALGO"] == "oe_paired_resets":
+        train_partners_fn = train_regret_resets_partners
+    elif config["PARTNER_ALGO"] == "oe_paired_comedi":
+        train_partners_fn = train_oe_comedi_partners
+    else:
+        raise ValueError(f"Invalid PARTNER_ALGO value: {config['PARTNER_ALGO']}")
+
+    train_out = train_partners_fn(config, env,
+                                  ego_params=prev_ego_params, ego_policy=ego_policy,
+                                  conf_params=conf_params, conf_policy=conf_policy, 
+                                  br_params=br_params, br_policy=br_policy, 
+                                  partner_rng=partner_rng)
         
     if config["EGO_TEAMMATE"] == "final":
         all_conf_params = train_out["final_params_conf"]
@@ -246,6 +254,12 @@ def run_persistent(config, wandb_logger):
     # Log metrics (reusing the original PAIRED logging function)
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
 
+    if algorithm_config["PARTNER_ALGO"] == "oe_paired_resets":
+        log_metrics = log_regret_resets_metrics
+    elif algorithm_config["PARTNER_ALGO"] == "oe_paired_comedi":
+        log_metrics = log_oe_comedi_metrics
+    else:
+        raise ValueError(f"Invalid PARTNER_ALGO value: {algorithm_config['PARTNER_ALGO']}")
     log_metrics(config, wandb_logger, outs, metric_names)
 
     # Prepare return values for heldout evaluation

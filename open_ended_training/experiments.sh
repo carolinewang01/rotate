@@ -1,8 +1,10 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_paired_comedi"
-label="paper-v0"
+algo="oe_persistent"
+partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
+conf_obj_type="traj_level_regret"
+label="paper-v0:paired-treg+pop"
 num_seeds=3
 
 # Create log directory if it doesn't exist
@@ -14,7 +16,7 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Available algorithms (commented out for reference)
 # algorithms=(
-#     "open_ended_lagrange"
+#     "oe_persistent"
 #     "open_ended_minimax"
 #     "open_ended_paired"
 #     "paired_ued"
@@ -27,7 +29,7 @@ tasks=(
     "overcooked/coord_ring"
     "overcooked/counter_circuit"
     "overcooked/cramped_room"
-    "overcooked/forced_coord"
+    # "overcooked/forced_coord"
     "lbf"
 )
 
@@ -46,7 +48,11 @@ failure_count=0
 for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
-    if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" 2>> "${log_file}"; then
+    if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" \
+        algorithm.PARTNER_ALGO="${partner_algo}" \
+        algorithm.NUM_SEEDS="${num_seeds}" \
+        algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
+        2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
     else

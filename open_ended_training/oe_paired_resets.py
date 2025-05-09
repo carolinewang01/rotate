@@ -524,6 +524,7 @@ def train_regret_maximizing_partners(config, env,
                             total_sxp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * target_v_sxp - traj_batch_sxp.other_value
                         
                         # # optimize per-state regret for both types of ego interactions, return for both types of br interactions
+                        # THIS DOESN'T WORK BECAUSE WE DON'T HAVE GOOD VALUE ESTIMATES FOR VBR ON XSP
                         # elif config["CONF_OBJ_TYPE"] == "sreg-xp_ret-sp_sreg-xsp_ret-sxp":
                         #     xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
                         #     xsp_return_to_go_xsp_data = value_xp_on_xsp_data + gae_xsp
@@ -553,14 +554,15 @@ def train_regret_maximizing_partners(config, env,
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize per-state regret on ego and sp rollouts, return on sxp, and nothing on xsp
-                        elif config["CONF_OBJ_TYPE"] == "sreg-xp_sreg-sp_-ret-xsp_ret-sxp":
-                            xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
-                            sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
+                        # THIS DOESN'T WORK EITHER
+                        # elif config["CONF_OBJ_TYPE"] == "sreg-xp_sreg-sp_-ret-xsp_ret-sxp":
+                        #     xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
+                        #     sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
 
-                            total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
-                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
-                            total_xsp_objective = -gae_xsp
-                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
+                        #     total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
+                        #     total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
+                        #     total_xsp_objective = -gae_xsp
+                        #     total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize trajectory-level regret for all interaction types
                         elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
@@ -1239,14 +1241,6 @@ def log_metrics(config, logger, outs, metric_names: tuple):
         metric_names: tuple, names of metrics to extract from training logs
     """
     teammate_outs, ego_outs = outs
-    # check if final ckpt is same as last 
-    # final_ckpt_leaf = jax.tree.leaves(teammate_outs["checkpoints_conf"])[0][0, 0, 0, -1]
-    # final_ckpt_mean = jnp.mean(final_ckpt_leaf)
-    # bias0_mean = jnp.mean(teammate_outs["checkpoints_conf"]['params']['Dense_0']['bias'])
-    # bias4_mean = jnp.mean(teammate_outs["checkpoints_conf"]['params']['Dense_4']['bias'])
-    # final_params_leaf = jax.tree.leaves(teammate_outs["final_params_conf"])[0][0, 0, 0]
-    # is_close= jnp.allclose(final_ckpt_leaf, final_params_leaf)
-    # import pdb; pdb.set_trace()
 
     teammate_metrics = teammate_outs["metrics"] # conf vs ego 
     ego_metrics = ego_outs["metrics"]

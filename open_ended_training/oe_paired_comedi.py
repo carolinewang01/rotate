@@ -526,9 +526,9 @@ def train_regret_maximizing_partners(config, env,
                         entropy_sp = jnp.mean(pi_sp.entropy())
                         entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
-                        xp_pg_weight = - config["XP_WEIGHT"] # negate to minimize the ego agent's PG objective
+                        xp_pg_weight = - config["COMEDI_ALPHA"] # negate to minimize the ego agent's PG objective
                         sp_pg_weight = 1.0 
-                        mp2_pg_weight = config["MP_WEIGHT"]
+                        mp2_pg_weight = config["COMEDI_BETA"]
 
                         xp_loss = xp_pg_weight * pg_loss_xp + config["VF_COEF"] * value_loss_xp - config["ENT_COEF"] * entropy_xp
                         sp_loss = sp_pg_weight * pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
@@ -588,7 +588,7 @@ def train_regret_maximizing_partners(config, env,
                         entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
                         sp_weight = 1.0
-                        mp2_weight = config["MP_WEIGHT"]
+                        mp2_weight = config["COMEDI_BETA"]
                         sp_loss = pg_loss_sp + config["VF_COEF"] * value_loss_sp - config["ENT_COEF"] * entropy_sp
                         mp2_loss = pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
 
@@ -1177,7 +1177,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     num_partner_updates = teammate_metrics["returned_episode_returns"].shape[3]
 
     ### Process/extract PAIRED-specific losses    
-    # TODO: add mp2 losses for br and conf
+    # WARNING: the losses for the MP2 rollouts are not included in the metrics.
     # Conf vs ego, conf vs br, br losses
     # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_updates, num_eval_episodes, num_agents_per_env)
     teammate_mean_dims = (0, 2, 4, 5)
