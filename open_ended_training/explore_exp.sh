@@ -2,15 +2,14 @@
 
 # Algorithm to run
 algo="oe_paired_resets" # oe_paired_resets
-label="method-explore:bengret:s5-new"
+label="method-explore:bengret-s5-new"
 partner_pop_size=1
-num_checkpoints=5
+num_checkpoints=3
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp
+conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp, sreg-xp_sreg-sp_-ret-xsp_ret-sxp
 ego_teammate="all" # choices: [final, all]
-# sampling_strategy="uniform" # choices: plr, uniform
 # pretrain_ppo=false
 
 # DEBUG COMMAND
@@ -36,11 +35,11 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    "lbf"
+    # "lbf"
     # "overcooked/cramped_room"
     # "overcooked/counter_circuit"
-    # "overcooked/forced_coord"
-    # "overcooked/asymm_advantages"
+    "overcooked/forced_coord"
+    "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
 )
 

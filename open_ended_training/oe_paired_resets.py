@@ -552,6 +552,16 @@ def train_regret_maximizing_partners(config, env,
                             total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
+                        # optimize per-state regret on ego and sp rollouts, return on sxp, and nothing on xsp
+                        elif config["CONF_OBJ_TYPE"] == "sreg-xp_sreg-sp_-ret-xsp_ret-sxp":
+                            xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
+                            sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
+
+                            total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
+                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
+                            total_xsp_objective = -gae_xsp
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
+
                         # optimize trajectory-level regret for all interaction types
                         elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
                             total_xp_objective = -gae_xp

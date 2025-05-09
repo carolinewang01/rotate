@@ -291,17 +291,24 @@ def train_ppo_ego_agent(config, env, train_rng,
                 (loss_val, aux_vals), grads = grad_fn(
                     train_state.params, init_hstate_0, traj_batch, advantages, returns)
                 train_state = train_state.apply_gradients(grads=grads)
-                return train_state, (loss_val, aux_vals)
+                
+                # compute average grad norm
+                grad_l2_norms = jax.tree.map(lambda g: jnp.linalg.norm(g.astype(jnp.float32)), grads)
+                sum_of_grad_norms = jax.tree.reduce(lambda x, y: x + y, grad_l2_norms)
+                n_elements = len(jax.tree.leaves(grad_l2_norms))
+                avg_grad_norm = sum_of_grad_norms / n_elements
+                
+                return train_state, (loss_val, aux_vals, avg_grad_norm)
 
             def _update_epoch(update_state, unused):
                 train_state, init_hstate_0, traj_batch, advantages, targets, rng = update_state
                 rng, perm_rng = jax.random.split(rng)
                 minibatches = _create_minibatches(traj_batch, advantages, targets, init_hstate_0, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng)
-                train_state, total_loss = jax.lax.scan(
+                train_state, losses_and_grads = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (train_state, init_hstate_0, traj_batch, advantages, targets, rng)
-                return update_state, total_loss
+                return update_state, losses_and_grads
 
             def _update_step(update_runner_state, unused):
                 """
@@ -350,10 +357,10 @@ def train_ppo_ego_agent(config, env, train_rng,
                     targets,
                     rng
                 )
-                update_state, all_losses = jax.lax.scan(
+                update_state, losses_and_grads = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state = update_state[0]
-
+                _, loss_terms, avg_grad_norm = losses_and_grads
                 # Resample partner for each env for next rollout
                 # Use the AgentPopulation's sample_agent_indices method
                 rng, p_rng = jax.random.split(rng)
@@ -370,9 +377,10 @@ def train_ppo_ego_agent(config, env, train_rng,
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
-                metric["actor_loss"] = all_losses[1][1]
-                metric["value_loss"] = all_losses[1][0]
-                metric["entropy_loss"] = all_losses[1][2]
+                metric["actor_loss"] = loss_terms[1]
+                metric["value_loss"] = loss_terms[0]
+                metric["entropy_loss"] = loss_terms[2]
+                metric["avg_grad_norm"] = avg_grad_norm
                 new_runner_state = (train_state, env_state, obs, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
@@ -575,7 +583,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     all_ego_value_losses = np.asarray(train_metrics["value_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
     all_ego_actor_losses = np.asarray(train_metrics["actor_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
     all_ego_entropy_losses = np.asarray(train_metrics["entropy_loss"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
-
+    all_ego_grad_norms = np.asarray(train_metrics["avg_grad_norm"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_minibatches)
     # Process eval return metrics - average across ego seeds, eval episodes,  training partners 
     # and num_agents per game for each checkpoint
     all_ego_returns = np.asarray(train_metrics["eval_ep_last_info"]["returned_episode_returns"]) # shape (n_ego_train_seeds, num_updates, num_partners, num_eval_episodes, nuM_agents_per_game)
@@ -586,6 +594,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     average_ego_value_losses = np.mean(all_ego_value_losses, axis=(0, 2, 3))
     average_ego_actor_losses = np.mean(all_ego_actor_losses, axis=(0, 2, 3))
     average_ego_entropy_losses = np.mean(all_ego_entropy_losses, axis=(0, 2, 3))
+    average_ego_grad_norms = np.mean(all_ego_grad_norms, axis=(0, 2, 3))
     
     # Log metrics for each update step
     num_updates = len(average_ego_value_losses)
@@ -599,7 +608,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
         logger.log_item("Train/EgoValueLoss", average_ego_value_losses[step], train_step=step, commit=True)
         logger.log_item("Train/EgoActorLoss", average_ego_actor_losses[step], train_step=step, commit=True)
         logger.log_item("Train/EgoEntropyLoss", average_ego_entropy_losses[step], train_step=step, commit=True)
-        
+        logger.log_item("Train/EgoGradNorm", average_ego_grad_norms[step], train_step=step, commit=True)
         logger.commit()
     
     # Saving artifacts
