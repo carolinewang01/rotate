@@ -2,13 +2,12 @@
 
 # Algorithm to run
 algo="oe_paired_resets" # oe_paired_resets
-label="method-explore:bengret:ckpts5"
+label="method-explore:bengret:s5-new"
 partner_pop_size=1
 num_checkpoints=5
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-regret_sp_weight=1.0
 conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_ret-sp_sreg-xsp_ret-sxp, sreg-xp_sreg-sp_ret-sxp
 ego_teammate="all" # choices: [final, all]
 # sampling_strategy="uniform" # choices: plr, uniform
@@ -38,11 +37,11 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 # Tasks to run
 tasks=(
     "lbf"
-    "overcooked/cramped_room"
-    "overcooked/counter_circuit"
-    "overcooked/forced_coord"
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
+    # "overcooked/cramped_room"
+    # "overcooked/counter_circuit"
+    # "overcooked/forced_coord"
+    # "overcooked/asymm_advantages"
+    # "overcooked/coord_ring"
 )
 
 # Function to log messages
@@ -63,7 +62,6 @@ for task in "${tasks[@]}"; do
     if python open_ended_training/run.py algorithm="${algo}/${task}" \
         task="${task}" label="${label}" algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.PARTNER_POP_SIZE="${partner_pop_size}" \
-        algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
         algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         algorithm.NUM_CHECKPOINTS="${num_checkpoints}" \
         algorithm.EGO_TEAMMATE="${ego_teammate}" \

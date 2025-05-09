@@ -9,7 +9,7 @@ PARTNER_POP_SIZE: 1 # true pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS per it
 
 SP_WEIGHT: 1.0 # weight on conf-br (SP) loss
 REGRET_SP_WEIGHT: 1.0 # weight on the SP term in the perstep regret loss
-CONF_OBJ_TYPE: sreg-xp_ret-sp_sreg-xsp_ret-sxp # choices: per_state_regret, per_state_regret_target, traj_level_regret, sreg-xp_ret-sp_sreg-xsp_ret-sxp, sreg-xp_ret-sp_ret-sxp
+CONF_OBJ_TYPE: sreg-xp_sreg-sp_ret-sxp # choices: per_state_regret, per_state_regret_target, traj_level_regret, sreg-xp_sreg-sp_ret-sxp, sreg-xp_ret-sp_ret-sxp
 
 REINIT_CONF: true # whether to reinitialize the confederate policy each iteration of open-ended training
 REINIT_BR_TO_BR: true # whether to reinitialize the br policy each iteration of open-ended training

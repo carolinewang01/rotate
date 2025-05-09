@@ -9,6 +9,7 @@ import numpy as np
 import optax
 from flax.training.train_state import TrainState
 from functools import partial
+import copy
 
 from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
 from agents.population_interface import AgentPopulation
@@ -949,7 +950,7 @@ def linear_schedule_regret(iter_idx, config):
     config["UPPER_REGRET_THRESHOLD"] = config["UPPER_REGRET_THRESHOLD_START"] + (config["UPPER_REGRET_THRESHOLD_END"] - config["UPPER_REGRET_THRESHOLD_START"]) * frac
     return config
 
-def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, config, env):
+def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, oe_config, ego_config, env):
     '''
     Train the ego agent against the regret-maximizing partners. 
     Note: Currently training fcp agent against **all** adversarial partner checkpoints
@@ -958,43 +959,42 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     prev_ego_params, prev_conf_params, prev_br_params, rng, oel_iter_idx = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
     
-    config = linear_schedule_regret(oel_iter_idx, config) # update regret thresholds
+    oe_config = linear_schedule_regret(oel_iter_idx, oe_config) # update regret thresholds
     
-    if config["REINIT_CONF"]:
-        init_rngs = jax.random.split(conf_init_rng, config["PARTNER_POP_SIZE"])
+    if oe_config["REINIT_CONF"]:
+        init_rngs = jax.random.split(conf_init_rng, oe_config["PARTNER_POP_SIZE"])
         conf_params = jax.vmap(conf_policy.init_params)(init_rngs)
     else:
         conf_params = prev_conf_params
 
-    if config["REINIT_BR_TO_BR"]:
-        init_rngs = jax.random.split(br_init_rng, config["PARTNER_POP_SIZE"])
+    if oe_config["REINIT_BR_TO_BR"]:
+        init_rngs = jax.random.split(br_init_rng, oe_config["PARTNER_POP_SIZE"])
         br_params = jax.vmap(br_policy.init_params)(init_rngs)
-    elif config["REINIT_BR_TO_EGO"]:
-        br_params = jax.tree.map(lambda x: x[jnp.newaxis, ...].repeat(config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
+    elif oe_config["REINIT_BR_TO_EGO"]:
+        br_params = jax.tree.map(lambda x: x[jnp.newaxis, ...].repeat(oe_config["PARTNER_POP_SIZE"], axis=0), prev_ego_params)
     else:
         br_params = prev_br_params
     
     # Train partner agents with ego_policy
-    train_out = train_lagrange_partners(config, env,
+    train_out = train_lagrange_partners(oe_config, env,
                                         ego_params=prev_ego_params, ego_policy=ego_policy,
                                         conf_params=conf_params, conf_policy=conf_policy, 
                                         br_params=br_params, br_policy=br_policy, 
                                         partner_rng=partner_rng)
     
-    if config["EGO_TEAMMATE"] == "final":
+    if oe_config["EGO_TEAMMATE"] == "final":
         train_partner_params = train_out["final_params_conf"]
 
-    elif config["EGO_TEAMMATE"] == "all":
-        n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
+    elif oe_config["EGO_TEAMMATE"] == "all":
+        n_ckpts = oe_config["PARTNER_POP_SIZE"] * oe_config["NUM_CHECKPOINTS"]
         train_partner_params = jax.tree.map(
             lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
             train_out["checkpoints_conf"]
         )
     
     # Train ego agent using train_ppo_ego_agent
-    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
-        config=config,
+        config=ego_config,
         env=env,
         train_rng=ego_rng,
         ego_policy=ego_policy,
@@ -1014,7 +1014,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     carry = (updated_ego_parameters, updated_conf_parameters, updated_br_parameters, rng, oel_iter_idx + 1)
     return carry, (train_out, ego_out)
 
-def train_lagrange(rng, env, algorithm_config):
+def train_lagrange(rng, env, algorithm_config, ego_config):
     rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     # Initialize ego agent
@@ -1070,7 +1070,7 @@ def train_lagrange(rng, env, algorithm_config):
     @jax.jit
     def open_ended_step_fn(carry, unused):
         return open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
-                                        partner_population, algorithm_config, env)
+                                        partner_population, algorithm_config, ego_config, env)
     
     init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng, 0)
     final_carry, outs = jax.lax.scan(
@@ -1092,13 +1092,19 @@ def run_lagrange(config, wandb_logger):
     rng, init_ego_rng = jax.random.split(rng)
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
     
+    # initialize ego config
+    ego_config = copy.deepcopy(algorithm_config)
+    ego_config["TOTAL_TIMESTEPS"] = algorithm_config["TIMESTEPS_PER_ITER_EGO"]
+    EGO_ARGS = algorithm_config.get("EGO_ARGS", {})
+    ego_config.update(EGO_ARGS)
+    
     log.info("Starting open-ended Lagrange training...")
     start_time = time.time()
 
     DEBUG = False
     with jax.disable_jit(DEBUG):
         train_fn = jax.jit(jax.vmap(partial(train_lagrange, 
-                env=env, algorithm_config=algorithm_config
+                env=env, algorithm_config=algorithm_config, ego_config=ego_config
                 )
             )
         )
@@ -1182,7 +1188,8 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_entropy_losses = np.asarray(ego_metrics["entropy_loss"]).mean(axis=(0, 2, 4, 5))
-    
+    avg_ego_grad_norms = np.asarray(ego_metrics["avg_grad_norm"]).mean(axis=(0, 2, 4, 5))
+
     for iter_idx in range(num_open_ended_iters):        
         # Log all partner metrics
         for step in range(num_partner_updates):
@@ -1235,7 +1242,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             logger.log_item("Losses/EgoValueLoss", avg_ego_value_losses[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/EgoActorLoss", avg_ego_actor_losses[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/EgoEntropyLoss", avg_ego_entropy_losses[iter_idx][step], train_step=global_step)
-            
+            logger.log_item("Losses/EgoGradNorm", avg_ego_grad_norms[iter_idx][step], train_step=global_step)
     logger.commit()
 
     # Saving artifacts

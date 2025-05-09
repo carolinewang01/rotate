@@ -5,7 +5,6 @@ from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from common.plot_utils import get_metric_names
 from common.wandb_visualizations import Logger
 from open_ended_minimax import run_minimax
-from open_ended_paired import run_paired
 from oe_paired_resets import run_paired as run_paired_resets
 from oe_paired_comedi import run_paired as run_paired_comedi
 from open_ended_training.open_ended_persistent import run_persistent
@@ -20,8 +19,6 @@ def run_training(cfg):
 
     if cfg.algorithm["ALG"] == "open_ended_minimax":
         ego_policy, final_ego_params, init_ego_params = run_minimax(cfg, wandb_logger)
-    elif cfg.algorithm["ALG"] == "open_ended_paired":
-        ego_policy, final_ego_params, init_ego_params = run_paired(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "oe_persistent":
         ego_policy, final_ego_params, init_ego_params = run_persistent(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "oe_paired_resets":

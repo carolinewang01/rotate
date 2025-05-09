@@ -15,6 +15,13 @@ LR: 1e-3
 NUM_MINIBATCHES: 8
 CLIP_EPS: 0.1
 ENT_COEF: 0.05
+ANNEAL_LR: false
+EGO_ARGS:
+  LR: 5e-5
+  ENT_COEF: .001
+  CLIP_EPS: 0.1
+  ANNEAL_LR: false
+  UPDATE_EPOCHS: 10
 PRETRAIN_ARGS:
   TOTAL_TIMESTEPS: 3e6 # timesteps to split between IPPO partners
   NUM_AGENTS: 3 # number of IPPO partners to pretrain

@@ -4,6 +4,7 @@ import time
 import logging
 from functools import partial
 from typing import NamedTuple
+import copy # Added import
 
 import hydra
 import jax
@@ -987,7 +988,7 @@ def train_regret_maximizing_partners(config, env,
     out = train_fn(rngs, conf_params, br_params)
     return out
 
-def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, config, env):
+def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, config, ego_config, env):
     '''
     Train the ego agent against the regret-maximizing partners. 
     Note: Currently training fcp agent against **all** adversarial partner checkpoints
@@ -1027,9 +1028,8 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
         )
     
     # Train ego agent using train_ppo_ego_agent
-    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent(
-        config=config,
+        config=ego_config,
         env=env,
         train_rng=ego_rng,
         ego_policy=ego_policy,
@@ -1050,7 +1050,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     return carry, (train_out, ego_out)
 
 
-def train_paired(rng, env, algorithm_config):
+def train_paired(rng, env, algorithm_config, ego_config): # Added ego_config
     rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
@@ -1105,7 +1105,7 @@ def train_paired(rng, env, algorithm_config):
     @jax.jit
     def open_ended_step_fn(carry, unused):
         return open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
-                                        partner_population, algorithm_config, env)
+                                        partner_population, algorithm_config, ego_config, env)
     
     init_carry = (init_ego_params, init_conf_params, init_br_params, train_rng)
     final_carry, outs = jax.lax.scan(
@@ -1127,6 +1127,11 @@ def run_paired(config, wandb_logger):
     rng, init_ego_rng = jax.random.split(rng)
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
 
+    # initialize ego config
+    ego_config = copy.deepcopy(algorithm_config)
+    ego_config["TOTAL_TIMESTEPS"] = algorithm_config["TIMESTEPS_PER_ITER_EGO"]
+    EGO_ARGS = algorithm_config.get("EGO_ARGS", {})
+    ego_config.update(EGO_ARGS)
 
     log.info("Starting open-ended PAIRED (CoMeDi) training...")
     start_time = time.time()
@@ -1134,7 +1139,7 @@ def run_paired(config, wandb_logger):
     DEBUG = False
     with jax.disable_jit(DEBUG):
         train_fn = jax.jit(jax.vmap(partial(train_paired, 
-                env=env, algorithm_config=algorithm_config
+                env=env, algorithm_config=algorithm_config, ego_config=ego_config # Pass ego_config
                 )
             )
         )
@@ -1204,7 +1209,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     avg_ego_value_losses = np.asarray(ego_metrics["value_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_actor_losses = np.asarray(ego_metrics["actor_loss"]).mean(axis=(0, 2, 4, 5))
     avg_ego_entropy_losses = np.asarray(ego_metrics["entropy_loss"]).mean(axis=(0, 2, 4, 5))
-    
+    avg_ego_grad_norms = np.asarray(ego_metrics["avg_grad_norm"]).mean(axis=(0, 2, 4, 5))
     # extract teammate-vs-ego stats 
     teammate_stats = get_stats(teammate_metrics, metric_names) # shape (num_seeds, num_open_ended_iters, num_partner_seeds, num_partner_updates, 2)
     teammate_stat_means = jax.tree.map(lambda x: np.mean(x, axis=(0, 2))[..., 0], teammate_stats) # shape (num_open_ended_iters, num_partner_updates)
@@ -1260,7 +1265,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             logger.log_item("Losses/EgoValueLoss", avg_ego_value_losses[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/EgoActorLoss", avg_ego_actor_losses[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/EgoEntropyLoss", avg_ego_entropy_losses[iter_idx][step], train_step=global_step)
-            
+            logger.log_item("Losses/EgoGradNorm", avg_ego_grad_norms[iter_idx][step], train_step=global_step)
     logger.commit()
 
     # Saving artifacts

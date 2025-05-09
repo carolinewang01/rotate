@@ -1,6 +1,7 @@
 import time
 import logging
 from functools import partial
+import copy
 
 import jax
 import jax.numpy as jnp
@@ -12,7 +13,6 @@ from envs import make_env
 from envs.log_wrapper import LogWrapper
 
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
-# from open_ended_training.open_ended_paired import train_regret_maximizing_partners, log_metrics
 from open_ended_training.oe_paired_resets import train_regret_maximizing_partners as train_regret_maximizing_partners, log_metrics
 # from open_ended_training.open_ended_lagrange import train_lagrange_partners as train_regret_maximizing_partners, log_metrics, linear_schedule_regret
 from ppo.ippo import make_train as make_ppo_train
@@ -45,7 +45,7 @@ def linear_schedule_regret(iter_idx, config):
     return config
 
 def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
-                                        partner_population, config, env):
+                                        partner_population, config, ego_config, env):
     '''
     Train the ego agent against a growing population of regret-maximizing partners.
     Unlike the original implementation, the partner population persists across iterations.
@@ -93,9 +93,8 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
 
     # Train ego agent using the population buffer
     # Sample agents from buffer for training
-    config["TOTAL_TIMESTEPS"] = config["TIMESTEPS_PER_ITER_EGO"]
     ego_out = train_ppo_ego_agent_with_buffer(
-        config=config,
+        config=ego_config,
         env=env,
         train_rng=ego_rng,
         ego_policy=ego_policy,
@@ -117,7 +116,7 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
     return carry, (train_out, ego_out)
 
 
-def train_persistent(rng, env, algorithm_config):
+def train_persistent(rng, env, algorithm_config, ego_config):
     rng, init_ego_rng, init_conf_rng1, init_conf_rng2, init_br_rng, train_rng = jax.random.split(rng, 6)
     
     # Initialize ego agent
@@ -197,7 +196,7 @@ def train_persistent(rng, env, algorithm_config):
     @jax.jit
     def open_ended_step_fn(carry, unused):
         return persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
-                                                 partner_population, algorithm_config, env)
+                                                 partner_population, algorithm_config, ego_config, env)
     
     init_carry = (init_ego_params, init_conf_params, init_br_params, population_buffer, train_rng, 0)
     final_carry, outs = jax.lax.scan(
@@ -223,13 +222,19 @@ def run_persistent(config, wandb_logger):
     rng, init_ego_rng = jax.random.split(rng)
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
 
+    # initialize ego config
+    ego_config = copy.deepcopy(algorithm_config)
+    ego_config["TOTAL_TIMESTEPS"] = algorithm_config["TIMESTEPS_PER_ITER_EGO"]
+    EGO_ARGS = algorithm_config.get("EGO_ARGS", {})
+    ego_config.update(EGO_ARGS)
+
     log.info("Starting persistent open-ended PAIRED training...")
     start_time = time.time()
 
     DEBUG = False
     with jax.disable_jit(DEBUG):
         train_fn = jax.jit(jax.vmap(partial(train_persistent, 
-                env=env, algorithm_config=algorithm_config, 
+                env=env, algorithm_config=algorithm_config, ego_config=ego_config
                 )
             )
         )

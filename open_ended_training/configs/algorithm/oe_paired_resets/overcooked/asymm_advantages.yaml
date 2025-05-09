@@ -6,7 +6,14 @@ TIMESTEPS_PER_ITER_PARTNER: 6e6 # per iter of open-ended training, divided betwe
 TIMESTEPS_PER_ITER_EGO: 2e6
 NUM_OPEN_ENDED_ITERS: 30
 REGRET_SP_WEIGHT: 2.0 # weight on the SP term in the perstep regret loss
-LR: .0001
+LR: 1e-4
 NUM_MINIBATCHES: 8
 CLIP_EPS: 0.3
 ENT_COEF: 0.01
+ANNEAL_LR: false
+EGO_ARGS:
+  LR: 5e-5
+  ENT_COEF: .001
+  CLIP_EPS: 0.1
+  ANNEAL_LR: false
+  UPDATE_EPOCHS: 10

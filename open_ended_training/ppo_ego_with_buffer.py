@@ -294,17 +294,24 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 (loss_val, aux_vals), grads = grad_fn(
                     train_state.params, init_hstate_0, traj_batch, advantages, returns)
                 train_state = train_state.apply_gradients(grads=grads)
-                return train_state, (loss_val, aux_vals)
+
+                # compute average grad norm
+                grad_l2_norms = jax.tree.map(lambda g: jnp.linalg.norm(g.astype(jnp.float32)), grads)
+                sum_of_grad_norms = jax.tree.reduce(lambda x, y: x + y, grad_l2_norms)
+                n_elements = len(jax.tree.leaves(grad_l2_norms))
+                avg_grad_norm = sum_of_grad_norms / n_elements
+                
+                return train_state, (loss_val, aux_vals, avg_grad_norm)
 
             def _update_epoch(update_state, unused):
                 train_state, init_hstate_0, traj_batch, advantages, targets, rng = update_state
                 rng, perm_rng = jax.random.split(rng)
                 minibatches = _create_minibatches(traj_batch, advantages, targets, init_hstate_0, config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng)
-                train_state, total_loss = jax.lax.scan(
+                train_state, losses_and_grads = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )
                 update_state = (train_state, init_hstate_0, traj_batch, advantages, targets, rng)
-                return update_state, total_loss
+                return update_state, losses_and_grads
 
             def _update_step(update_runner_state, unused):
                 """
@@ -353,9 +360,10 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     targets,
                     rng
                 )
-                update_state, all_losses = jax.lax.scan(
+                update_state, losses_and_grads = jax.lax.scan(
                     _update_epoch, update_state, None, config["UPDATE_EPOCHS"])
                 train_state = update_state[0]
+                _, loss_terms, avg_grad_norm = losses_and_grads
 
                 # Reset environment due to update
                 rng, reset_rng = jax.random.split(rng)
@@ -365,9 +373,10 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
-                metric["actor_loss"] = all_losses[1][1]
-                metric["value_loss"] = all_losses[1][0]
-                metric["entropy_loss"] = all_losses[1][2]
+                metric["actor_loss"] = loss_terms[1]
+                metric["value_loss"] = loss_terms[0]
+                metric["entropy_loss"] = loss_terms[2]
+                metric["avg_grad_norm"] = avg_grad_norm
                 new_runner_state = (train_state, env_state, obs, partner_indices, buffer, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
