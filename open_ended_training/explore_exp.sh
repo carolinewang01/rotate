@@ -2,14 +2,15 @@
 
 # Algorithm to run
 algo="oe_persistent"
-label="method-explore:1reg:rsp1" # method-explore
+label="hyperparam:elr8e-6:bengret" # method-explore
 num_seeds=1
 log_train_out=false
 log_eval_out=false
-conf_obj_type="sreg-xp_ret-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp
+conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp
 ego_teammate="final"
 partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
-regret_sp_weight=1.0
+ego_ent=0.001
+ego_lr=8e-6
 # pretrain_ppo=false
 
 # DEBUG COMMAND
@@ -35,12 +36,12 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    "lbf"
-    "overcooked/cramped_room"
-    "overcooked/counter_circuit"
-    # "overcooked/forced_coord"
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
+    # "lbf"
+    # "overcooked/cramped_room"
+    # "overcooked/counter_circuit"
+    "overcooked/forced_coord"
+    # "overcooked/asymm_advantages"
+    # "overcooked/coord_ring"
 )
 
 # Function to log messages
@@ -63,9 +64,12 @@ for task in "${tasks[@]}"; do
         algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         algorithm.EGO_TEAMMATE="${ego_teammate}" \
         algorithm.PARTNER_ALGO="${partner_algo}" \
-        algorithm.REGRET_SP_WEIGHT="${regret_sp_weight}" \
+        algorithm.EGO_ARGS.ENT_COEF="${ego_ent}" \
+        algorithm.EGO_ARGS.LR="${ego_lr}" \
         logger.log_train_out="${log_train_out}" \
         logger.log_eval_out="${log_eval_out}" \
+        local_logger.save_train_out="${log_train_out}" \
+        local_logger.save_eval_out="${log_eval_out}" \
         2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))

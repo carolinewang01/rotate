@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_persistent"
-partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
-conf_obj_type="traj_level_regret"
-label="paper-v0:paired-treg+pop"
+algo="oe_paired_resets" # oe_persistent
+# partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
+conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # ours is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
+label="paper-v0:breg"
 num_seeds=3
 
 # Create log directory if it doesn't exist
@@ -49,7 +49,6 @@ for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
     if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" \
-        algorithm.PARTNER_ALGO="${partner_algo}" \
         algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         2>> "${log_file}"; then
