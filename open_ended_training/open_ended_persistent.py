@@ -214,9 +214,16 @@ def train_persistent(rng, env, algorithm_config, ego_config):
         length=algorithm_config["NUM_OPEN_ENDED_ITERS"]
     )
 
+    # Save only the buffer from the last iteration of OEL, rather than all iterations
+    # ego_outs = outs[1]
+    # # TODO: we want to check if we're saving the final buffer for ALL iterations of OEL or only the last one.
+    # import pdb; pdb.set_trace()
+    # outs[1]["final_buffer"] = jax.tree.map(lambda x: x[-1], ego_outs["final_buffer"])
+
     if algorithm_config["PRETRAIN_PPO"]:
         # add pretrain out to the teammate out
         outs[0]["pretrain_out"] = pretrain_out
+
     return outs
 
 def run_persistent(config, wandb_logger):
