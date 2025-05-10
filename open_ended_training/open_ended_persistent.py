@@ -6,7 +6,7 @@ import copy
 import jax
 import jax.numpy as jnp
 from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
-from agents.population_buffer import BufferedPopulation, add_partners_to_buffer
+from agents.population_buffer import BufferedPopulation, add_partners_to_buffer, get_final_buffer
 from agents.initialize_agents import initialize_s5_agent, initialize_actor_with_double_critic
 from common.plot_utils import get_metric_names
 from envs import make_env
@@ -111,7 +111,7 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
         partner_population=partner_population,
         population_buffer=updated_buffer  # Pass the buffer to the training function
     )
-    
+
     updated_ego_parameters = ego_out["final_params"]
     updated_conf_parameters = train_out["final_params_conf"]
     updated_br_parameters = train_out["final_params_br"]
@@ -215,10 +215,7 @@ def train_persistent(rng, env, algorithm_config, ego_config):
     )
 
     # Save only the buffer from the last iteration of OEL, rather than all iterations
-    # ego_outs = outs[1]
-    # # TODO: we want to check if we're saving the final buffer for ALL iterations of OEL or only the last one.
-    # import pdb; pdb.set_trace()
-    # outs[1]["final_buffer"] = jax.tree.map(lambda x: x[-1], ego_outs["final_buffer"])
+    outs[1]["final_buffer"] = get_final_buffer(outs[1]["final_buffer"])
 
     if algorithm_config["PRETRAIN_PPO"]:
         # add pretrain out to the teammate out
