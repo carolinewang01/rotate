@@ -3,12 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import plotly
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from paper_vis.process_data import load_results_for_task
 from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE, get_heldout_names
 
 from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
+
+plotly.io.kaleido.scope.mathjax = None # disable mathjax to prevent the "loading mathjax" message
 
 
 def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
@@ -42,6 +43,24 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
             line=dict(color=colors[i % len(colors)], width=2),
             opacity=0.4
         ))
+    
+    # Add a black circle at radius 1.0
+    theta_circle = np.linspace(0, 2*np.pi, 100)
+    theta_labels = []
+    for angle in theta_circle:
+        idx = int(angle / (2*np.pi) * len(heldout_names))
+        if idx >= len(heldout_names):
+            idx = 0
+        theta_labels.append(heldout_names[idx])
+    
+    fig.add_trace(go.Scatterpolar(
+        r=[1.0] * len(theta_labels),
+        theta=theta_labels,
+        mode='lines',
+        name='radius 1.0',
+        line=dict(color='dimgray', width=1.5, dash='dot'),
+        showlegend=False
+    ))
     
     # Update the layout with improved styling
     fig.update_layout(
@@ -86,6 +105,10 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
         if not os.path.exists(savedir):
             os.makedirs(savedir)
         
+        # Configure Plotly to disable MathJax
+        config = {'displayModeBar': False, 'mathjax': None}
+        
+        # Save as PDF for paper with high resolution
         pdf_path = os.path.join(savedir, f"{savename}.pdf")
         fig.write_image(pdf_path, scale=2)  # Scale=2 for higher resolution
     
@@ -102,7 +125,11 @@ if __name__ == "__main__":
     }
     task_list = [
         # "lbf", 
-        "overcooked-v1/asymm_advantages"
+        "overcooked-v1/cramped_room",
+        # "overcooked-v1/asymm_advantages",
+        # "overcooked-v1/counter_circuit",
+        # "overcooked-v1/coord_ring",
+        # "overcooked-v1/forced_coord"
     ]
     for task in task_list:
         PLOT_ARGS = {

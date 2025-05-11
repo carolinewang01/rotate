@@ -102,9 +102,9 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
                ecolor='black', capsize=5)
     
     # Set x-axis tick labels to task names
-    task_display_names = [task.replace("overcooked-v1", "overcooked") for task in tasks]
+    task_display_names = [task.replace("overcooked-v1/", "") for task in tasks]
     ax.set_xticks(task_positions)
-    ax.set_xticklabels(task_display_names, rotation=0, ha="center", fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xticklabels(task_display_names, rotation=25, ha="right", fontsize=AXIS_LABEL_FONTSIZE)
 
     # Set labels and title
     ax.set_ylabel(f'{aggregate_stat_name.capitalize()} {metric_name.replace("_", " ").title() if metric_name != "task_specific" else "Performance"} (Normalized)', 
@@ -127,13 +127,18 @@ if __name__ == "__main__":
     from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
     
     RESULTS_TO_PLOT = {
-        # **OUR_METHOD,
+        **OUR_METHOD,
         **BASELINES 
     }
 
     task_list = [
-        "lbf", 
-        "overcooked-v1/asymm_advantages"
+        # "lbf", 
+        "overcooked-v1/cramped_room",
+        "overcooked-v1/asymm_advantages",
+        "overcooked-v1/counter_circuit",
+        "overcooked-v1/coord_ring",
+        "overcooked-v1/forced_coord"
+
                  ]
     all_task_results = {}
     for task_name in task_list:
