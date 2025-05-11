@@ -1,28 +1,120 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from paper_vis.process_data import load_results_for_task
-from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
+from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE, get_heldout_names
 
 from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
 
 
 def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
-                   plot_title: str, save: bool, savedir: str, show_plot: bool, savename: str):
-    '''Plots a radar chart for a single task, metric, and aggregate stat.'''
-    pass
+                   heldout_names: list, plot_title: str, 
+                   save: bool, savedir: str, show_plot: bool, savename: str):
+    '''Plots radar charts for each algorithm in results, to show the performance against each heldout agent. 
+    '''
+    fig = go.Figure()
+    
+    # Define colors for different methods
+    colors = plotly.colors.qualitative.Plotly
+    max_value = 0    
+    
+
+    for i, (method_name, method_results) in enumerate(results.items()):
+        # Get the per-agent performance values
+        per_agent_values = method_results[metric_name][f"{aggregate_stat_name}_per_agent"]
+        max_value = max(max_value, np.max(per_agent_values))
+
+        # Ensure the polygon closes by explicitly repeating the first point at the end
+        radar_values = np.append(per_agent_values, per_agent_values[0])
+        radar_categories = heldout_names.copy()
+        radar_categories.append(radar_categories[0])  # Repeat the first category at the end
+
+        # Add trace for this method with improved styling
+        fig.add_trace(go.Scatterpolar(
+            r=radar_values,
+            theta=radar_categories,
+            fill='toself',
+            name=method_name,
+            line=dict(color=colors[i % len(colors)], width=2),
+            opacity=0.4
+        ))
+    
+    # Update the layout with improved styling
+    fig.update_layout(
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        polar=dict(
+            bgcolor='white',
+            radialaxis=dict(
+                visible=True,
+                range=[0, max_value * 1.1],  # Add 10% margin for visibility
+                tickfont=dict(size=12),
+                gridcolor='#EEEEEE',
+                linecolor='#CCCCCC'
+            ),
+            angularaxis=dict(
+                tickfont=dict(size=14, family="sans-serif", color="black"),
+                linecolor='#CCCCCC',
+                gridcolor='#EEEEEE'
+            )
+        ),
+        title=dict(
+            text=plot_title,
+            font=dict(size=TITLE_FONTSIZE, family="sans-serif", color="black"),
+            x=0.5,
+            y=0.90
+        ),
+        showlegend=True,
+        legend=dict(
+            font=dict(size=AXIS_LABEL_FONTSIZE, family="sans-serif"),
+            yanchor="top",
+            y=1.05,
+            xanchor="right",
+            x=1.1,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="rgba(0, 0, 0, 0.2)",
+            borderwidth=1
+        )
+    )
+    
+    # Save the figure if requested
+    if save:
+        if not os.path.exists(savedir):
+            os.makedirs(savedir)
+        
+        pdf_path = os.path.join(savedir, f"{savename}.pdf")
+        fig.write_image(pdf_path, scale=2)  # Scale=2 for higher resolution
+    
+    # Show the plot if requested
+    if show_plot:
+        fig.show()
 
 
 if __name__ == "__main__":
     from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
-    
     RESULTS_TO_PLOT = {
-        **BASELINES,
-        **OUR_METHOD
+        **OUR_METHOD,  # Put OUR_METHOD first so it gets the first color
+        **BASELINES
     }
-
     task_list = [
-        "lbf", 
+        # "lbf", 
         "overcooked-v1/asymm_advantages"
     ]
+    for task in task_list:
+        PLOT_ARGS = {
+            "save": True,
+            "savedir": "results/neurips_figures", 
+            "savename": f"{task.replace('/', '_')}_radar",
+            "plot_title": TASK_TO_PLOT_TITLE[task],
+            "show_plot": False
+        }
+
+        results = load_results_for_task(task, RESULTS_TO_PLOT, load_from_cache=True)
+        metric_name = TASK_TO_METRIC_NAME[task]
+        aggregate_stat_name = GLOBAL_HELDOUT_CONFIG["global_heldout_settings"]["AGGREGATE_STAT"]
+        heldout_names = get_heldout_names(task, task_config_path=f"open_ended_training/configs/task/{task.replace('-v1', '')}.yaml")
+        plot_radar_chart(results, metric_name, aggregate_stat_name, heldout_names, **PLOT_ARGS)

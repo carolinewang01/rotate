@@ -1,4 +1,7 @@
+import jax
 import omegaconf
+from evaluation.heldout_evaluator import load_heldout_set
+from envs import make_env
 
 TASK_TO_ENV_NAME = {
     "lbf": "lbf",
@@ -50,3 +53,46 @@ CACHE_FILENAME = "cached_summary_metrics.pkl"
 
 TITLE_FONTSIZE = 16
 AXIS_LABEL_FONTSIZE = 14
+
+def get_heldout_names(task_name, task_config_path):
+    rng = jax.random.PRNGKey(0)
+    heldout_cfg = GLOBAL_HELDOUT_CONFIG["heldout_set"][task_name]
+    env_config = omegaconf.OmegaConf.load(task_config_path)
+    env_name = env_config["ENV_NAME"]
+    env_kwargs = env_config["ENV_KWARGS"]
+
+    env = make_env(env_name, env_kwargs)
+    heldout_agents = load_heldout_set(heldout_cfg, env, task_name, env_kwargs, rng)
+    heldout_names = list(heldout_agents.keys())
+    # TODO: refine name mapping
+    # each agent must have a UNIQUE name
+    # heldout_names = [heldout_agent_name_map(name) for name in heldout_names]
+    return heldout_names
+
+def heldout_agent_name_map(heldout_agent_name):
+    if "ippo" in heldout_agent_name:
+        return "ippo agent"
+    elif "brdiv" in heldout_agent_name:
+        return "brdiv agent"
+    elif "independent" in heldout_agent_name:
+        return "ind. agent"
+    elif "onion" in heldout_agent_name:
+        return "onion agent"
+    elif "plate" in heldout_agent_name:
+        return "plate agent"
+    # lbf heuristic agents
+    elif heldout_agent_name == "seq_agent_lexi":
+        return "lexicographic"
+    elif heldout_agent_name == "seq_agent_rlexi":
+        return "reverse lexicographic"
+    elif heldout_agent_name == "seq_agent_col":
+        return "column major"
+    elif heldout_agent_name == "seq_agent_rcol":
+        return "reverse column major"
+    elif heldout_agent_name == "seq_agent_nearest":
+        return "nearest"
+    elif heldout_agent_name == "seq_agent_farthest":
+        return "farthest"
+    else:
+        return heldout_agent_name
+    

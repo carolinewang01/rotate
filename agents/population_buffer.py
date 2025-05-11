@@ -44,7 +44,7 @@ def get_final_buffer(buffer):
     last_scores = jax.tree.map(lambda x: x[-1][jnp.newaxis], buffer.scores)
     last_ages = jax.tree.map(lambda x: x[-1][jnp.newaxis], buffer.ages)
     last_filled = jax.tree.map(lambda x: x[-1][jnp.newaxis], buffer.filled)
-    last_filled_count = jax.tree.map(lambda x: x[[-1]], buffer.filled_count)
+    last_filled_count = jax.tree.map(lambda x: x[-1][jnp.newaxis], buffer.filled_count)
     return PopulationBuffer(
         params=last_params,
         scores=last_scores,

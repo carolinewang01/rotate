@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="oe_paired_resets" # oe_persistent
-# partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
-conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # ours is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
-label="paper-v0:breg"
+algo="oe_persistent" # oe_persistent
+partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
+conf_obj_type="sreg-xp_ret-sp_ret-sxp" # ours is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
+label="paper-v0:1reg"
 num_seeds=3
 
 # Create log directory if it doesn't exist
@@ -25,12 +25,12 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
-    "overcooked/counter_circuit"
-    "overcooked/cramped_room"
-    # "overcooked/forced_coord"
-    "lbf"
+    # "overcooked/asymm_advantages"
+    # "overcooked/coord_ring"
+    # "overcooked/counter_circuit"
+    # "overcooked/cramped_room"
+    "overcooked/forced_coord"
+    # "lbf"
 )
 
 # Function to log messages
@@ -51,6 +51,7 @@ for task in "${tasks[@]}"; do
     if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" \
         algorithm.NUM_SEEDS="${num_seeds}" \
         algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
+        algorithm.PARTNER_ALGO="${partner_algo}" \
         2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
         ((success_count++))
