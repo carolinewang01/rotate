@@ -41,6 +41,9 @@ def plot_single_bar_chart(results, metric_name: str, aggregate_stat_name: str,
     ax.set_xticklabels(method_display_names, rotation=0, ha="center", fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_title(plot_title, fontsize=TITLE_FONTSIZE)
     ax.yaxis.grid(True)
+    
+    # Add horizontal line at y=1.0
+    ax.axhline(y=1.0, color='dimgray', linestyle='-')
 
     plt.tight_layout()
     if save:
@@ -111,6 +114,9 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
                   fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_title(plot_title, fontsize=TITLE_FONTSIZE)
     
+    # Add horizontal line at y=1.0
+    ax.axhline(y=1.0, color='dimgray', linestyle='-')
+    
     ax.legend(fontsize=AXIS_LABEL_FONTSIZE)
     ax.yaxis.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
@@ -124,12 +130,25 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
 
 
 if __name__ == "__main__":
-    from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
+    from paper_vis.plot_globals import BASELINES, OUR_METHOD, ABLATIONS, SUPPLEMENTAL, \
+        GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
     
-    RESULTS_TO_PLOT = {
-        **OUR_METHOD,
-        **BASELINES 
-    }
+    PLOT_TYPE = "supplemental" # core or ablations or supplemental
+    if PLOT_TYPE == "core":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,
+            **BASELINES 
+        }
+    elif PLOT_TYPE == "ablations":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,
+            **ABLATIONS
+        }
+    elif PLOT_TYPE == "supplemental":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,
+            **SUPPLEMENTAL
+        }
 
     task_list = [
         # "lbf", 
@@ -149,7 +168,7 @@ if __name__ == "__main__":
         PLOT_ARGS = {
             "save": True,
             "savedir": "results/neurips_figures", 
-            "savename": f"{task_name.replace('/', '_')}_core_bar",
+            "savename": f"{task_name.replace('/', '_')}_{PLOT_TYPE}_bar",
             "plot_title": TASK_TO_PLOT_TITLE[task_name],
             "show_plot": False
         }
@@ -164,7 +183,7 @@ if __name__ == "__main__":
     ALL_TASKS_PLOT_ARGS = {
         "save": True,
         "savedir": "results/neurips_figures", 
-        "savename": "all_tasks_comparison",
+        "savename": f"all_tasks_comparison_{PLOT_TYPE}",
         "plot_title": "Method Performance Across All Tasks",
         "show_plot": True
     }
