@@ -31,6 +31,9 @@ def plot_single_bar_chart(results, metric_name: str, aggregate_stat_name: str,
     x_pos = np.arange(num_methods)
 
     fig, ax = plt.subplots()
+    # Add horizontal line at y=1.0
+    ax.axhline(y=1.0, color='dimgray', linestyle='--')
+
     # Transpose y_errors to match expected format for yerr
     y_errors_transposed = np.array(y_errors).T
     ax.bar(x_pos, y_values, yerr=y_errors_transposed, align='center', alpha=0.7, ecolor='black', capsize=10)
@@ -42,9 +45,6 @@ def plot_single_bar_chart(results, metric_name: str, aggregate_stat_name: str,
     ax.set_title(plot_title, fontsize=TITLE_FONTSIZE)
     ax.yaxis.grid(True)
     
-    # Add horizontal line at y=1.0
-    ax.axhline(y=1.0, color='dimgray', linestyle='-')
-
     plt.tight_layout()
     if save:
         if not os.path.exists(savedir):
@@ -69,7 +69,10 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
     
     # Set up the figure
     fig, ax = plt.subplots(figsize=(max(8, num_tasks * 2), 6))
-    
+
+    # Add horizontal line at y=1.0
+    ax.axhline(y=1.0, color='dimgray', linestyle='--')
+
     # Set up x positions for tasks and bars within each task group
     task_positions = np.arange(num_tasks)
     
@@ -114,9 +117,6 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
                   fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_title(plot_title, fontsize=TITLE_FONTSIZE)
     
-    # Add horizontal line at y=1.0
-    ax.axhline(y=1.0, color='dimgray', linestyle='-')
-    
     ax.legend(fontsize=AXIS_LABEL_FONTSIZE)
     ax.yaxis.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     from paper_vis.plot_globals import BASELINES, OUR_METHOD, ABLATIONS, SUPPLEMENTAL, \
         GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
     
-    PLOT_TYPE = "supplemental" # core or ablations or supplemental
+    PLOT_TYPE = "core" # core or ablations or supplemental
     if PLOT_TYPE == "core":
         RESULTS_TO_PLOT = {
             **OUR_METHOD,

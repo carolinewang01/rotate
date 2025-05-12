@@ -565,11 +565,17 @@ def train_regret_maximizing_partners(config, env,
                         #     total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize trajectory-level regret for all interaction types
-                        elif config["CONF_OBJ_TYPE"] == "traj_level_regret":
+                        elif config["CONF_OBJ_TYPE"] == "gae_per_state_regret": # previously called traj_level_regret but this was a misnomer
                             total_xp_objective = -gae_xp
                             total_sp_objective = config["SP_WEIGHT"] * gae_sp
                             total_xsp_objective = -gae_xsp
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
+
+                        elif config["CONF_OBJ_TYPE"] == "traj_regret":
+                            total_xp_objective = -gae_xp
+                            total_sp_objective = config["SP_WEIGHT"] * gae_sp
+                            total_xsp_objective = jnp.array(0.0)
+                            total_sxp_objective = jnp.array(0.0)
 
                         pg_loss_xp = _compute_ppo_pg_loss(total_xp_objective, log_prob_xp, traj_batch_xp)
                         pg_loss_sp = _compute_ppo_pg_loss(total_sp_objective, log_prob_sp, traj_batch_sp)

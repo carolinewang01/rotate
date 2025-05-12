@@ -32,9 +32,11 @@ TASK_TO_METRIC_NAME = {
 
 BASELINES = { # method_path: (type, display_name)
     "open_ended_minimax/paper-v0": ("open_ended", "minimax"),
-    "open_ended_paired/paper-v0": ("open_ended", "paired"),
+    # "open_ended_paired/paper-v0": ("open_ended", "oe_paired"), # TODO: present this as an ablation
+    "paired_ued/paper-v0": ("teammate_generation", "paired"),
     "fcp/paper-v0": ("teammate_generation", "fcp"),
     "brdiv/paper-v0": ("teammate_generation", "brdiv"),
+    "lbrdiv/paper-v0": ("teammate_generation", "lbrdiv"),
 }
 
 OUR_METHOD = {
@@ -45,14 +47,16 @@ OUR_METHOD = {
 ABLATIONS = {
     "oe_persistent/paper-v0:1reg": ("open_ended", "rotate"),
     "oe_persistent/paper-v0:comedi+pop": ("open_ended", "rotate w/mixed play"),
-    # "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "rotate w/traj regret"),
-    "oe_paired_resets/paper-v0:breg": ("open_ended", "rotate w/o population"), # TODO: update to 1reg w/o population
+    "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "rotate w/gae-per-state-regret"),
+    "oe_paired_resets/paper-v0:1reg": ("open_ended", "rotate w/o population"),
 }
 
 SUPPLEMENTAL = {
-    "oe_persistent/paper-v0:breg:s5-s": ("open_ended", "rotate, s5-small"),
-    "ppo_ego_s5/paper-v0:breg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"),
-    # "oe_persistent/paper-v0:breg": ("open_ended", "rotate w/sp regret"),
+    # "oe_persistent/paper-v0:1reg:s5-s": ("open_ended", "rotate, s5-small"),
+    "ppo_ego_s5/paper-v0:1reg-ego-v-pop": ("teammate_generation", "ppo on rotate pop"),
+    # "oe_persistent/paper-v0:breg:s5-s": ("open_ended", "rotate (obj 0), s5-small"),
+    # "ppo_ego_s5/paper-v0:breg-ego-v-pop": ("teammate_generation", "ppo on rotate pop (obj 0)"),
+    # "oe_persistent/paper-v0:breg": ("open_ended", "rotate (obj 0) w/sp regret"),
 }
 
 GLOBAL_HELDOUT_CONFIG = omegaconf.OmegaConf.load("evaluation/configs/global_heldout_settings.yaml")
