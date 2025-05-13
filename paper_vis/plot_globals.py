@@ -30,13 +30,15 @@ TASK_TO_METRIC_NAME = {
     "overcooked-v1/coord_ring": "base_return",
 }
 
-BASELINES = { # method_path: (type, display_name)
+OE_BASELINES = { # method_path: (type, display_name)
     "open_ended_minimax/paper-v0": ("open_ended", "minimax"),
     # "open_ended_paired/paper-v0": ("open_ended", "oe_paired"), # TODO: present this as an ablation
+}
+
+TEAMMATE_GEN_BASELINES = {
     "paired_ued/paper-v0": ("teammate_generation", "paired"),
     "fcp/paper-v0": ("teammate_generation", "fcp"),
     "brdiv/paper-v0": ("teammate_generation", "brdiv"),
-    "lbrdiv/paper-v0": ("teammate_generation", "lbrdiv"),
 }
 
 OUR_METHOD = {
@@ -47,6 +49,7 @@ OUR_METHOD = {
 ABLATIONS = {
     "oe_persistent/paper-v0:1reg": ("open_ended", "rotate"),
     "oe_persistent/paper-v0:comedi+pop": ("open_ended", "rotate w/mixed play"),
+    "oe_persistent/paper-v0:treg": ("open_ended", "rotate w/trajectory regret"),
     "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "rotate w/gae-per-state-regret"),
     "oe_paired_resets/paper-v0:1reg": ("open_ended", "rotate w/o population"),
 }
@@ -61,7 +64,7 @@ SUPPLEMENTAL = {
 
 GLOBAL_HELDOUT_CONFIG = omegaconf.OmegaConf.load("evaluation/configs/global_heldout_settings.yaml")
 CACHE_FILENAME = "cached_summary_metrics.pkl"
-
+HELDOUT_CURVES_CACHE_FILENAME = "cached_heldout_curves.pkl"
 TITLE_FONTSIZE = 16
 AXIS_LABEL_FONTSIZE = 14
 

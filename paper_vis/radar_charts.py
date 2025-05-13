@@ -118,10 +118,11 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
 
 
 if __name__ == "__main__":
-    from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
+    from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
     RESULTS_TO_PLOT = {
         **OUR_METHOD,  # Put OUR_METHOD first so it gets the first color
-        **BASELINES
+        **OE_BASELINES,
+        **TEAMMATE_GEN_BASELINES
     }
     task_list = [
         # "lbf", 
@@ -135,12 +136,12 @@ if __name__ == "__main__":
         PLOT_ARGS = {
             "save": True,
             "savedir": "results/neurips_figures", 
-            "savename": f"{task.replace('/', '_')}_radar",
+            "savename": f"radar_{task.replace('/', '_')}",
             "plot_title": TASK_TO_PLOT_TITLE[task],
             "show_plot": False
         }
 
-        results = load_results_for_task(task, RESULTS_TO_PLOT, load_from_cache=True)
+        results = load_results_for_task(task, RESULTS_TO_PLOT, CACHE_FILENAME, load_from_cache=True)
         metric_name = TASK_TO_METRIC_NAME[task]
         aggregate_stat_name = GLOBAL_HELDOUT_CONFIG["global_heldout_settings"]["AGGREGATE_STAT"]
         heldout_names = get_heldout_names(task, task_config_path=f"open_ended_training/configs/task/{task.replace('-v1', '')}.yaml")
