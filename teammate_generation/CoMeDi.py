@@ -1109,14 +1109,21 @@ def train_comedi_partners(train_rng, env, config):
                 )
 
                 updated_pop_buffer = partner_population.add_agent(pop_buffer, runner_state[0][0].params)
-                return updated_pop_buffer, None
+                conf_checkpoints = runner_state[1]
+                return updated_pop_buffer, (conf_checkpoints, metric)
             
             iter_ids = jnp.arange(1, config["PARTNER_POP_SIZE"])
-            final_population_buffer = jax.lax.scan(
+            final_population_buffer, others = jax.lax.scan(
                 add_conf_policy, population_buffer, (iter_ids, add_conf_iter_rngs)
             )
+
+            out = {
+                "final_params_conf": final_population_buffer,
+                "checkpoints_conf": others[0],
+                "metrics": others[1]
+            }
             
-            return final_population_buffer
+            return out
         return train
     
     train_fn = make_comedi_agents(config)
@@ -1172,13 +1179,11 @@ def run_comedi(config, wandb_logger):
     end = time.time()
     log.info(f"CoMeDi training complete in {end - start} seconds")
 
-    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
+    # metric_names = get_metric_names(algorithm_config["ENV_NAME"])
     # log_metrics(config, out, wandb_logger, metric_names)
 
-    #partner_params, partner_population = get_comedi_population(config, out, env)
-
-    #return partner_params, partner_population
-    return None
+    partner_params, partner_population = get_comedi_population(config, out, env)
+    return partner_params, partner_population
 
 
 def compute_sp_mask_and_ids(pop_size):
