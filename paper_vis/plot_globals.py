@@ -68,7 +68,7 @@ HELDOUT_CURVES_CACHE_FILENAME = "cached_heldout_curves.pkl"
 TITLE_FONTSIZE = 16
 AXIS_LABEL_FONTSIZE = 14
 
-def get_heldout_names(task_name, task_config_path):
+def get_heldout_agents(task_name, task_config_path):
     rng = jax.random.PRNGKey(0)
     heldout_cfg = GLOBAL_HELDOUT_CONFIG["heldout_set"][task_name]
     env_config = omegaconf.OmegaConf.load(task_config_path)
@@ -77,13 +77,13 @@ def get_heldout_names(task_name, task_config_path):
 
     env = make_env(env_name, env_kwargs)
     heldout_agents = load_heldout_set(heldout_cfg, env, task_name, env_kwargs, rng)
-    heldout_names = list(heldout_agents.keys())
+
+    return heldout_agents
+
+def heldout_agent_name_map(heldout_agent_name):
     # TODO: refine name mapping
     # each agent must have a UNIQUE name
     # heldout_names = [heldout_agent_name_map(name) for name in heldout_names]
-    return heldout_names
-
-def heldout_agent_name_map(heldout_agent_name):
     if "ippo" in heldout_agent_name:
         return "ippo agent"
     elif "brdiv" in heldout_agent_name:

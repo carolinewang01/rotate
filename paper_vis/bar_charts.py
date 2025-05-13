@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 from paper_vis.process_data import load_results_for_task
 from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
@@ -133,19 +134,31 @@ if __name__ == "__main__":
     from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS, SUPPLEMENTAL, \
         GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
     
-    PLOT_TYPE = "ablations" # core or ablations or supplemental
-    if PLOT_TYPE == "core":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Generate bar charts for visualization")
+    parser.add_argument("--plot_type", type=str, default="core",
+                        choices=["core", "ablations", "supplemental"],
+                        help="Type of plot to generate")
+    parser.add_argument("--use_original_normalization", action="store_true",
+                        help="Use original normalization instead of best-returns normalization")
+    parser.add_argument("--show_plots", action="store_true",
+                        help="Show plots in addition to saving them")
+    parser.add_argument("--save_dir", type=str, default="results/neurips_figures",
+                        help="Directory to save plots")
+    args = parser.parse_args()
+    
+    if args.plot_type == "core":
         RESULTS_TO_PLOT = {
             **OUR_METHOD,
             **OE_BASELINES,
             **TEAMMATE_GEN_BASELINES
         }
-    elif PLOT_TYPE == "ablations":
+    elif args.plot_type == "ablations":
         RESULTS_TO_PLOT = {
             **OUR_METHOD,
             **ABLATIONS
         }
-    elif PLOT_TYPE == "supplemental":
+    elif args.plot_type == "supplemental":
         RESULTS_TO_PLOT = {
             **OUR_METHOD,
             **SUPPLEMENTAL
@@ -158,20 +171,30 @@ if __name__ == "__main__":
         "overcooked-v1/counter_circuit",
         "overcooked-v1/coord_ring",
         "overcooked-v1/forced_coord"
-
-                 ]
+    ]
+    
+    # Add suffix to savename based on normalization method
+    norm_suffix = "_original" if args.use_original_normalization else "_best_returns"
+    
     all_task_results = {}
     for task_name in task_list:
-        all_task_results[task_name] = load_results_for_task(task_name, RESULTS_TO_PLOT, CACHE_FILENAME, load_from_cache=True)
+        # Pass the normalization flag to load_results_for_task
+        all_task_results[task_name] = load_results_for_task(
+            task_name, 
+            RESULTS_TO_PLOT, 
+            CACHE_FILENAME, 
+            load_from_cache=True,
+            renormalize_metrics=not args.use_original_normalization
+        )
         metric_name = TASK_TO_METRIC_NAME[task_name]
 
         # Individual task plots
         PLOT_ARGS = {
             "save": True,
-            "savedir": "results/neurips_figures", 
-            "savename": f"{PLOT_TYPE}_bar_{task_name.replace('/', '_')}",
+            "savedir": args.save_dir, 
+            "savename": f"{args.plot_type}_bar_{task_name.replace('/', '_')}{norm_suffix}",
             "plot_title": TASK_TO_PLOT_TITLE[task_name],
-            "show_plot": False
+            "show_plot": args.show_plots
         }
         
         # plot_single_bar_chart(all_task_results[task_name], 
@@ -183,10 +206,10 @@ if __name__ == "__main__":
     # Plot all tasks together
     ALL_TASKS_PLOT_ARGS = {
         "save": True,
-        "savedir": "results/neurips_figures", 
-        "savename": f"all_tasks_comparison_{PLOT_TYPE}",
-        "plot_title": "",
-        "show_plot": True
+        "savedir": args.save_dir, 
+        "savename": f"all_tasks_comparison_{args.plot_type}{norm_suffix}",
+        "plot_title": f"Performance Across Tasks ({args.plot_type.capitalize()})",
+        "show_plot": args.show_plots
     }
     
     plot_all_tasks_bar_chart(all_task_results, 

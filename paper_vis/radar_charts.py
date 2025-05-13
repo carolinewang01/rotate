@@ -5,9 +5,9 @@ import plotly
 import plotly.graph_objects as go
 
 from paper_vis.process_data import load_results_for_task
-from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE, get_heldout_names
-
-from paper_vis.plot_globals import BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME
+from paper_vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
+from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, \
+    GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
 
 plotly.io.kaleido.scope.mathjax = None # disable mathjax to prevent the "loading mathjax" message
 
@@ -118,7 +118,6 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
 
 
 if __name__ == "__main__":
-    from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
     RESULTS_TO_PLOT = {
         **OUR_METHOD,  # Put OUR_METHOD first so it gets the first color
         **OE_BASELINES,
@@ -126,8 +125,8 @@ if __name__ == "__main__":
     }
     task_list = [
         # "lbf", 
-        "overcooked-v1/cramped_room",
-        # "overcooked-v1/asymm_advantages",
+        # "overcooked-v1/cramped_room",
+        "overcooked-v1/asymm_advantages",
         # "overcooked-v1/counter_circuit",
         # "overcooked-v1/coord_ring",
         # "overcooked-v1/forced_coord"
@@ -144,5 +143,6 @@ if __name__ == "__main__":
         results = load_results_for_task(task, RESULTS_TO_PLOT, CACHE_FILENAME, load_from_cache=True)
         metric_name = TASK_TO_METRIC_NAME[task]
         aggregate_stat_name = GLOBAL_HELDOUT_CONFIG["global_heldout_settings"]["AGGREGATE_STAT"]
-        heldout_names = get_heldout_names(task, task_config_path=f"open_ended_training/configs/task/{task.replace('-v1', '')}.yaml")
+        heldout_agent_dict = get_heldout_agents(task, task_config_path=f"open_ended_training/configs/task/{task.replace('-v1', '')}.yaml")
+        heldout_names = list(heldout_agent_dict.keys())
         plot_radar_chart(results, metric_name, aggregate_stat_name, heldout_names, **PLOT_ARGS)
