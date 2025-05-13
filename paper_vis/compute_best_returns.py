@@ -418,9 +418,9 @@ def renormalize_eval_metrics(eval_metrics: Dict[str, np.ndarray],
         if num_heldout_agents != len(agent_performance_bounds):
             print(f"Warning: Number of heldout agents in data ({num_heldout_agents}) "
                  f"doesn't match number of agents with bounds ({len(agent_performance_bounds)})")
-        
+
         if metric_name not in best_returns:
-            print(f"Warning: No best returns found for metric {metric_name}. Keeping original data.")
+            # print(f"Warning: No best returns found for metric {metric_name}. Keeping original data.")
             normalized_metrics[metric_name] = data
             continue
         
@@ -503,8 +503,8 @@ if __name__ == "__main__":
     
     # Command to show best returns for a task
     show_parser = subparsers.add_parser("show", help="Show best returns for a task")
-    show_parser.add_argument("--tasks", nargs="+", required=True,
-                            help="List of tasks to show best returns for")
+    show_parser.add_argument("--tasks", nargs="+", 
+                            help="List of tasks to show best returns for. If not provided, all tasks will be shown.")
     
     args = parser.parse_args()
     
@@ -552,7 +552,12 @@ if __name__ == "__main__":
             print("No tasks found in results directory.")
     
     elif args.command == "show":
-        for task_name in args.tasks:
+        if not args.tasks:
+            tasks = find_all_tasks()
+        else:
+            tasks = args.tasks
+        
+        for task_name in tasks:
             print(f"Best returns for {task_name}:")
             try:
                 best_returns = load_best_returns(task_name)

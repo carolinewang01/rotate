@@ -3,10 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import plotly
 import plotly.graph_objects as go
+import argparse
 
 from paper_vis.process_data import load_results_for_task
 from paper_vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
-from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, \
+from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS, SUPPLEMENTAL, \
     GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
 
 plotly.io.kaleido.scope.mathjax = None # disable mathjax to prevent the "loading mathjax" message
@@ -118,29 +119,69 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
 
 
 if __name__ == "__main__":
-    RESULTS_TO_PLOT = {
-        **OUR_METHOD,  # Put OUR_METHOD first so it gets the first color
-        **OE_BASELINES,
-        **TEAMMATE_GEN_BASELINES
-    }
-    task_list = [
-        # "lbf", 
-        # "overcooked-v1/cramped_room",
-        "overcooked-v1/asymm_advantages",
-        # "overcooked-v1/counter_circuit",
-        # "overcooked-v1/coord_ring",
-        # "overcooked-v1/forced_coord"
-    ]
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Generate radar charts for visualization")
+    parser.add_argument("--plot_type", type=str, default="core",
+                        choices=["core", "ablations", "supplemental"],
+                        help="Type of plot to generate")
+    parser.add_argument("--use_original_normalization", action="store_true",
+                        help="Use original normalization instead of best-returns normalization")
+    parser.add_argument("--show_plots", action="store_true",
+                        help="Show plots in addition to saving them")
+    parser.add_argument("--save_dir", type=str, default="results/neurips_figures",
+                        help="Directory to save plots")
+    parser.add_argument("--tasks", nargs="+", 
+                        help="List of tasks to show best returns for. If not provided, all tasks will be computed.")
+    args = parser.parse_args()
+    
+    if args.plot_type == "core":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,  # Put OUR_METHOD first so it gets the first color
+            **OE_BASELINES,
+            **TEAMMATE_GEN_BASELINES
+        }
+    elif args.plot_type == "ablations":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,
+            **ABLATIONS
+        }
+    elif args.plot_type == "supplemental":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,
+            **SUPPLEMENTAL
+        }
+    
+    # Add suffix to savename based on normalization method
+    norm_suffix = "original_normalization" if args.use_original_normalization else "br_normalization"
+    
+    if not args.tasks:
+        task_list = [
+            "lbf", 
+            "overcooked-v1/cramped_room",
+            "overcooked-v1/asymm_advantages",
+            "overcooked-v1/counter_circuit",
+            "overcooked-v1/coord_ring",
+            "overcooked-v1/forced_coord"
+        ]
+    else:
+        task_list = args.tasks
+    
     for task in task_list:
         PLOT_ARGS = {
             "save": True,
-            "savedir": "results/neurips_figures", 
-            "savename": f"radar_{task.replace('/', '_')}",
+            "savedir": f"{args.save_dir}/{task}", 
+            "savename": f"radar_{args.plot_type}_{norm_suffix}",
             "plot_title": TASK_TO_PLOT_TITLE[task],
-            "show_plot": False
+            "show_plot": args.show_plots
         }
 
-        results = load_results_for_task(task, RESULTS_TO_PLOT, CACHE_FILENAME, load_from_cache=True)
+        results = load_results_for_task(
+            task, 
+            RESULTS_TO_PLOT, 
+            CACHE_FILENAME, 
+            load_from_cache=True,
+            renormalize_metrics=not args.use_original_normalization
+        )
         metric_name = TASK_TO_METRIC_NAME[task]
         aggregate_stat_name = GLOBAL_HELDOUT_CONFIG["global_heldout_settings"]["AGGREGATE_STAT"]
         heldout_agent_dict = get_heldout_agents(task, task_config_path=f"open_ended_training/configs/task/{task.replace('-v1', '')}.yaml")

@@ -145,6 +145,8 @@ if __name__ == "__main__":
                         help="Show plots in addition to saving them")
     parser.add_argument("--save_dir", type=str, default="results/neurips_figures",
                         help="Directory to save plots")
+    parser.add_argument("--tasks", nargs="+", 
+                        help="List of tasks to show best returns for. If not provided, all tasks will be computed.")
     args = parser.parse_args()
     
     if args.plot_type == "core":
@@ -164,17 +166,20 @@ if __name__ == "__main__":
             **SUPPLEMENTAL
         }
 
-    task_list = [
-        "lbf", 
-        "overcooked-v1/cramped_room",
-        "overcooked-v1/asymm_advantages",
-        "overcooked-v1/counter_circuit",
-        "overcooked-v1/coord_ring",
-        "overcooked-v1/forced_coord"
-    ]
+    if not args.tasks:
+        task_list = [
+            "lbf", 
+            "overcooked-v1/cramped_room",
+            "overcooked-v1/asymm_advantages",
+            "overcooked-v1/counter_circuit",
+            "overcooked-v1/coord_ring",
+            "overcooked-v1/forced_coord"
+        ]
+    else:
+        task_list = args.tasks
     
     # Add suffix to savename based on normalization method
-    norm_suffix = "_original" if args.use_original_normalization else "_best_returns"
+    norm_suffix = "original_normalization" if args.use_original_normalization else "br_normalization"
     
     all_task_results = {}
     for task_name in task_list:
@@ -188,14 +193,14 @@ if __name__ == "__main__":
         )
         metric_name = TASK_TO_METRIC_NAME[task_name]
 
-        # Individual task plots
-        PLOT_ARGS = {
-            "save": True,
-            "savedir": args.save_dir, 
-            "savename": f"{args.plot_type}_bar_{task_name.replace('/', '_')}{norm_suffix}",
-            "plot_title": TASK_TO_PLOT_TITLE[task_name],
-            "show_plot": args.show_plots
-        }
+        # # Individual task plots
+        # PLOT_ARGS = {
+        #     "save": True,
+        #     "savedir": f"{args.save_dir}/{task_name}", 
+        #     "savename": f"{args.plot_type}_bar_{norm_suffix}",
+        #     "plot_title": TASK_TO_PLOT_TITLE[task_name],
+        #     "show_plot": args.show_plots
+        # }
         
         # plot_single_bar_chart(all_task_results[task_name], 
         #             metric_name=metric_name, 
