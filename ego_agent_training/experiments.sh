@@ -3,16 +3,18 @@
 # Algorithm to run
 algo="ppo_ego"
 config_name="ppo_ego"
-label="ego-vs-population"
-num_seeds=2
+label="paper-v0:1reg-ego-v-pop"
+num_seeds=3
 
 # Declare an associative array for partner paths
 declare -A partner_paths
 partner_paths=(
-    ["overcooked/counter_circuit"]="results/overcooked-v1/counter_circuit/oe_persistent_paired/method-explore:uniform/2025-04-29_23-21-19/saved_train_run"
-    ["overcooked/cramped_room"]="results/overcooked-v1/cramped_room/oe_persistent_paired/method-explore:uniform/2025-04-30_00-47-07/saved_train_run"
-    ["overcooked/forced_coord"]="results/overcooked-v1/forced_coord/oe_persistent_paired/method-explore:uniform/2025-04-30_01-34-09/saved_train_run"
-    ["lbf"]="results/lbf/oe_persistent_paired/method-explore:uniform/2025-04-30_03-14-07/saved_train_run"
+    ["overcooked/cramped_room"]="results/overcooked-v1/cramped_room/oe_persistent/paper-v0:1reg/2025-05-10_16-28-55/saved_train_run"
+    ["overcooked/asymm_advantages"]="results/overcooked-v1/asymm_advantages/oe_persistent/paper-v0:1reg/2025-05-10_01-14-02/saved_train_run/"
+    ["overcooked/counter_circuit"]="results/overcooked-v1/counter_circuit/oe_persistent/paper-v0:1reg/2025-05-10_10-48-53/saved_train_run/"
+    ["overcooked/forced_coord"]="results/overcooked-v1/forced_coord/oe_persistent/paper-v0:1reg/2025-05-10_18-22-48/saved_train_run/"
+    ["overcooked/coord_ring"]="results/overcooked-v1/coord_ring/oe_persistent/paper-v0:1reg/2025-05-10_05-18-25/saved_train_run/"
+    ["lbf"]="results/lbf/oe_persistent/paper-v0:1reg/2025-05-10_19-26-02/saved_train_run/"
 )
 
 # Create log directory if it doesn't exist
@@ -26,7 +28,7 @@ log_file="results/ego_agent_training_logs/${algo}/${label}/experiment_${timestam
 tasks=(
     # "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
-    "overcooked/counter_circuit"
+    # "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
     "lbf"
