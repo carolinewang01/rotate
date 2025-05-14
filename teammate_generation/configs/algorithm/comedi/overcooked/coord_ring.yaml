@@ -1,5 +1,5 @@
 defaults:
-  - brdiv/_base_
+  - comedi/_base_
   - _self_ # values from this file override the values from the base file
 
 TOTAL_TIMESTEPS: 1.6e7

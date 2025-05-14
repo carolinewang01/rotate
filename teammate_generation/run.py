@@ -6,9 +6,9 @@ from common.plot_utils import get_metric_names
 from common.wandb_visualizations import Logger
 from teammate_generation.BRDiv import run_brdiv
 from teammate_generation.LBRDiv import run_lbrdiv
+from teammate_generation.CoMeDi import run_comedi
 from teammate_generation.fcp import run_fcp
 from teammate_generation.train_ego import train_ego_agent
-from teammate_generation.CoMeDi import run_comedi
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="base_config_teammate")
