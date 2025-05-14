@@ -1,7 +1,8 @@
 import jax
 from agents.agent_interface import S5ActorCriticPolicy, \
     MLPActorCriticPolicy, RNNActorCriticPolicy, ActorWithDoubleCriticPolicy, \
-    ActorWithConditionalCriticPolicy, PseudoActorWithDoubleCriticPolicy
+    ActorWithConditionalCriticPolicy, PseudoActorWithDoubleCriticPolicy, \
+    PseudoActorWithConditionalCriticPolicy
 
 
 def initialize_s5_agent(config, env, rng):
@@ -118,3 +119,15 @@ def initialize_actor_with_conditional_critic(config, env, rng):
 
     return policy, init_params
 
+def initialize_pseudo_actor_with_conditional_critic(config, env, rng):
+    """Initialize a pseudo actor with conditional critic with the given config."""
+    policy = PseudoActorWithConditionalCriticPolicy(
+        action_dim=env.action_space(env.agents[0]).n,
+        obs_dim=env.observation_space(env.agents[0]).shape[0],
+        pop_size=config["POP_SIZE"],
+        activation=config.get("ACTIVATION", "tanh"),
+    )
+    rng, init_rng = jax.random.split(rng)
+    init_params = policy.init_params(init_rng)
+
+    return policy, init_params

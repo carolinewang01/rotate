@@ -10,7 +10,8 @@ import optax
 from flax.training.train_state import TrainState
 from envs.log_wrapper import LogWrapper
 
-from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent, initialize_pseudo_actor_with_double_critic
+from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, \
+    initialize_rnn_agent, initialize_pseudo_actor_with_double_critic, initialize_pseudo_actor_with_conditional_critic
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
 from common.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
@@ -25,6 +26,8 @@ def initialize_agent(actor_type, algorithm_config, env, init_rng):
         policy, init_params = initialize_rnn_agent(algorithm_config, env, init_rng)
     elif actor_type == "pseudo_actor_with_double_critic":
         policy, init_params = initialize_pseudo_actor_with_double_critic(algorithm_config, env, init_rng)
+    elif actor_type == "pseudo_actor_with_conditional_critic":
+        policy, init_params = initialize_pseudo_actor_with_conditional_critic(algorithm_config, env, init_rng)
     return policy, init_params
 
 def make_train(config, env):
@@ -239,25 +242,6 @@ def make_train(config, env):
                 minibatches = _create_minibatches(traj_batch, advantages, targets, init_hstate, 
                                                   config["NUM_ACTORS"], config["NUM_MINIBATCHES"], perm_rng)
 
-                # # TODO: GOT TO HERE! Create minibatches!
-                # batch_size = config["MINIBATCH_SIZE"] * config["NUM_MINIBATCHES"]
-                # assert (
-                #     batch_size == config["ROLLOUT_LENGTH"] * config["NUM_ACTORS"]
-                # ), "batch size must be equal to number of steps * number of actors"
-                # permutation = jax.random.permutation(_rng, batch_size)
-                # batch = (traj_batch, advantages, targets)
-                # batch = jax.tree.map(
-                #     lambda x: x.reshape((batch_size,) + x.shape[2:]), batch
-                # )
-                # shuffled_batch = jax.tree.map(
-                #     lambda x: jnp.take(x, permutation, axis=0), batch
-                # )
-                # minibatches = jax.tree.map(
-                #     lambda x: jnp.reshape(
-                #         x, [config["NUM_MINIBATCHES"], -1] + list(x.shape[1:])
-                #     ),
-                #     shuffled_batch,
-                # )
                 train_state, total_loss = jax.lax.scan(
                     _update_minbatch, train_state, minibatches
                 )

@@ -224,6 +224,21 @@ class ActorWithConditionalCriticPolicy(AgentPolicy):
         # TODO: determine if it's okay to use the basic init function or if we must 
         # use the init_with_output function
         return self.network.init(rng, init_x)
+
+class PseudoActorWithConditionalCriticPolicy(ActorWithConditionalCriticPolicy):
+    """Enables PseudoActorWithConditionalCriticPolicy to act as an MLPActorCriticPolicy.
+    by passing in a dummy agent id.
+    """
+    def __init__(self, action_dim, obs_dim, pop_size, activation="tanh"):
+        super().__init__(action_dim, obs_dim, pop_size, activation)
+
+    def get_action_value_policy(self, params, obs, done, avail_actions, hstate, rng, 
+                                aux_obs=None, env_state=None):
+        dummy_agent_id = jnp.zeros(obs.shape[:-1] + (self.pop_size,))
+        action, val, pi, hidden_state = super().get_action_value_policy(
+            params, obs, done, avail_actions, hstate, rng, 
+            dummy_agent_id, env_state)
+        return action, val, pi, hidden_state
     
 class RNNActorCriticPolicy(AgentPolicy):
     """Policy wrapper for RNN Actor-Critic"""
