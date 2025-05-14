@@ -840,7 +840,7 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     sp_returns = all_returns[:, :, sp_mask]
     xp_returns = all_returns[:, :, ~sp_mask]
     
-    # Average over seeds, then over agent pairs and episodes
+    # Average over seeds, then over agent pairs, episodes and num_agents_per_game
     sp_return_curve = sp_returns.mean(axis=(0, 2, 3, 4))
     xp_return_curve = xp_returns.mean(axis=(0, 2, 3, 4))
 

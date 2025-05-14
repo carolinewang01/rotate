@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="fcp"
-label="paper-v0:analysis"
+algo="comedi"
+label="paper-v0"
 num_seeds=3
 
 # Create log directory if it doesn't exist
@@ -17,6 +17,7 @@ log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timesta
 #     "brdiv"
 #     "fcp"
 #     "lbrdiv"
+#     "comedi"
 # )
 
 # Tasks to run

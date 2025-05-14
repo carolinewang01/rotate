@@ -21,7 +21,7 @@ from common.ppo_utils import unbatchify
 from common.save_load_utils import save_train_run
 from agents.initialize_agents import initialize_actor_with_conditional_critic
 from common.ppo_utils import Transition
-
+from common.plot_utils import get_metric_names
 # Initial PPO training
 from ppo.ippo import make_train as make_ppo_train
 
@@ -98,27 +98,28 @@ def train_comedi_partners(train_rng, env, config):
     # Right now assume control of both agent and its BR
     config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"]
 
-    config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS_PER_ITERATION"] // (num_agents * config["ROLLOUT_LENGTH"])// config["NUM_ENVS"]
+    # Divide by 4 because we have 4 types of rollouts
+    config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS_PER_ITERATION"] // ( 4* num_agents * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"])
     config["MINIBATCH_SIZE_EGO"] = ((config["NUM_GAME_AGENTS"]-1) * config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
     config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
 
-    def gather_params(partner_params_pytree, idx_vec):
-        """
-        partner_params_pytree: pytree with all partner params. Each leaf has shape (n_seeds, m_ckpts, ...).
-        idx_vec: a vector of indices with shape (num_envs,) each in [0, n_seeds*m_ckpts).
+    # def gather_params(partner_params_pytree, idx_vec):
+    #     """
+    #     partner_params_pytree: pytree with all partner params. Each leaf has shape (n_seeds, m_ckpts, ...).
+    #     idx_vec: a vector of indices with shape (num_envs,) each in [0, n_seeds*m_ckpts).
 
-        Return a new pytree where each leaf has shape (num_envs, ...). Each leaf has a sampled
-        partner's parameters for each environment.
-        """
-        # We'll define a function that gathers from each leaf
-        # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
-        # We'll vmap a slicing function.
-        def gather_leaf(leaf):
-            def slice_one(idx):
-                return leaf[idx]  # shape (...)
-            return jax.vmap(slice_one)(idx_vec)
+    #     Return a new pytree where each leaf has shape (num_envs, ...). Each leaf has a sampled
+    #     partner's parameters for each environment.
+    #     """
+    #     # We'll define a function that gathers from each leaf
+    #     # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
+    #     # We'll vmap a slicing function.
+    #     def gather_leaf(leaf):
+    #         def slice_one(idx):
+    #             return leaf[idx]  # shape (...)
+    #         return jax.vmap(slice_one)(idx_vec)
 
-        return jax.tree.map(gather_leaf, partner_params_pytree)
+    #     return jax.tree.map(gather_leaf, partner_params_pytree)
 
     def make_comedi_agents(config):
         def linear_schedule(count):
@@ -1134,7 +1135,7 @@ def train_comedi_partners(train_rng, env, config):
             )
 
             out = {
-                "final_params_conf": final_population_buffer,
+                "final_params_conf": final_population_buffer.params,
                 "checkpoints_conf": others[0],
                 "metrics": others[1],
                 "last_ep_infos_xp": others[2],
@@ -1194,14 +1195,12 @@ def run_comedi(config, wandb_logger):
         )
         out = vmapped_train_fn(rngs)
     
-    jax.debug.breakpoint()
     end = time.time()
     log.info(f"CoMeDi training complete in {end - start} seconds")
 
     metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    jax.debug.breakpoint()
+
     log_metrics(config, out, wandb_logger, metric_names)
-    jax.debug.breakpoint()
     partner_params, partner_population = get_comedi_population(config, out, env)
     return partner_params, partner_population
 
@@ -1220,15 +1219,16 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     metrics = outs["metrics"]
     # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
     num_seeds, pop_size, num_updates, _, _ = metrics["pg_loss_conf_sp"].shape # number of trained pairs
-
+    # TODO: add the eval_ep_last_info metrics
     ### Log evaluation metrics
     # we plot XP return curves separately from SP return curves 
-    # shape (num_seeds, num_updates, (pop_size)^2, num_eval_episodes, 1)
-    all_returns_sp = np.asarray(outs["last_ep_infos_sp"][0]["returned_episode_returns"])[:, :, :, :, 1:]
-    all_returns_xp = np.asarray(outs["last_ep_infos_sp"][0]["returned_episode_returns"])[:, :, :, :, :, 1:]
+    # shape (num_seeds, num_updates, pop_size,  num_eval_episodes, num_agents_per_game)
+    all_returns_sp = np.asarray(outs["last_ep_infos_sp"][0]["returned_episode_returns"])
+    # shape (num_seeds, num_updates, pop_size, pop_size, num_eval_episodes, num_agents_per_game)
+    all_returns_xp = np.asarray(outs["last_ep_infos_xp"][0]["returned_episode_returns"])
     xs = list(range(num_updates))
     
-    # Average over seeds, then over agent pairs and episodes
+    # Average over seeds, then over agent pairs, episodes and num_agents_per_game
     sp_return_curve = all_returns_sp.mean(axis=(0, 3, 4))
     xp_return_curve = all_returns_xp.mean(axis=(0, 4, 5))
 
@@ -1240,22 +1240,23 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     logger.commit()
 
     ### Log population loss as multi-line plots, where each line is a different population member
-    # shape (num_seeds, num_updates, update_epochs, num_minibatches, pop_size)
+    # both xp and xp metrics has shape (num_seeds, pop_size, num_updates, update_epochs, num_minibatches)
     # Average over seeds
     processed_losses = {
-        "ConfPGLossSP": np.asarray(metrics["pg_loss_conf_sp"]).mean(axis=(0, 3, 4)).transpose(),
-        "ConfPGLossXP": np.asarray(metrics["pg_loss_conf_xp"]).mean(axis=(0, 3, 4)).transpose(),
-        "ConfPGLossMP": np.asarray(metrics["pg_loss_conf_mp"]).mean(axis=(0, 3, 4)).transpose(),
-        "ConfValLossSP": np.asarray(metrics["value_loss_sp"]).mean(axis=(0, 3, 4)).transpose(),
-        "ConfValLossXP": np.asarray(metrics["value_loss_xp"]).mean(axis=(0, 3, 4)).transpose(),
-        "ConfValLossMP": np.asarray(metrics["value_loss_mp"]).mean(axis=(0, 3, 4)).transpose(),
-        "EntropySP": np.asarray(metrics["entropy_conf_sp"]).mean(axis=(0, 3, 4)).transpose(),
-        "EntropyXP": np.asarray(metrics["entropy_conf_xp"]).mean(axis=(0, 3, 4)).transpose(),
-        "EntropyMP": np.asarray(metrics["entropy_conf_mp"]).mean(axis=(0, 3, 4)).transpose(),
+        "ConfPGLossSP": np.asarray(metrics["pg_loss_conf_sp"]).mean(axis=(0, 3, 4)), # .transpose(), # desired shape (pop_size, num_updates)
+        "ConfPGLossXP": np.asarray(metrics["pg_loss_conf_xp"]).mean(axis=(0, 3, 4)),  # .transpose(),
+        "ConfPGLossMP": np.asarray(metrics["pg_loss_conf_mp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "ConfValLossSP": np.asarray(metrics["value_loss_sp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "ConfValLossXP": np.asarray(metrics["value_loss_xp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "ConfValLossMP": np.asarray(metrics["value_loss_mp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "EntropySP": np.asarray(metrics["entropy_conf_sp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "EntropyXP": np.asarray(metrics["entropy_conf_xp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "EntropyMP": np.asarray(metrics["entropy_conf_mp"]).mean(axis=(0, 3, 4)), # .transpose(),
     }
     
     xs = list(range(num_updates))
     keys = [f"pair {i}" for i in range(pop_size)]
+
     for loss_name, loss_data in processed_losses.items():
         logger.log_item(f"Losses/{loss_name}", 
             wandb.plot.line_series(xs=xs, ys=loss_data, keys=keys, 
