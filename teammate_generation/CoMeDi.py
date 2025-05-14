@@ -183,7 +183,7 @@ def train_comedi_partners(train_rng, env, config):
                 )
 
                 # Reset envs for SP, XP, and MP
-                rng, update_rng, reset_rng_eval, reset_rng_sp, reset_rng_xp, reset_rng_mp, reset_rng_mp2 = jax.random.split(rng, 7)
+                rng, reset_rng_eval, reset_rng_eval2, reset_rng_sp, reset_rng_xp, reset_rng_mp, reset_rng_mp2 = jax.random.split(rng, 7)
 
                 reset_rngs_sps = jax.random.split(reset_rng_sp, config["NUM_ENVS_SP"])
                 reset_rngs_xps = jax.random.split(reset_rng_xp, config["NUM_ENVS_XP"])
@@ -203,28 +203,6 @@ def train_comedi_partners(train_rng, env, config):
                         lambda x: jnp.zeros((num_ckpts,) + x.shape, x.dtype),
                         params_pytree
                     )
-
-                update_steps = 0
-                init_done_xp = {k: jnp.zeros((config["NUM_ENVS_XP"]), dtype=bool) for k in env.agents + ["__all__"]}
-                init_done_sp = {k: jnp.zeros((config["NUM_ENVS_SP"]), dtype=bool) for k in env.agents + ["__all__"]}
-                init_done_mp = {k: jnp.zeros((config["NUM_ENVS_MP"]), dtype=bool) for k in env.agents + ["__all__"]}
-                init_done_mp2 = {k: jnp.zeros((config["NUM_ENVS_MP"]), dtype=bool) for k in env.agents + ["__all__"]}
-
-                update_runner_state = (
-                    train_state, pop_buffer,
-                    env_state_sp, obsv_sp, 
-                    env_state_xp, obsv_xp,
-                    env_state_mp, obsv_mp,
-                    env_state_mp2, obsv_mp2,
-                    init_done_xp, init_done_sp,
-                    init_done_mp, init_done_mp2,
-                    rng, update_steps,
-                    num_existing_agents
-                )
-
-                checkpoint_array = init_ckpt_array(train_state.params)
-                ckpt_idx = 0
-                update_with_ckpt_runner_state = (update_runner_state, checkpoint_array, ckpt_idx)
 
                 def run_single_episode(ep_rng, conf_param, prev_trained_conf_param, max_episode_steps):
                     '''agent_0 is the confederate, agent 1 is the best response'''
@@ -908,7 +886,7 @@ def train_comedi_partners(train_rng, env, config):
                                 entropy_mp = jnp.mean(pi_mp.entropy())
                                 entropy_mp2 = jnp.mean(pi_mp2.entropy())
 
-                                xp_pg_weight = - config["COMEDI_ALPHA"] # negate to minimize the ego agent's PG objective
+                                xp_pg_weight = -config["COMEDI_ALPHA"] # negate to minimize the ego agent's PG objective
                                 sp_pg_weight = 1.0 
                                 mp2_pg_weight = config["COMEDI_BETA"]
 
@@ -1045,14 +1023,54 @@ def train_comedi_partners(train_rng, env, config):
 
                     return (new_update_runner_state, checkpoint_array, ckpt_idx+1), None
 
+                per_id_run_episode = lambda x: run_episodes(
+                    reset_rng_eval, train_state.params, 
+                    jax.tree_map(lambda x: jnp.squeeze(x, 0), gather_agent_params(pop_buffer, x * jnp.ones((1,), dtype=np.int32))),
+                    config["ROLLOUT_LENGTH"], config["NUM_EVAL_EPISODES"]
+                )
+
+                # XP eval against all policies in the buffer
+                xp_eval_returns = jax.vmap(per_id_run_episode)(jnp.arange(config["POP_SIZE"]))
+
+                # SP performance against itself
+                sp_eval_returns = run_episodes(
+                    reset_rng_eval, train_state.params, train_state.params,
+                    config["ROLLOUT_LENGTH"], config["NUM_EVAL_EPISODES"]
+                )
+
+
+                update_steps = 0
+                init_done_xp = {k: jnp.zeros((config["NUM_ENVS_XP"]), dtype=bool) for k in env.agents + ["__all__"]}
+                init_done_sp = {k: jnp.zeros((config["NUM_ENVS_SP"]), dtype=bool) for k in env.agents + ["__all__"]}
+                init_done_mp = {k: jnp.zeros((config["NUM_ENVS_MP"]), dtype=bool) for k in env.agents + ["__all__"]}
+                init_done_mp2 = {k: jnp.zeros((config["NUM_ENVS_MP"]), dtype=bool) for k in env.agents + ["__all__"]}
+
+                update_runner_state = (
+                    train_state, pop_buffer,
+                    env_state_sp, obsv_sp, 
+                    env_state_xp, obsv_xp,
+                    env_state_mp, obsv_mp,
+                    env_state_mp2, obsv_mp2,
+                    init_done_xp, init_done_sp,
+                    init_done_mp, init_done_mp2,
+                    rng, update_steps,
+                    num_existing_agents
+                )
+
+                checkpoint_array = init_ckpt_array(train_state.params)
+                ckpt_idx = 0
+                update_with_ckpt_runner_state = (update_runner_state, checkpoint_array, ckpt_idx, xp_eval_returns, sp_eval_returns)
+                
                 def _update_step_with_ckpt(state_with_ckpt, unused):
-                    (update_runner_state, checkpoint_array, ckpt_idx) = state_with_ckpt
+                    
+                    (update_runner_state, checkpoint_array, ckpt_idx, xp_eval_returns, sp_eval_returns) = state_with_ckpt
                     train_state = update_runner_state[0]
                     pop_buffer = update_runner_state[1]
 
                     # Single PPO update
+                    update_input = (update_runner_state, checkpoint_array, ckpt_idx)
                     new_state_with_ckpt, metric = _update_step(
-                        state_with_ckpt,
+                        update_input,
                         None
                     )
                     new_update_runner_state = new_state_with_ckpt[0]
@@ -1064,7 +1082,7 @@ def train_comedi_partners(train_rng, env, config):
                                             jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                     
                     def store_and_eval_ckpt(args):
-                        ckpt_arr_conf, rng, cidx = args
+                        ckpt_arr_conf, rng, cidx, _, _ = args
                         new_ckpt_arr_conf = jax.tree.map(
                             lambda c_arr, p: c_arr.at[cidx].set(p),
                             ckpt_arr_conf, train_state.params
@@ -1079,29 +1097,29 @@ def train_comedi_partners(train_rng, env, config):
                             config["ROLLOUT_LENGTH"], config["NUM_EVAL_EPISODES"]
                         )
 
-                        # self-play eval
-                        last_ep_info_with_br = run_episodes(eval_rng, 
-                            train_state.params, train_state.params, 
-                            max_episode_steps=config["ROLLOUT_LENGTH"], 
-                            num_eps=config["NUM_EVAL_EPISODES"]
+                        # Eval trained agent against all params in the pool
+                        xp_eval_returns = jax.vmap(per_id_run_episode)(jnp.arange(config["POP_SIZE"]))
+                        sp_eval_returns = run_episodes(
+                            eval_rng, train_state.params, train_state.params,
+                            config["ROLLOUT_LENGTH"], config["NUM_EVAL_EPISODES"]
                         )
                         
-                        return (new_ckpt_arr_conf, rng, cidx + 1)
+                        return (new_ckpt_arr_conf, rng, cidx + 1, xp_eval_returns, sp_eval_returns)
                     
                     def skip_ckpt(args):
                         return args
                     
                     rng, store_and_eval_rng = jax.random.split(rng, 2)
-                    (checkpoint_array, store_and_eval_rng, ckpt_idx) = jax.lax.cond(
+                    (checkpoint_array, store_and_eval_rng, ckpt_idx, xp_eval_returns, sp_eval_returns) = jax.lax.cond(
                         to_store, 
                         store_and_eval_ckpt, 
                         skip_ckpt, 
-                        (checkpoint_array, store_and_eval_rng, ckpt_idx)
+                        (checkpoint_array, store_and_eval_rng, ckpt_idx, xp_eval_returns, sp_eval_returns)
                     )
                     
-                    return (new_update_runner_state, checkpoint_array, ckpt_idx), metric
+                    return (new_update_runner_state, checkpoint_array, ckpt_idx, xp_eval_returns, sp_eval_returns), (metric, xp_eval_returns, sp_eval_returns)
 
-                runner_state, metric = jax.lax.scan(
+                runner_state, (metric, xp_eval_returns, sp_eval_returns) = jax.lax.scan(
                     _update_step_with_ckpt,
                     update_with_ckpt_runner_state,
                     xs=None,  # No per-step input data
@@ -1110,7 +1128,7 @@ def train_comedi_partners(train_rng, env, config):
 
                 updated_pop_buffer = partner_population.add_agent(pop_buffer, runner_state[0][0].params)
                 conf_checkpoints = runner_state[1]
-                return updated_pop_buffer, (conf_checkpoints, metric)
+                return updated_pop_buffer, (conf_checkpoints, metric, xp_eval_returns, sp_eval_returns)
             
             iter_ids = jnp.arange(1, config["PARTNER_POP_SIZE"])
             final_population_buffer, others = jax.lax.scan(
@@ -1120,8 +1138,11 @@ def train_comedi_partners(train_rng, env, config):
             out = {
                 "final_params_conf": final_population_buffer,
                 "checkpoints_conf": others[0],
-                "metrics": others[1]
+                "metrics": others[1],
+                "last_ep_infos_xp": others[2],
+                "last_ep_infos_sp": others[3]
             }
+            jax.debug.breakpoint()
             
             return out
         return train
@@ -1176,6 +1197,7 @@ def run_comedi(config, wandb_logger):
         )
         out = vmapped_train_fn(rngs)
     
+    jax.debug.breakpoint()
     end = time.time()
     log.info(f"CoMeDi training complete in {end - start} seconds")
 
