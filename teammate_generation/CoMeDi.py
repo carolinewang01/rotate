@@ -1021,7 +1021,7 @@ def train_comedi_partners(train_rng, env, config):
                     metric["average_rewards_br_sp"] = jnp.mean(traj_batch_sp_agent1.reward)
                     metric["average_rewards_br_mp2"] = jnp.mean(traj_batch_smp1.reward)
 
-                    return (new_update_runner_state, checkpoint_array, ckpt_idx+1), None
+                    return (new_update_runner_state, checkpoint_array, ckpt_idx+1), metric
 
                 per_id_run_episode = lambda x: run_episodes(
                     reset_rng_eval, train_state.params, 
@@ -1142,7 +1142,6 @@ def train_comedi_partners(train_rng, env, config):
                 "last_ep_infos_xp": others[2],
                 "last_ep_infos_sp": others[3]
             }
-            jax.debug.breakpoint()
             
             return out
         return train
@@ -1201,9 +1200,10 @@ def run_comedi(config, wandb_logger):
     end = time.time()
     log.info(f"CoMeDi training complete in {end - start} seconds")
 
-    # metric_names = get_metric_names(algorithm_config["ENV_NAME"])
-    # log_metrics(config, out, wandb_logger, metric_names)
-
+    metric_names = get_metric_names(algorithm_config["ENV_NAME"])
+    jax.debug.breakpoint()
+    log_metrics(config, out, wandb_logger, metric_names)
+    jax.debug.breakpoint()
     partner_params, partner_population = get_comedi_population(config, out, env)
     return partner_params, partner_population
 
@@ -1222,42 +1222,39 @@ def compute_sp_mask_and_ids(pop_size):
 def log_metrics(config, outs, logger, metric_names: tuple):
     metrics = outs["metrics"]
     # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
-    num_seeds, num_updates, _, _, pop_size = metrics["pg_loss_conf_agent"].shape # number of trained pairs
+    num_seeds, pop_size, num_updates, _, _ = metrics["pg_loss_conf_sp"].shape # number of trained pairs
 
     ### Log evaluation metrics
     # we plot XP return curves separately from SP return curves 
     # shape (num_seeds, num_updates, (pop_size)^2, num_eval_episodes, 1)
-    all_returns = np.asarray(metrics["eval_ep_last_info"])
+    all_returns_sp = np.asarray(outs["last_ep_infos_sp"][0]["returned_episode_returns"])[:, :, :, :, 1:]
+    all_returns_xp = np.asarray(outs["last_ep_infos_sp"][0]["returned_episode_returns"])[:, :, :, :, :, 1:]
     xs = list(range(num_updates))
     
-    sp_mask, agent_id_cartesian_product = compute_sp_mask_and_ids(pop_size)
-    sp_returns = all_returns[:, :, sp_mask]
-    xp_returns = all_returns[:, :, ~sp_mask]
-    
     # Average over seeds, then over agent pairs and episodes
-    sp_return_curve = sp_returns.mean(axis=(0, 2, 3, 4))
-    xp_return_curve = xp_returns.mean(axis=(0, 2, 3, 4))
+    sp_return_curve = all_returns_sp.mean(axis=(0, 3, 4))
+    xp_return_curve = all_returns_xp.mean(axis=(0, 4, 5))
 
-    for step in range(num_updates):
-        logger.log_item("Eval/AvgSPReturnCurve", sp_return_curve[step], train_step=step)
-        logger.log_item("Eval/AvgXPReturnCurve", xp_return_curve[step], train_step=step)
+    for num_add_policies in range(pop_size):
+        for step in range(num_updates):
+            logger.log_item("Eval/AvgSPReturnCurve", sp_return_curve[num_add_policies, step], train_step=step)
+            mean_xp_returns = xp_return_curve[num_add_policies][:, :(num_add_policies+1)].mean(axis=-1)
+            logger.log_item("Eval/AvgXPReturnCurve", mean_xp_returns[step], train_step=step)
     logger.commit()
-
-    # log final XP matrix to wandb - average over seeds
-    last_returns_array = all_returns[:, -1].mean(axis=(0, 2, 3))
-    last_returns_array = np.reshape(last_returns_array, (pop_size, pop_size))
-    logger.log_xp_matrix("Eval/LastXPMatrix", last_returns_array)
 
     ### Log population loss as multi-line plots, where each line is a different population member
     # shape (num_seeds, num_updates, update_epochs, num_minibatches, pop_size)
     # Average over seeds
     processed_losses = {
-        "ConfPGLoss": np.asarray(metrics["pg_loss_conf_agent"]).mean(axis=(0, 2, 3)).transpose(),
-        "BRPGLoss": np.asarray(metrics["pg_loss_br_agent"]).mean(axis=(0, 2, 3)).transpose(),
-        "ConfValLoss": np.asarray(metrics["value_loss_conf_agent"]).mean(axis=(0, 2, 3)).transpose(),
-        "BRValLoss": np.asarray(metrics["value_loss_br_agent"]).mean(axis=(0, 2, 3)).transpose(),
-        "ConfEntropy": np.asarray(metrics["entropy_conf"]).mean(axis=(0, 2, 3)).transpose(),
-        "BREntropy": np.asarray(metrics["entropy_br"]).mean(axis=(0, 2, 3)).transpose(),
+        "ConfPGLossSP": np.asarray(metrics["pg_loss_conf_sp"]).mean(axis=(0, 3, 4)).transpose(),
+        "ConfPGLossXP": np.asarray(metrics["pg_loss_conf_xp"]).mean(axis=(0, 3, 4)).transpose(),
+        "ConfPGLossMP": np.asarray(metrics["pg_loss_conf_mp"]).mean(axis=(0, 3, 4)).transpose(),
+        "ConfValLossSP": np.asarray(metrics["value_loss_sp"]).mean(axis=(0, 3, 4)).transpose(),
+        "ConfValLossXP": np.asarray(metrics["value_loss_xp"]).mean(axis=(0, 3, 4)).transpose(),
+        "ConfValLossMP": np.asarray(metrics["value_loss_mp"]).mean(axis=(0, 3, 4)).transpose(),
+        "EntropySP": np.asarray(metrics["entropy_conf_sp"]).mean(axis=(0, 3, 4)).transpose(),
+        "EntropyXP": np.asarray(metrics["entropy_conf_xp"]).mean(axis=(0, 3, 4)).transpose(),
+        "EntropyMP": np.asarray(metrics["entropy_conf_mp"]).mean(axis=(0, 3, 4)).transpose(),
     }
     
     xs = list(range(num_updates))
