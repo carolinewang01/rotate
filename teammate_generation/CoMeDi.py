@@ -16,9 +16,7 @@ from envs import make_env
 from envs.log_wrapper import LogWrapper, LogEnvState
 from agents.agent_interface import ActorWithConditionalCriticPolicy
 from agents.population_interface import AgentPopulation
-from agents.mlp_actor_critic import ActorWithConditionalCritic
-from agents.population_buffer import BufferedPopulation, add_partners_to_buffer, get_final_buffer
-from common.plot_utils import get_metric_names
+from agents.population_buffer import BufferedPopulation
 from common.ppo_utils import unbatchify
 from common.save_load_utils import save_train_run
 from agents.initialize_agents import initialize_actor_with_conditional_critic
@@ -133,9 +131,9 @@ def train_comedi_partners(train_rng, env, config):
             Returns out, a dictionary of the model checkpoints, final parameters, and metrics.
             '''
             config["TOTAL_TIMESTEPS"] = config["TOTAL_TIMESTEPS_PER_ITERATION"]
-            config["ACTOR_TYPE"] = "actor_with_conditional_critic"
+            config["ACTOR_TYPE"] = "pseudo_actor_with_conditional_critic"
             config["POP_SIZE"] = config["PARTNER_POP_SIZE"]
-            out = make_ppo_train(config, env)(partner_rng)
+            out = make_ppo_train(config, env)(partner_rng) # train a single PPO agent
             return out
         
         def train(rng):
@@ -1142,7 +1140,6 @@ def train_comedi_partners(train_rng, env, config):
                 "last_ep_infos_xp": others[2],
                 "last_ep_infos_sp": others[3]
             }
-            jax.debug.breakpoint()
             
             return out
         return train
@@ -1155,21 +1152,21 @@ def get_comedi_population(config, out, env):
     '''
     Get the partner params and partner population for ego training.
     '''
-    brdiv_pop_size = config["algorithm"]["PARTNER_POP_SIZE"]
+    comedi_pop_size = config["algorithm"]["PARTNER_POP_SIZE"]
 
-    # partner_params has shape (num_seeds, brdiv_pop_size, ...)
+    # partner_params has shape (num_seeds, comedi_pop_size, ...)
     partner_params = out['final_params_conf']
     
     partner_policy = ActorWithConditionalCriticPolicy(
         action_dim=env.action_space(env.agents[1]).n,
         obs_dim=env.observation_space(env.agents[1]).shape[0],
-        pop_size=brdiv_pop_size, # used to create onehot agent id
+        pop_size=comedi_pop_size, # used to create onehot agent id
         activation=config["algorithm"].get("ACTIVATION", "tanh")
     )
 
     # Create partner population
     partner_population = AgentPopulation( 
-        pop_size=brdiv_pop_size,
+        pop_size=comedi_pop_size,
         policy_cls=partner_policy
     )
 
@@ -1188,7 +1185,7 @@ def run_comedi(config, wandb_logger):
     rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
     rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
     
-    # Create a vmapped version of train_brdiv_partners
+    # Create a vmapped version of train_comedi_partners
     with jax.disable_jit(False):
         vmapped_train_fn = jax.jit(
             jax.vmap(
@@ -1206,7 +1203,6 @@ def run_comedi(config, wandb_logger):
 
     partner_params, partner_population = get_comedi_population(config, out, env)
     return partner_params, partner_population
-
 
 def compute_sp_mask_and_ids(pop_size):
     cross_product = np.meshgrid(

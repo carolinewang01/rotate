@@ -25,8 +25,7 @@ def run_training(cfg):
     elif cfg["algorithm"]["ALG"] == "lbrdiv":
         partner_params, partner_population = run_lbrdiv(cfg, wandb_logger)
     elif cfg["algorithm"]["ALG"] == "comedi":
-        #partner_params, partner_population = run_comedi(cfg, wandb_logger)
-        run_comedi(cfg, wandb_logger)
+        partner_params, partner_population = run_comedi(cfg, wandb_logger)
     else:
         raise NotImplementedError("Selected method not implemented.")
     
