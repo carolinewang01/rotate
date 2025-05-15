@@ -858,6 +858,9 @@ def train_regret_maximizing_partners(config, env,
                 conf_pg_loss_sp = (conf_loss_sp[1] + conf_loss_sxp[1])/2.0
                 conf_entropy_sp = (conf_loss_sp[2] + conf_loss_sxp[2])/2.0
 
+                conf_avg_reward_ego = jnp.mean([traj_batch_xp.reward, traj_batch_xsp.reward])
+                conf_avg_reward_br = jnp.mean([traj_batch_sp_br.reward, traj_batch_sxp_br.reward])
+
                 (br_value_loss, br_pg_loss, br_entropy) = br_losses[1]
                 
                 # Metrics
@@ -872,8 +875,8 @@ def train_regret_maximizing_partners(config, env,
                 metric["entropy_conf_against_ego"] = conf_entropy_xp
                 metric["entropy_conf_against_br"] = conf_entropy_sp
                 
-                metric["average_rewards_ego"] = jnp.mean(traj_batch_sp_conf.reward)
-                metric["average_rewards_br"] = jnp.mean(traj_batch_sp_br.reward)
+                metric["average_rewards_ego"] = conf_avg_reward_ego
+                metric["average_rewards_br"] = conf_avg_reward_br
 
                 metric["value_loss_br"] = br_value_loss
                 metric["pg_loss_br"] = br_pg_loss

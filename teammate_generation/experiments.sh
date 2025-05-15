@@ -22,12 +22,12 @@ log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timesta
 
 # Tasks to run
 tasks=(
-    # "overcooked/asymm_advantages"
+    "overcooked/asymm_advantages"
     # "overcooked/coord_ring"
     # "overcooked/counter_circuit"
-    "overcooked/cramped_room"
-    "overcooked/forced_coord"
-    "lbf"
+    # "overcooked/cramped_room"
+    # "overcooked/forced_coord"
+    # "lbf"
 )
 
 # Function to log messages

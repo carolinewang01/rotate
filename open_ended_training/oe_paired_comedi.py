@@ -794,7 +794,7 @@ def train_regret_maximizing_partners(config, env,
                 metric["entropy_conf_against_br_sp"] = conf_entropy_sp
                 metric["entropy_conf_against_br_mp2"] = conf_entropy_mp2
                 
-                metric["average_rewards_ego"] = jnp.mean(traj_batch_sp_conf.reward)
+                metric["average_rewards_ego"] = jnp.mean(traj_batch_xp.reward)
                 metric["average_rewards_br_sp"] = jnp.mean(traj_batch_sp_br.reward)
                 metric["average_rewards_br_mp2"] = jnp.mean(traj_batch_mp2_br.reward)
 

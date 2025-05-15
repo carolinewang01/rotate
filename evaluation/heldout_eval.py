@@ -14,7 +14,7 @@ from common.tree_utils import tree_stack
 from common.stat_utils import compute_aggregate_stat_and_ci, compute_aggregate_stat_and_ci_per_task, get_aggregate_stat_fn
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from evaluation.heldout_evaluator import load_heldout_set, normalize_metrics,eval_egos_vs_heldouts as eval_1d_egos_vs_heldouts
+from evaluation.heldout_evaluator import load_heldout_set, normalize_metrics, eval_egos_vs_heldouts as eval_1d_egos_vs_heldouts
 
 log = logging.getLogger(__name__)   
 logging.basicConfig(level=logging.INFO)

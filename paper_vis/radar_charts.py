@@ -7,7 +7,7 @@ import argparse
 
 from paper_vis.process_data import load_results_for_task
 from paper_vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
-from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS, SUPPLEMENTAL, \
+from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
     GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
 
 plotly.io.kaleido.scope.mathjax = None # disable mathjax to prevent the "loading mathjax" message
@@ -15,7 +15,8 @@ plotly.io.kaleido.scope.mathjax = None # disable mathjax to prevent the "loading
 
 def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
                    heldout_names: list, plot_title: str, 
-                   save: bool, savedir: str, show_plot: bool, savename: str):
+                   save: bool, savedir: str, show_plot: bool, savename: str,
+                   show_legend: bool, show_title: bool):
     '''Plots radar charts for each algorithm in results, to show the performance against each heldout agent. 
     '''
     fig = go.Figure()
@@ -67,34 +68,35 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
     fig.update_layout(
         paper_bgcolor='white',
         plot_bgcolor='white',
+        # margin=dict(l=120, r=120, t=100, b=100, autoexpand=True),
         polar=dict(
             bgcolor='white',
             radialaxis=dict(
                 visible=True,
                 range=[0, max_value * 1.1],  # Add 10% margin for visibility
-                tickfont=dict(size=12),
+                tickfont=dict(size=20),
                 gridcolor='#EEEEEE',
                 linecolor='#CCCCCC'
             ),
             angularaxis=dict(
-                tickfont=dict(size=14, family="sans-serif", color="black"),
+                tickfont=dict(size=20, family="sans-serif", color="black"),
                 linecolor='#CCCCCC',
                 gridcolor='#EEEEEE'
             )
         ),
         title=dict(
             text=plot_title,
-            font=dict(size=TITLE_FONTSIZE, family="sans-serif", color="black"),
+            font=dict(size=TITLE_FONTSIZE*2, family="sans-serif", color="black"),
             x=0.5,
             y=0.90
-        ),
-        showlegend=True,
+        ) if show_title else None,
+        showlegend=show_legend,
         legend=dict(
-            font=dict(size=AXIS_LABEL_FONTSIZE, family="sans-serif"),
+            font=dict(size=15, family="sans-serif"),
             yanchor="top",
-            y=1.05,
+            y=1.20,
             xanchor="right",
-            x=1.1,
+            x=1.20,
             bgcolor="rgba(255, 255, 255, 0.8)",
             bordercolor="rgba(0, 0, 0, 0.2)",
             borderwidth=1
@@ -111,7 +113,9 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
         
         # Save as PDF for paper with high resolution
         pdf_path = os.path.join(savedir, f"{savename}.pdf")
-        fig.write_image(pdf_path, scale=2)  # Scale=2 for higher resolution
+        fig.write_image(pdf_path, 
+                        # width=1000, height=900
+                        )  # Slightly wider than tall to accommodate legend
     
     # Show the plot if requested
     if show_plot:
@@ -132,6 +136,10 @@ if __name__ == "__main__":
                         help="Directory to save plots")
     parser.add_argument("--tasks", nargs="+", 
                         help="List of tasks to show best returns for. If not provided, all tasks will be computed.")
+    parser.add_argument("--show_legend", action="store_true",
+                        help="Show legend in the plot")
+    parser.add_argument("--show_title", action="store_true",
+                        help="Show title in the plot")
     args = parser.parse_args()
     
     if args.plot_type == "core":
@@ -140,10 +148,15 @@ if __name__ == "__main__":
             **OE_BASELINES,
             **TEAMMATE_GEN_BASELINES
         }
-    elif args.plot_type == "ablations":
+    elif args.plot_type == "ablations_obj":
         RESULTS_TO_PLOT = {
             **OUR_METHOD,
-            **ABLATIONS
+            **ABLATIONS_OBJ
+        }
+    elif args.plot_type == "ablations_pop":
+        RESULTS_TO_PLOT = {
+            **OUR_METHOD,
+            **ABLATIONS_POP
         }
     elif args.plot_type == "supplemental":
         RESULTS_TO_PLOT = {
@@ -172,7 +185,9 @@ if __name__ == "__main__":
             "savedir": f"{args.save_dir}/{task}", 
             "savename": f"radar_{args.plot_type}_{norm_suffix}",
             "plot_title": TASK_TO_PLOT_TITLE[task],
-            "show_plot": args.show_plots
+            "show_plot": args.show_plots,
+            "show_legend": args.show_legend,
+            "show_title": args.show_title
         }
 
         results = load_results_for_task(
