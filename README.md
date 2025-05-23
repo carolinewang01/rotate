@@ -3,23 +3,14 @@
 ## TODOs
 
 ### Evaluation
-- Metrics: 
-    - BRProx metric    
+- Heldout eval teammates: write a script to compute the best responses
 - Regret-based evaluator: 
     - Figure out how to return regret-maximizing teammates that don't sabotage
 
-### Method Exploration: 
-- BufferedPopulation
-    - Try using regret-based scores
-    - Try decreasing the population size / increasing ego agent learning time
-
 ### Baselines 
 - FIX LBRDIV!
-- Implement PLR style FCP baseline (this requires implementing "growing" the population size between iterations and implementing a curator)
+- Implement PLR style FCP baseline (this requires implementing a regret-based curator)
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
-
-During rebuttal phase: 
-- Implement CoMeDi
 
 ### Clean Up Code: 
 - Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because 
@@ -55,7 +46,6 @@ Follow instructions at `install_instructions.md`
 - `common/`: Shared utilities and common code
 - `envs/`: Environment implementations and wrappers
 - `evaluation/`: Evaluation and visualization scripts
-- `examples/`: Example usage scripts
 - `ego_agent_training/`: all ego-agent implementations. Currently only PPO
 - `teammate_generation/`: teammate generation algorithms
 - `open_ended_training`: our open-ended learning methods
@@ -84,18 +74,6 @@ We made some modifications to the JaxMARL Overcooked environment to improve the 
 
 - Initialization randomization: Previously, setting `random_reset` would lead to random initial agent positions, and randomized initial object states (e.g. pot might be initialized with onions already in it, agents might be initialized holding plates, etc.). We separate the functionality of the argument `random_reset` into two arguments: `random_reset` and `random_obj_state`, where `random_reset` only controls the initial positions of the two agents. 
 - Agent initial positions: previously, in a map with disconnected components, it was possible for two agents to be spawned in the same component, making it impossible to solve the task. The Overcooked-v2 environment initializes agents such that one is always spawned on each side of the map.
-
-
-### Fictitious Co-Play (FCP)
-The `fcp/` directory stores our Fictitious Co-Play implementation. This implementation was based on JaxMARL's IPPO implementation. 
-Our full implementation can be run via `python fcp/run_fcp_pipeline.py`. Results are logged via wandb, but can also be viewed locally in the `results` directory.
-
-The FCP implementation includes several training variants:
-- `fcp_train_s5.py`: Training with S5 actor-critic architecture for the ego agent
-- `fcp_train_mlp.py`: Training with MLP actor-critic architecture for the ego agent
-- `fcp_train_rnn.py`: Training with RNN actor-critic architecture for the ego agent
-- `fcp_eval.py`: Evaluation script for FCP agents
-- `train_partners.py`: Script for training partner agents using IPPO.
 
 ### PPO
 The `ppo/` directory stores our IPPO implementation. 

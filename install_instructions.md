@@ -1,5 +1,5 @@
 ### Instructions
-Instructions were tested on debruyne by Caroline on 4/3/25 on a fresh install w/Python 3.11. 
+Instructions were tested on 4/3/25 with a fresh install w/Python 3.11 on debruyne. 
 
 1. Create a conda env: 
 
