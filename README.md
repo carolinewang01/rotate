@@ -13,8 +13,6 @@
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
 ### Clean Up Code - High Priority: 
-- ROTATE implementation
-    - Figure out how to name our methods ROTATE
 - Open-ended learning implementations
     - Remove conf-br weight argument from paired-style methods
     - Rename reinit-conf, reinit br/ego arguments
@@ -32,6 +30,7 @@
     - Figure out better place to put the initialize_ego_agent helper function
 - Hydra configs: 
     - add structured hydra configs for ego agent training, evaluation, and ppo
+- Update paper visualization code names?
 - Add basic documentation
 - Update README
 

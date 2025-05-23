@@ -18,9 +18,9 @@ from envs.log_wrapper import LogWrapper
 from common.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
 from agents.population_interface import AgentPopulation
-from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, initialize_rnn_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
+from ego_agent_training.utils import initialize_ego_agent
 from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 
 log = logging.getLogger(__name__)
@@ -499,16 +499,6 @@ def train_ppo_ego_agent(config, env, train_rng,
     out = train_fn(rngs)    
     return out
 
-def initialize_ego_agent(algorithm_config, env, init_rng):
-    if algorithm_config["EGO_ACTOR_TYPE"] == "s5":
-        ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "mlp":
-        ego_policy, init_ego_params = initialize_mlp_agent(algorithm_config, env, init_rng)
-    elif algorithm_config["EGO_ACTOR_TYPE"] == "rnn":
-        ego_policy, init_ego_params = initialize_rnn_agent(algorithm_config, env, init_rng)
-    return ego_policy, init_ego_params
-
-    
 def run_ego_training(config, wandb_logger):
     '''Run ego agent training against the population of partner agents.
     

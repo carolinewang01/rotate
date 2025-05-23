@@ -9,7 +9,8 @@ import hydra
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 
-from ego_agent_training.ppo_ego import train_ppo_ego_agent, initialize_ego_agent
+from ego_agent_training.ppo_ego import train_ppo_ego_agent
+from ego_agent_training.utils import initialize_ego_agent
 from common.plot_utils import get_metric_names, get_stats
 from common.save_load_utils import save_train_run
 

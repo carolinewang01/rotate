@@ -9,7 +9,8 @@ from agents.population_interface import AgentPopulation
 from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from ego_agent_training.ppo_ego import train_ppo_ego_agent, log_metrics, initialize_ego_agent
+from ego_agent_training.ppo_ego import train_ppo_ego_agent, log_metrics
+from ego_agent_training.utils import initialize_ego_agent
 from evaluation.heldout_evaluator import load_heldout_set
 
 log = logging.getLogger(__name__)
