@@ -68,7 +68,9 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
     fig.update_layout(
         paper_bgcolor='white',
         plot_bgcolor='white',
-        # margin=dict(l=120, r=120, t=100, b=100, autoexpand=True),
+        margin=dict(
+            l=105, # r=200,
+            autoexpand=True),
         polar=dict(
             bgcolor='white',
             radialaxis=dict(
@@ -95,8 +97,8 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
             font=dict(size=15, family="sans-serif"),
             yanchor="top",
             y=1.20,
-            xanchor="right",
-            x=1.20,
+            xanchor="left",
+            x=-0.32,
             bgcolor="rgba(255, 255, 255, 0.8)",
             bordercolor="rgba(0, 0, 0, 0.2)",
             borderwidth=1
@@ -115,7 +117,7 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
         pdf_path = os.path.join(savedir, f"{savename}.pdf")
         fig.write_image(pdf_path, 
                         # width=1000, height=900
-                        )  # Slightly wider than tall to accommodate legend
+                        )
     
     # Show the plot if requested
     if show_plot:

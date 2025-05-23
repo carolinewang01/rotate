@@ -128,7 +128,7 @@ def train_persistent(rng, env, algorithm_config, ego_config):
     rng, init_ego_rng, init_conf_rng1, init_conf_rng2, init_br_rng, train_rng = jax.random.split(rng, 6)
     
     # Initialize ego agent
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(ego_config, env, init_ego_rng)
 
     # Initialize confederate agent
     conf_policy = ActorWithDoubleCriticPolicy(

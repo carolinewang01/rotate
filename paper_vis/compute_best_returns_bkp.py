@@ -19,15 +19,16 @@ The best returns for each agent are always guaranteed to be at least as high as 
 agent's original upper bound from the performance bounds, ensuring we don't make
 things look worse than the original normalization.
 """
+
 import os
 import numpy as np
+import pickle
 import json
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from common.save_load_utils import load_train_run
 from common.plot_utils import get_metric_names
 from paper_vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
-
 
 def get_original_performance_bounds(task_name: str) -> Dict[str, List[List[float]]]:
     """Get the original agent-specific performance bounds for a task.
@@ -55,165 +56,131 @@ def get_original_performance_bounds(task_name: str) -> Dict[str, List[List[float
     return metric_bounds
 
 
-def extract_returns_for_method(eval_metrics_dir: str, env_name: str, 
-                               is_oel_method: bool, task_name: str) -> Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+def extract_returns_for_method(eval_metrics_dir: str, env_name: str, is_oel_method: bool, task_name: str) -> Dict[str, np.ndarray]:
     """Extract the returns for each heldout agent from a method's evaluation metrics.
     
     The metrics are first unnormalized using the original performance bounds
     before calculating means and returning them. Each heldout agent has its own
     specific performance bounds.
-
-    Returns:
-        A dictionary where keys are metric names. Each value is a tuple containing:
-        - mean_returns: np.ndarray of shape (num_heldout_agents,)
-        - seed_indices: np.ndarray of shape (num_heldout_agents,) containing the seed index
-        - iter_indices: np.ndarray of shape (num_heldout_agents,) containing the iteration index (None for non-OEL methods)
     """
     print(f"Processing {eval_metrics_dir} (OEL method: {is_oel_method})")
     
-    # Load the normalized evaluation metrics
-    eval_metrics = load_train_run(eval_metrics_dir)
-    metric_names = get_metric_names(env_name)
-    
-    if not metric_names:
-        raise ValueError(f"No metric names found for environment {env_name}")
-    
-    # Get the original performance bounds for each heldout agent
-    task_config_path = f"open_ended_training/configs/task/{task_name.replace('-v1', '')}.yaml"
-    heldout_agents_dict = get_heldout_agents(task_name, task_config_path)
-    
-    # Extract the agent-specific performance bounds
-    agent_performance_bounds = []
-    for agent_name, agent_dict in heldout_agents_dict.items():
-        bounds = agent_dict[3]  # The performance bounds are at index 3
-        agent_performance_bounds.append((agent_name, bounds))
-    
-    print(f"Found performance bounds for {len(agent_performance_bounds)} heldout agents")
-    
-    returns_per_heldout_agent = {}
-    
-    for metric_name in metric_names:
-        if metric_name not in eval_metrics:
-            print(f"Warning: Metric {metric_name} not found in evaluation metrics")
-            continue
+    try:
+        # Load the normalized evaluation metrics
+        eval_metrics = load_train_run(eval_metrics_dir)
+        metric_names = get_metric_names(env_name)
         
-        data = eval_metrics[metric_name]
-        # Create a copy for unnormalization
-        unnormalized_data = np.copy(data)
-        if unnormalized_data.max() > 10: 
-            import pdb; pdb.set_trace()
-            raise ValueError(f"Unnormalized data at {eval_metrics_dir} has values greater than 10.")
+        if not metric_names:
+            raise ValueError(f"No metric names found for environment {env_name}")
         
-        if is_oel_method:
-            if len(data.shape) != 5:
-                print(f"Warning: Expected OEL data shape of 5 dimensions but got {len(data.shape)} dimensions")
+        # Get the original performance bounds for each heldout agent
+        task_config_path = f"open_ended_training/configs/task/{task_name.replace('-v1', '')}.yaml"
+        heldout_agents_dict = get_heldout_agents(task_name, task_config_path)
+        
+        # Extract the agent-specific performance bounds
+        agent_performance_bounds = []
+        for agent_name, agent_dict in heldout_agents_dict.items():
+            bounds = agent_dict[3]  # The performance bounds are at index 3
+            agent_performance_bounds.append((agent_name, bounds))
+        
+        print(f"Found performance bounds for {len(agent_performance_bounds)} heldout agents")
+        
+        returns_per_heldout_agent = {}
+        
+        for metric_name in metric_names:
+            if metric_name not in eval_metrics:
+                print(f"Warning: Metric {metric_name} not found in evaluation metrics")
                 continue
             
-            # For OEL data, the heldout agent dimension is at index 2
-            num_heldout_agents = data.shape[2]
-            
-            # Check that we have the right number of bounds
-            if num_heldout_agents != len(agent_performance_bounds):
-                print(f"Warning: Number of heldout agents in data ({num_heldout_agents}) "
-                        f"doesn't match number of agents with bounds ({len(agent_performance_bounds)})")
-            
-            # Unnormalize each heldout agent using its specific bounds
-            for h in range(min(num_heldout_agents, len(agent_performance_bounds))):
-                agent_name, bounds = agent_performance_bounds[h]
-                if metric_name in bounds:
-                    lower_bd, upper_bd = bounds[metric_name]
-                    # print(f"Unnormalizing agent {h} ({agent_name}) using bounds: [{lower_bd}, {upper_bd}]")                    
-                    # The stored metrics are normalized to around 0-1 using:
-                    # (value - lower) / (upper - lower)
-                    # We need to unnormalize them correctly using:
-                    # value * (upper - lower) + lower
-                    unnormalized_data[:, :, h, :, :] = data[:, :, h, :, :] * (upper_bd - lower_bd) + lower_bd
-            
-            # Take the mean over agents per game, then mean over episodes
-            # Shape: (num_seeds, num_oel_iter, num_heldout_agents, num_eval_episodes)
-            mean_data_per_episode = unnormalized_data.mean(axis=-1)
-            # Mean over eval episodes
-            # Shape: (num_seeds, num_oel_iter, num_heldout_agents)
-            mean_data_over_episodes = mean_data_per_episode.mean(axis=-1)
-
-            # For best returns, we want the max performance over seeds and iterations for each heldout agent
-            # Resulting shape for mean_returns, best_seed_indices, best_iter_indices: (num_heldout_agents,)
-            mean_returns = np.zeros(num_heldout_agents)
-            best_seed_indices = np.zeros(num_heldout_agents, dtype=int)
-            best_iter_indices = np.zeros(num_heldout_agents, dtype=int)
-
-            for h_idx in range(num_heldout_agents):
-                # Find the seed and iteration that achieved the max return for this heldout agent
-                # mean_data_over_episodes[:, :, h_idx] has shape (num_seeds, num_oel_iter)
-                seed_idx, iter_idx = np.unravel_index(
-                    np.argmax(mean_data_over_episodes[:, :, h_idx]),
-                    mean_data_over_episodes[:, :, h_idx].shape
-                )
-                mean_returns[h_idx] = mean_data_over_episodes[seed_idx, iter_idx, h_idx]
-                best_seed_indices[h_idx] = seed_idx
-                best_iter_indices[h_idx] = iter_idx
-        
-        elif len(data.shape) == 4:  # Teammate generation methods
-            # For teammate gen data, the heldout agent dimension is at index 1
-            num_heldout_agents = data.shape[1]
-            
-            # Check that we have the right number of bounds
-            if num_heldout_agents != len(agent_performance_bounds):
-                print(f"Warning: Number of heldout agents in data ({num_heldout_agents}) "
-                        f"doesn't match number of agents with bounds ({len(agent_performance_bounds)})")
-            
-            # Unnormalize each heldout agent using its specific bounds
-            for h in range(min(num_heldout_agents, len(agent_performance_bounds))):
-                agent_name, bounds = agent_performance_bounds[h]
-                if metric_name in bounds:
-                    lower_bd, upper_bd = bounds[metric_name]
-                    print(f"Unnormalizing agent {h} ({agent_name}) using bounds: [{lower_bd}, {upper_bd}]")
+            try:
+                data = eval_metrics[metric_name]
+                # Create a copy for unnormalization
+                unnormalized_data = np.copy(data)
+                if unnormalized_data.max() > 10: 
+                    raise ValueError(f"Unnormalized data at {eval_metrics_dir} has values greater than 10.")
+                
+                if is_oel_method:
+                    if len(data.shape) != 5:
+                        print(f"Warning: Expected OEL data shape of 5 dimensions but got {len(data.shape)} dimensions")
+                        continue
                     
-                    # The stored metrics are already normalized to [0,1] using:
-                    # (value - lower) / (upper - lower)
-                    # We need to unnormalize them correctly using:
-                    # value * (upper - lower) + lower
-                    unnormalized_data[:, h, :, :] = data[:, h, :, :] * (upper_bd - lower_bd) + lower_bd
+                    # For OEL data, the heldout agent dimension is at index 2
+                    num_heldout_agents = data.shape[2]
+                    
+                    # Check that we have the right number of bounds
+                    if num_heldout_agents != len(agent_performance_bounds):
+                        print(f"Warning: Number of heldout agents in data ({num_heldout_agents}) "
+                              f"doesn't match number of agents with bounds ({len(agent_performance_bounds)})")
+                    
+                    # Unnormalize each heldout agent using its specific bounds
+                    for h in range(min(num_heldout_agents, len(agent_performance_bounds))):
+                        agent_name, bounds = agent_performance_bounds[h]
+                        if metric_name in bounds:
+                            lower_bd, upper_bd = bounds[metric_name]
+                            print(f"Unnormalizing agent {h} ({agent_name}) using bounds: [{lower_bd}, {upper_bd}]")
+                            
+                            # The stored metrics are normalized to around 0-1 using:
+                            # (value - lower) / (upper - lower)
+                            # We need to unnormalize them correctly using:
+                            # value * (upper - lower) + lower
+                            unnormalized_data[:, :, h, :, :] = data[:, :, h, :, :] * (upper_bd - lower_bd) + lower_bd
+                    
+                    # Take the mean over agents per game, then mean over episodes
+                    mean_data = unnormalized_data.mean(axis=-1)  # Now shape (num_seeds, num_oel_iter, num_heldout_agents, num_eval_episodes)
+                    # For best returns, we want the mean performance over seeds, iterations, and episodes
+                    mean_returns = mean_data.mean(axis=-1).max(axis=(0, 1))  # Shape (num_heldout_agents,)
+                
+                elif len(data.shape) == 4:  # Teammate generation methods
+                    # For teammate gen data, the heldout agent dimension is at index 1
+                    num_heldout_agents = data.shape[1]
+                    
+                    # Check that we have the right number of bounds
+                    if num_heldout_agents != len(agent_performance_bounds):
+                        print(f"Warning: Number of heldout agents in data ({num_heldout_agents}) "
+                              f"doesn't match number of agents with bounds ({len(agent_performance_bounds)})")
+                    
+                    # Unnormalize each heldout agent using its specific bounds
+                    for h in range(min(num_heldout_agents, len(agent_performance_bounds))):
+                        agent_name, bounds = agent_performance_bounds[h]
+                        if metric_name in bounds:
+                            lower_bd, upper_bd = bounds[metric_name]
+                            print(f"Unnormalizing agent {h} ({agent_name}) using bounds: [{lower_bd}, {upper_bd}]")
+                            
+                            # The stored metrics are already normalized to [0,1] using:
+                            # (value - lower) / (upper - lower)
+                            # We need to unnormalize them correctly using:
+                            # value * (upper - lower) + lower
+                            unnormalized_data[:, h, :, :] = data[:, h, :, :] * (upper_bd - lower_bd) + lower_bd
+                    
+                    # Take the mean over agents per game, then mean over episodes and seeds
+                    mean_data = unnormalized_data.mean(axis=-1)  # Now shape (num_seeds, num_heldout_agents, num_eval_episodes)
+                    mean_returns = mean_data.mean(axis=-1).max(axis=0)  # Shape (num_heldout_agents,)                
+                else:
+                    print(f"Warning: Unexpected data shape {data.shape} for {metric_name}")
+                    continue
+                
+                # Sanity check for percentage metrics
+                if metric_name == "percent_eaten" and np.any(mean_returns > 100):
+                    raise ValueError(f"Warning: unnormalized percent_eaten values exceed 100%. Max value: {mean_returns.max()}")
+                
+                # Sanity check for Overcooked returns
+                if "overcooked" in task_name and (metric_name == "returned_episode_returns" or metric_name == "base_return"):
+                    if np.any(mean_returns > 500):
+                        raise ValueError(f"Warning: unnormalized Overcooked returns are unusually high. Max value: {mean_returns.max()}")
+                
+                print(f"Mean returns shape for {metric_name}: {mean_returns.shape}, values: {mean_returns}")
+                returns_per_heldout_agent[metric_name] = mean_returns
             
-            # Take the mean over agents per game, then mean over episodes
-            # Shape: (num_seeds, num_heldout_agents, num_eval_episodes)
-            mean_data_per_episode = unnormalized_data.mean(axis=-1)
-            # Mean over eval episodes
-            # Shape: (num_seeds, num_heldout_agents)
-            mean_data_over_episodes = mean_data_per_episode.mean(axis=-1)
+            except Exception as e:
+                print(f"Error processing metric {metric_name}: {e}")
+        
+        return returns_per_heldout_agent
+    
+    except Exception as e:
+        print(f"Error loading from {eval_metrics_dir}: {e}")
+        return {}
 
-            # For best returns, we want the max performance over seeds for each heldout agent
-            # Resulting shape for mean_returns, best_seed_indices: (num_heldout_agents,)
-            mean_returns = np.zeros(num_heldout_agents)
-            best_seed_indices = np.zeros(num_heldout_agents, dtype=int)
-            # Iteration is not applicable for teammate generation methods
-            best_iter_indices = np.full(num_heldout_agents, None, dtype=object)
 
-            for h_idx in range(num_heldout_agents):
-                # Find the seed that achieved the max return for this heldout agent
-                # mean_data_over_episodes[:, h_idx] has shape (num_seeds,)
-                seed_idx = np.argmax(mean_data_over_episodes[:, h_idx])
-                mean_returns[h_idx] = mean_data_over_episodes[seed_idx, h_idx]
-                best_seed_indices[h_idx] = seed_idx
-        else:
-            print(f"Warning: Unexpected data shape {data.shape} for {metric_name}")
-            continue
-        
-        # Sanity check for LBF percentage metrics
-        if metric_name == "percent_eaten" and np.any(mean_returns > 101):
-            raise ValueError(f"Unnormalized percent_eaten values exceed 101%. Max value: {mean_returns.max()}")
-        
-        # Sanity check for Overcooked returns
-        if "overcooked" in task_name and (metric_name == "returned_episode_returns" or metric_name == "base_return"):
-            if np.any(mean_returns > 500):
-                raise ValueError(f"Unnormalized Overcooked returns are unusually high. Max value: {mean_returns.max()}")
-        
-        print(f"Mean returns shape for {metric_name}: {mean_returns.shape}, values: {mean_returns}")
-        returns_per_heldout_agent[metric_name] = (mean_returns, best_seed_indices, best_iter_indices)
-    
-    
-    return returns_per_heldout_agent
-    
 def find_eval_metrics_dirs(base_dir: str) -> List[Dict]:
     """Find all heldout_eval_metrics directories recursively and determine if they're from OEL methods.
     
@@ -274,29 +241,37 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
     original_bounds = get_original_performance_bounds(task_name)
     print(f"Original performance bounds: {original_bounds}")
     
-    # # First, examine a method's eval metrics to determine the number of heldout agents
-    # num_heldout_agents = None
-    # for eval_dir_info in eval_metrics_dirs:
-    #     eval_metrics_dir = eval_dir_info['dir']
-    #     eval_metrics = load_train_run(eval_metrics_dir)
-    #     metric_names = get_metric_names(env_name)
-    #     # Find the number of heldout agents from the data shape
-    #     for metric_name in metric_names:
-    #         if metric_name not in eval_metrics:
-    #             continue
+    # First, examine a method's eval metrics to determine the number of heldout agents
+    num_heldout_agents = None
+    for eval_dir_info in eval_metrics_dirs:
+        eval_metrics_dir = eval_dir_info['dir']
+        try:
+            eval_metrics = load_train_run(eval_metrics_dir)
+            metric_names = get_metric_names(env_name)
+            # Find the number of heldout agents from the data shape
+            for metric_name in metric_names:
+                if metric_name not in eval_metrics:
+                    continue
+                    
+                metric_data = eval_metrics[metric_name]
+                if len(metric_data.shape) == 5:  # OEL method
+                    num_heldout_agents = metric_data.shape[2]
+                elif len(metric_data.shape) == 4:  # Teammate generation method
+                    num_heldout_agents = metric_data.shape[1]
                 
-    #         metric_data = eval_metrics[metric_name]
-    #         if len(metric_data.shape) == 5:  # OEL method
-    #             num_heldout_agents = metric_data.shape[2]
-    #         elif len(metric_data.shape) == 4:  # Teammate generation method
-    #             num_heldout_agents = metric_data.shape[1]
+                if num_heldout_agents is not None:
+                    print(f"Detected {num_heldout_agents} heldout agents from {eval_metrics_dir}")
+                    break
             
-    #         if num_heldout_agents is not None:
-    #             print(f"Detected {num_heldout_agents} heldout agents from {eval_metrics_dir}")
-    #             break
-            
-    # if num_heldout_agents is None:
-    #     raise ValueError(f"Could not determine number of heldout agents for {task_name}")
+            if num_heldout_agents is not None:
+                break
+        except Exception as e:
+            print(f"Error examining {eval_metrics_dir}: {e}")
+    
+    if num_heldout_agents is None:
+        # Default to 6 heldout agents if we couldn't detect it
+        num_heldout_agents = 6
+        print(f"Warning: Could not determine number of heldout agents for {task_name}. Using default value: {num_heldout_agents}")
     
     # Initialize dicts to store best returns and their metadata for each heldout agent and each metric
     best_returns = {}
@@ -309,33 +284,50 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
         eval_metrics_dir = eval_dir_info['dir']
         is_oel_method = eval_dir_info['is_oel']
         
-        # Extract returns from this method (these are already unnormalized)
-        # returns_data is a dict: {metric_name: (mean_returns, seed_indices, iter_indices)}
-        returns_data = extract_returns_for_method(eval_metrics_dir, env_name, is_oel_method, task_name)
-        
-        # Update best returns
-        for metric_name, (current_mean_returns, current_seed_indices, current_iter_indices) in returns_data.items():
-            if metric_name not in best_returns:
-                # First time seeing this metric, initialize the arrays
-                best_returns[metric_name] = current_mean_returns
-                best_returns_method[metric_name] = [eval_metrics_dir] * len(current_mean_returns)
-                best_returns_seed[metric_name] = current_seed_indices.astype(object) # Use object to allow None
-                best_returns_iter[metric_name] = current_iter_indices.astype(object) # Use object to allow None
-            else:
-                # # Make sure arrays are the same length
-                # CLEANUP FLAG
-                # if len(current_mean_returns) != len(best_returns[metric_name]):
-                #     print(f"Warning: Skipping {eval_metrics_dir} for metric {metric_name} - "
-                #             f"expected {len(best_returns[metric_name])} values but got {len(current_mean_returns)}")
-                #     continue
-                
-                # Compare and update best returns and their metadata
-                for i in range(len(current_mean_returns)):
-                    if current_mean_returns[i] > best_returns[metric_name][i]:
-                        best_returns[metric_name][i] = current_mean_returns[i]
-                        best_returns_method[metric_name][i] = eval_metrics_dir
-                        best_returns_seed[metric_name][i] = current_seed_indices[i]
-                        best_returns_iter[metric_name][i] = current_iter_indices[i]
+        try:
+            # Extract returns from this method (these are already unnormalized)
+            returns = extract_returns_for_method(eval_metrics_dir, env_name, is_oel_method, task_name)
+            
+            # Update best returns
+            for metric_name, values in returns.items():
+                if metric_name not in best_returns:
+                    # First time seeing this metric, initialize the arrays
+                    best_returns[metric_name] = values
+                    best_returns_method[metric_name] = [eval_metrics_dir] * len(values)
+                    best_returns_seed[metric_name] = [0] * len(values)  # Default seed
+                    best_returns_iter[metric_name] = [0] * len(values)  # Default iteration
+                else:
+                    # Make sure arrays are the same length
+                    if len(values) != len(best_returns[metric_name]):
+                        print(f"Warning: Skipping {eval_metrics_dir} for metric {metric_name} - "
+                              f"expected {len(best_returns[metric_name])} values but got {len(values)}")
+                        continue
+                    
+                    # Compare and update best returns and their metadata
+                    for i in range(len(values)):
+                        if values[i] > best_returns[metric_name][i]:
+                            best_returns[metric_name][i] = values[i]
+                            best_returns_method[metric_name][i] = eval_metrics_dir
+                            # For OEL methods, we need to find which seed and iteration achieved this return
+                            if is_oel_method:
+                                eval_metrics = load_train_run(eval_metrics_dir)
+                                metric_data = eval_metrics[metric_name]
+                                # Find the seed and iteration that achieved this return
+                                best_seed, best_iter = np.unravel_index(
+                                    np.argmax(metric_data[:, :, i].mean(axis=-1)), 
+                                    metric_data[:, :, i].mean(axis=-1).shape
+                                )
+                                best_returns_seed[metric_name][i] = int(best_seed)
+                                best_returns_iter[metric_name][i] = int(best_iter)
+                            else:
+                                # For teammate generation methods, find the seed that achieved this return
+                                eval_metrics = load_train_run(eval_metrics_dir)
+                                metric_data = eval_metrics[metric_name]
+                                best_seed = np.argmax(metric_data[:, i].mean(axis=-1))
+                                best_returns_seed[metric_name][i] = int(best_seed)
+                                best_returns_iter[metric_name][i] = 0  # No iterations for teammate gen methods
+        except Exception as e:
+            print(f"Error processing {eval_metrics_dir}: {e}")
     
     # Check if we found any valid returns
     if not best_returns:
@@ -345,8 +337,8 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
     for metric_name, values in best_returns.items():
         if metric_name in original_bounds:
             agent_bounds = original_bounds[metric_name]
-            # print(f"For metric {metric_name}, original bounds: {agent_bounds}")
-            # print(f"Current best returns: {values}")
+            print(f"For metric {metric_name}, original bounds: {agent_bounds}")
+            print(f"Current best returns: {values}")
             
             # Ensure all values are at least as high as the corresponding agent's original upper bound
             for i in range(min(len(values), len(agent_bounds))):
@@ -359,9 +351,8 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
     for metric_name in best_returns:
         best_returns[metric_name] = best_returns[metric_name].tolist()
         best_returns_method[metric_name] = best_returns_method[metric_name]
-        # Convert seed and iter arrays to lists, handling potential None values
-        best_returns_seed[metric_name] = [int(s) if s is not None else None for s in best_returns_seed[metric_name]]
-        best_returns_iter[metric_name] = [int(it) if it is not None else None for it in best_returns_iter[metric_name]]
+        best_returns_seed[metric_name] = best_returns_seed[metric_name]
+        best_returns_iter[metric_name] = best_returns_iter[metric_name]
     
     # Combine all the information into a single dictionary
     result = {}
@@ -583,13 +574,16 @@ if __name__ == "__main__":
                 continue
             
             # Compute and save best returns
-            best_returns = compute_best_returns(task_name)
-            save_best_returns(task_name, best_returns)
-            print(f"Successfully computed and saved best returns for {task_name}")
-            
-            # Print summary
-            for metric_name, values in best_returns.items():
-                print(f"{metric_name}: {values}")
+            try:
+                best_returns = compute_best_returns(task_name)
+                save_best_returns(task_name, best_returns)
+                print(f"Successfully computed and saved best returns for {task_name}")
+                
+                # Print summary
+                for metric_name, values in best_returns.items():
+                    print(f"  {metric_name}: {values}")
+            except Exception as e:
+                print(f"Error processing {task_name}: {e}")
     
     elif args.command == "list":
         tasks = find_all_tasks()
@@ -608,9 +602,12 @@ if __name__ == "__main__":
         
         for task_name in tasks:
             print(f"Best returns for {task_name}:")
-            best_returns = load_best_returns(task_name)
-            for metric_name, values in best_returns.items():
-                print(f"{metric_name}: {values}")
+            try:
+                best_returns = load_best_returns(task_name)
+                for metric_name, values in best_returns.items():
+                    print(f"  {metric_name}: {values}")
+            except Exception as e:
+                print(f"  Error loading best returns: {e}")
     
     else:
         parser.print_help() 

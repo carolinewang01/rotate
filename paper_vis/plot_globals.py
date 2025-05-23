@@ -42,7 +42,6 @@ TASK_TO_METRIC_NAME = {
 OE_BASELINES = { # method_path: (type, display_name)
     "open_ended_minimax/paper-v0": ("open_ended", "Minimax"),
     # "open_ended_minimax/paper-v0:minimax2": ("open_ended", "minimax2"), # TODO: remove this result
-    # "open_ended_paired/paper-v0": ("open_ended", "oe_paired"), # TODO: remove this result
 }
 
 TEAMMATE_GEN_BASELINES = {
@@ -58,7 +57,8 @@ OUR_METHOD = {
 
 ABLATIONS_OBJ = {
     "oe_persistent/paper-v0:1reg": ("open_ended", "ROTATE (per-state)"),
-    "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"),
+    "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"), 
+    "open_ended_paired/paper-v0": ("open_ended", "ROTATE (per-traj, no SXP)"), # TODO: remove locally and rerun this result!
 }
 
 ABLATIONS_POP = {
@@ -92,34 +92,3 @@ def get_heldout_agents(task_name, task_config_path):
     heldout_agents = load_heldout_set(heldout_cfg, env, task_name, env_kwargs, rng)
 
     return heldout_agents
-
-def heldout_agent_name_map(heldout_agent_name):
-    # TODO: refine name mapping
-    # each agent must have a UNIQUE name
-    # heldout_names = [heldout_agent_name_map(name) for name in heldout_names]
-    if "ippo" in heldout_agent_name:
-        return "ippo agent"
-    elif "brdiv" in heldout_agent_name:
-        return "brdiv agent"
-    elif "independent" in heldout_agent_name:
-        return "ind. agent"
-    elif "onion" in heldout_agent_name:
-        return "onion agent"
-    elif "plate" in heldout_agent_name:
-        return "plate agent"
-    # lbf heuristic agents
-    elif heldout_agent_name == "seq_agent_lexi":
-        return "lexicographic"
-    elif heldout_agent_name == "seq_agent_rlexi":
-        return "reverse lexicographic"
-    elif heldout_agent_name == "seq_agent_col":
-        return "column major"
-    elif heldout_agent_name == "seq_agent_rcol":
-        return "reverse column major"
-    elif heldout_agent_name == "seq_agent_nearest":
-        return "nearest"
-    elif heldout_agent_name == "seq_agent_farthest":
-        return "farthest"
-    else:
-        return heldout_agent_name
-    

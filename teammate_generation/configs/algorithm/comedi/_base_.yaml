@@ -19,5 +19,5 @@ MAX_GRAD_NORM: 1.0
 ANNEAL_LR: false
 ACTOR_TYPE: actor_with_conditional_critic
 NUM_ARGMAX_ROLLOUT_EPS: 20
-COMEDI_ALPHA: 1.0 #  TODO: check with the OEL-Comedi config
+COMEDI_ALPHA: 1.0
 COMEDI_BETA: 0.5

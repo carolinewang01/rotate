@@ -1,7 +1,7 @@
 import shutil
 import time
 import logging
-
+import copy
 import hydra
 import jax
 import jax.numpy as jnp
@@ -514,11 +514,11 @@ def open_ended_training_step(carry, ego_policy, partner_population, config, env)
     carry = (updated_ego_parameters, rng)
     return carry, (train_out, ego_out)
 
-def train_minimax(rng, env, algorithm_config, partner_population):
+def train_minimax(rng, env, algorithm_config, partner_population, ego_config):
     rng, init_rng, train_rng = jax.random.split(rng, 3)
     
     # Initialize ego agent
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(ego_config, env, init_rng)
     
     @jax.jit
     def open_ended_step_fn(carry, unused):
@@ -556,6 +556,12 @@ def run_minimax(config, wandb_logger):
         policy_cls=partner_policy
     )
 
+    # initialize ego config
+    ego_config = copy.deepcopy(algorithm_config)
+    ego_config["TOTAL_TIMESTEPS"] = algorithm_config["TIMESTEPS_PER_ITER_EGO"]
+    EGO_ARGS = algorithm_config.get("EGO_ARGS", {})
+    ego_config.update(EGO_ARGS)
+
     log.info("Starting open-ended minimax training...")
     start_time = time.time()
 
@@ -563,7 +569,8 @@ def run_minimax(config, wandb_logger):
     with jax.disable_jit(DEBUG):
         train_fn = jax.jit(jax.vmap(partial(train_minimax, 
                 env=env, algorithm_config=algorithm_config, 
-                partner_population=partner_population
+                partner_population=partner_population,
+                ego_config=ego_config
                 )
             )
         )

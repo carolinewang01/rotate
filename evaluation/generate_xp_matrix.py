@@ -9,10 +9,11 @@ from envs import make_env
 from envs.log_wrapper import LogWrapper
 from evaluation.heldout_evaluator import load_heldout_set, print_metrics_table, normalize_metrics
 
-def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
+def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list, br_agent_list):
     '''Evaluate all heldout agents against each other
     Args: 
         heldout_agent_list: a list of (policy, params, test_mode) tuples for each heldout partner. params might be None for heuristic agents.
+        br_agent_list: list with same structure as heldout_agent_list, but for best response agents.
     Returns a pytree of shape (num_heldout_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
     '''
     num_agents = env.num_agents
@@ -49,8 +50,8 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
         
         partner_i_metrics = []
         for j in range(num_heldout_agents):
-            heldout_agent2 = heldout_agent_list[j]
-            policy2, param2, test_mode2, performance_bounds2 = heldout_agent2
+            br_agent = br_agent_list[j]
+            policy2, param2, test_mode2, performance_bounds2 = br_agent
             rng2 = partner_rngs[j]
             
             # Evaluate the pair
@@ -61,7 +62,7 @@ def heldout_crossplay(config, env, rng, num_episodes, heldout_agent_list):
                     merged_perf_bounds = merge_performance_bounds(performance_bounds1, performance_bounds2)
                     eval_metrics = normalize_metrics(eval_metrics, merged_perf_bounds)
                 else:
-                    print(f"Warning: no performance bounds provided for {heldout_agent1} and {heldout_agent2}. Skipping normalization.")
+                    print(f"Warning: no performance bounds provided for {heldout_agent1} and {br_agent}. Skipping normalization.")
 
             partner_i_metrics.append(eval_metrics)
 
@@ -76,7 +77,7 @@ def merge_performance_bounds(perf_bounds1, perf_bounds2):
     for k, v in perf_bounds1.items():
         lower1, upper1 = v[0], v[1]
         lower2, upper2 = perf_bounds2[k][0], perf_bounds2[k][1]
-        merged_perf_bounds[k] = [min(lower1, lower2), min(upper1, upper2)]
+        merged_perf_bounds[k] = [min(lower1, lower2), max(upper1, upper2)]
     return merged_perf_bounds
 
 def run_heldout_xp_evaluation(config, print_metrics=False):
@@ -86,24 +87,32 @@ def run_heldout_xp_evaluation(config, print_metrics=False):
     env = LogWrapper(env)
     
     rng = jax.random.PRNGKey(config["global_heldout_settings"]["EVAL_SEED"])
-    rng, heldout_init_rng, eval_rng = jax.random.split(rng, 3)
+    rng, heldout_init_rng, br_init_rng, eval_rng = jax.random.split(rng, 4)
     
     # load heldout agents
     heldout_cfg = config["heldout_set"][config["TASK_NAME"]]
     heldout_agents = load_heldout_set(heldout_cfg, env, config["TASK_NAME"], config["ENV_KWARGS"], heldout_init_rng)
     heldout_agent_list = list(heldout_agents.values())
     
+    # load best response agents
+    br_cfg = config["best_response_set"][config["TASK_NAME"]]
+    br_agents = load_heldout_set(br_cfg, env, config["TASK_NAME"], config["ENV_KWARGS"], br_init_rng)
+    br_agent_list = list(br_agents.values())
+
+    # sanity check
+    assert len(heldout_agent_list) == len(br_agent_list), "Number of heldout agents and best response agents must be the same."
     # run evaluation
     eval_metrics = heldout_crossplay(
         config, env, eval_rng, config["global_heldout_settings"]["NUM_EVAL_EPISODES"], 
-        heldout_agent_list)
+        heldout_agent_list, br_agent_list)
 
     if print_metrics:
         # each leaf of eval_metrics has shape (num_heldout_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
         metric_names = get_metric_names(config["ENV_NAME"])
         heldout_names = list(heldout_agents.keys())
+        br_names = list(br_agents.keys())
         for metric_name in metric_names:
-            print_metrics_table(eval_metrics, metric_name, heldout_names, heldout_names, 
+            print_metrics_table(eval_metrics, metric_name, heldout_names, br_names, 
             config["global_heldout_settings"]["AGGREGATE_STAT"], 
-            config["global_heldout_settings"]["NORMALIZE_RETURNS"])
+            config["global_heldout_settings"]["NORMALIZE_RETURNS"], save=True)
     return eval_metrics

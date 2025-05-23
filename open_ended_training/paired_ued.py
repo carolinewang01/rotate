@@ -428,7 +428,7 @@ def train_paired_ued(config, env, partner_rng):
                         # We negate the pg_loss_conf_ego to minimize the ego agent's objective
                         conf_ego_loss = - pg_loss_conf_ego + config["VF_COEF"] * value_loss_conf_ego - config["ENT_COEF"] * entropy_conf_ego
                         conf_br_loss = pg_loss_conf_br + config["VF_COEF"] * value_loss_conf_br - config["ENT_COEF"] * entropy_conf_br
-                        total_loss = (1 - config["SP_WEIGHT"]) * conf_ego_loss + config["SP_WEIGHT"] * conf_br_loss
+                        total_loss = conf_ego_loss + conf_br_loss
                         return total_loss, (value_loss_conf_ego, value_loss_conf_br, pg_loss_conf_ego, pg_loss_conf_br, entropy_conf_ego, entropy_conf_br)
 
                     grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)

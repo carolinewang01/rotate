@@ -84,7 +84,11 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
     agent_path = agent_config["path"]
     ckpt_key = agent_config.get("ckpt_key", "checkpoints")
     custom_loader_cfg = agent_config.get("custom_loader", None)
-    agent_ckpt = load_checkpoints(agent_path, ckpt_key=ckpt_key, custom_loader_cfg=custom_loader_cfg)
+    try: # CLEANUP FLAG
+        agent_ckpt = load_checkpoints(agent_path, ckpt_key=ckpt_key, custom_loader_cfg=custom_loader_cfg)
+    except Exception as e:
+        log.warning(f"Error loading agent checkpoint: {e}. Treating as untrained agent.")
+        import pdb; pdb.set_trace()
 
     leaf0_shape = jax.tree.leaves(agent_ckpt)[0].shape
 
@@ -110,10 +114,18 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
     idx_labels = create_idx_labels(idx_list, leaf0_shape)
 
 
-    rng, init_rng, train_rng = jax.random.split(rng, 3)
+    rng, init_rng = jax.random.split(rng, 2)
     
     if agent_config["actor_type"] == "s5":
         policy, init_params = initialize_s5_agent(agent_config, env, init_rng)
+        # Make compatible with old naming for S5 layers
+        if "action_body_0" in agent_params['params'].keys(): #  CLEANUP FLAG
+            agent_param_keys = list(agent_params['params'].keys())
+            for k in agent_param_keys:
+                if "body" in k:
+                    new_k = k.replace("body", "body_layers")
+                    agent_params['params'][new_k] = agent_params['params'][k]
+                    del agent_params['params'][k]
     elif agent_config["actor_type"] == "mlp":
         policy, init_params = initialize_mlp_agent(agent_config, env, init_rng)
     elif agent_config["actor_type"] == "rnn":
@@ -124,5 +136,11 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
         policy, init_params = initialize_actor_with_conditional_critic(agent_config, env, init_rng)
     else:
         raise ValueError(f"Invalid actor type: {agent_config['actor_type']}")
+
+    try: # CLEANUP FLAG
+        assert jax.tree.structure(agent_params) == jax.tree.structure(init_params), "Agent parameters and initial parameters must have the same structure."
+    except Exception as e:
+        log.warning(f"Error checking agent parameters and initial parameters: {e}.")
+        import pdb; pdb.set_trace()
 
     return policy, agent_params, init_params, idx_labels

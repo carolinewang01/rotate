@@ -1018,7 +1018,7 @@ def train_lagrange(rng, env, algorithm_config, ego_config):
     rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     # Initialize ego agent
-    ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
+    ego_policy, init_ego_params = initialize_s5_agent(ego_config, env, init_ego_rng)
     
     # initialize PARTNER_POP_SIZE conf and br params
     conf_policy = ActorWithDoubleCriticPolicy(

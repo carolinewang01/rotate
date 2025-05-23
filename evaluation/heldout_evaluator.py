@@ -6,6 +6,8 @@ import numpy as np
 from prettytable import PrettyTable
 from functools import partial
 import time
+import os
+import hydra
 
 from agents.lbf.agent_policy_wrappers import LBFRandomPolicyWrapper, LBFSequentialFruitPolicyWrapper
 from agents.overcooked.agent_policy_wrappers import (OvercookedIndependentPolicyWrapper, 
@@ -272,7 +274,7 @@ def run_heldout_evaluation(config, print_metrics=False):
     return eval_metrics
 
 def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names, 
-                        aggregate_stat: str, normalized_metrics: bool):
+                        aggregate_stat: str, normalized_metrics: bool, save: bool = False):
     '''Generate a table of the aggregate stat and CI of the metric for each ego agent and heldout agent.'''
     # eval_metrics[metric_name] shape (num_ego_agents, num_heldout_agents, num_eval_episodes, num_agents_per_env)
     # we first take the mean over the num_agents_per_env dimension
@@ -292,3 +294,16 @@ def print_metrics_table(eval_metrics, metric_name, ego_names, heldout_names,
     if normalized_metrics:
         print("Metrics are normalized to [lower_bound, upper_bound].")
     print(table)
+
+    if save:
+        output_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+        # if not os.path.exists(output_dir):
+        #     os.makedirs(output_dir)
+        
+        # Sanitize metric_name for use in filename
+        safe_metric_name = "".join(c if c.isalnum() else "_" for c in metric_name)
+        
+        csv_filename = os.path.join(output_dir, f"{safe_metric_name}_{aggregate_stat}_normalized={normalized_metrics}.csv")
+        with open(csv_filename, 'w', newline='') as f_output:
+            f_output.write(table.get_csv_string())
+        print(f"Table saved to {csv_filename}")
