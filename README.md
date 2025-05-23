@@ -12,27 +12,36 @@
 - Implement PLR style FCP baseline (this requires implementing a regret-based curator)
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
-### Clean Up Code: 
-- Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because 
- it displays the shaped return in Overcooked. We need to fix this.
-- In learners, all calls to run_episodes should specify test mode based on the task-specific config value.
-- Final checkpoints - rather than storing this explicitly, let's modify the learning code to always store the final ckpt as the last ckpt
+### Clean Up Code - High Priority: 
+- ROTATE implementation
+    - Figure out how to name our methods ROTATE
 - Open-ended learning implementations
     - Remove conf-br weight argument from paired-style methods
     - Rename reinit-conf, reinit br/ego arguments
+- Minibatch creation
+    - All learners should call the minibatch creation util function rather than redefine it
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
+    - Use run_episodes
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
 - Clean up IPPO: 
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
-- Heuristic agents: 
-    - Enable decision-making to account for the available actions
 - PPO-ego: 
     - Update this code to resample from the agent population each time the episode is done.
     - Figure out better place to put the initialize_ego_agent helper function
 - Hydra configs: 
     - add structured hydra configs for ego agent training, evaluation, and ppo
+- Add basic documentation
+- Update README
+
+### Clean Up Code - Lower Priority
+- Heuristic agents: 
+    - Enable decision-making to account for the available actions
+- Move best response computation code to its own directory?
+- Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because it displays the shaped return in Overcooked. We need to fix this.
+- Final params - we don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
+
 
 ### Code Assumptions
 While cleaning up the code, we should re-examine these assumptions for the benchmark. 

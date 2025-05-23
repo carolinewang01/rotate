@@ -393,11 +393,7 @@ def train_brdiv_partners(train_rng, env, config):
                         value_loss = jax.lax.cond(
                             loss_weights.sum() == 0, lambda x: jnp.zeros_like(x).astype(jnp.float32), 
                             lambda x: x,
-                            (
-                                0.5 * (
-                                loss_weights * jnp.maximum(value_losses, value_losses_clipped)
-                                ).sum()
-                            )/(loss_weights.sum())
+                            loss_weights * jnp.maximum(value_losses, value_losses_clipped).sum() / loss_weights.sum()
                         )
                         
                         choose_actor_weight = lambda self_id, other_id, rew: jax.lax.cond(
@@ -703,7 +699,6 @@ def train_brdiv_partners(train_rng, env, config):
                         checkpoint_array_conf, checkpoint_array_br, ckpt_idx, 
                         ckpt_infos), metric
 
-            # TODO
             # init checkpoint array
             checkpoint_array_conf = init_ckpt_array(all_conf_optims.params)
             checkpoint_array_br = init_ckpt_array(all_br_optims.params)

@@ -1,6 +1,6 @@
 '''
-Script for training a PPO ego agent against a buffered population of partner agents.
-This version maintains a persistent buffer of partners rather than using fixed parameters.
+Script for training a PPO ego agent against a buffered population of partner agents 
+that can 
 '''
 import logging
 
@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
 
+from agents.population_interface import AgentPopulation
+from agents.population_buffer import BufferedPopulation
 from common.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
 
@@ -52,14 +54,15 @@ def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors
 
 def train_ppo_ego_agent_with_buffer(config, env, train_rng, 
                            ego_policy, init_ego_params, n_ego_train_seeds,
-                           partner_population, population_buffer
+                           partner_population: AgentPopulation, 
+                           population_buffer: BufferedPopulation
                            ):
     '''
-    Train PPO ego agent using partners from a persistent buffer.
+    Train PPO ego agent using partners from the BufferedPopulation.
 
     Args:
         config: dict, config for the training
-        env: gymnasium environment
+        env: environment
         train_rng: jax.random.PRNGKey, random key for training
         ego_policy: AgentPolicy, policy for the ego agent
         init_ego_params: dict, initial parameters for the ego agent
@@ -99,9 +102,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
                     optax.adam(config["LR"], eps=1e-5),
                 )
-            # We need to use network.apply here to maintain the correct function 
-            # signature for the TrainState's apply_fn. The higher level policy methods 
-            # have different signatures.
+
             train_state = TrainState.create(
                 apply_fn=ego_policy.network.apply,
                 params=init_ego_params,
@@ -189,7 +190,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     done_1_reshaped,
                     avail_actions_1,
                     partner_hstate,
-                    partner_rng, # Note: partner_rng was already used for sampling, consider splitting if needed inside get_actions
+                    partner_rng,
                     env_state=env_state,
                     aux_obs=None
                 )
@@ -219,13 +220,11 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
-                # The new runner state for the next iteration includes the updated buffer and final indices
                 new_runner_state = (train_state, env_state_next, obs_next, done, 
                                     hstate_0, new_partner_hstate, updated_buffer, 
                                     updated_partner_indices, rng)
                 return new_runner_state, transition
 
-            # GAE & update step
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
@@ -270,9 +269,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                         -config["CLIP_EPS"], config["CLIP_EPS"])
                     value_losses = jnp.square(value - target_v)
                     value_losses_clipped = jnp.square(value_pred_clipped - target_v)
-                    value_loss = (
-                        0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
-                    )
+                    value_loss = jnp.maximum(value_losses, value_losses_clipped).mean()
 
                     # Policy gradient loss
                     ratio = jnp.exp(log_prob - traj_batch.log_prob)

@@ -3,7 +3,7 @@ import jax
 
 
 class AgentPopulation:
-    '''Base class for a population of identical agents
+    '''Base class for a population of homogeneous agents
     TODO: develop more complex population classes that can handle heterogeneous agents
     '''
     def __init__(self, pop_size, policy_cls):

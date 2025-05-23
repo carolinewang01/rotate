@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="open_ended_minimax" # oe_persistent
-# partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
+algo="rotate"
+# partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
 # conf_obj_type="traj_regret" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
 label="paper-v0:minimax2"
 num_seeds=3
@@ -20,17 +20,17 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Available algorithms (commented out for reference)
 # algorithms=(
-#     "oe_persistent"
+#     "rotate"
 #     "open_ended_minimax"
-#     "paired_ued"
+#     "paired"
 #     "open_ended_fcp"
 # )
 
 # Tasks to run
 tasks=(
-    # "overcooked/asymm_advantages"
-    # "overcooked/coord_ring"
-    # "overcooked/counter_circuit"
+    "overcooked/asymm_advantages"
+    "overcooked/coord_ring"
+    "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
     "lbf"

@@ -322,9 +322,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                             -config["CLIP_EPS"], config["CLIP_EPS"])
                         value_losses_ego = jnp.square(value_ego - target_v_ego)
                         value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
-                        value_loss_ego = (
-                            0.5 * jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
-                        )
+                        value_loss_ego = jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
 
                         # Value loss for interaction with best response agent
                         value_pred_br_clipped = traj_batch_br.value + (
@@ -333,9 +331,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                             -config["CLIP_EPS"], config["CLIP_EPS"])
                         value_losses_br = jnp.square(value_br - target_v_br)
                         value_losses_clipped_br = jnp.square(value_pred_br_clipped - target_v_br)
-                        value_loss_br = (
-                            0.5 * jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
-                        )
+                        value_loss_br = jnp.maximum(value_losses_br, value_losses_clipped_br).mean()
 
                         # Policy gradient loss for interaction with ego agent
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)
@@ -396,9 +392,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                             -config["CLIP_EPS"], config["CLIP_EPS"])
                         value_losses = jnp.square(value - target_v)
                         value_losses_clipped = jnp.square(value_pred_clipped - target_v)
-                        value_loss = (
-                            0.5 * jnp.maximum(value_losses, value_losses_clipped).mean()
-                        )
+                        value_loss = jnp.maximum(value_losses, value_losses_clipped).mean()
 
                         # Policy gradient loss
                         ratio = jnp.exp(log_prob - traj_batch_br.log_prob)

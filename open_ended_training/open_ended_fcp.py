@@ -1,6 +1,6 @@
 '''
-An implementation of open-ended FCP where both the ego agent and all 
-partner agents are MLP actor critics.
+An implementation of FCP where the ego agent encounters a newly trained population of 
+IPPO partners at each iteration.
 '''
 import shutil
 import time

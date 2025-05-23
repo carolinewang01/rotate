@@ -953,8 +953,6 @@ def linear_schedule_regret(iter_idx, config):
 def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_population, oe_config, ego_config, env):
     '''
     Train the ego agent against the regret-maximizing partners. 
-    Note: Currently training fcp agent against **all** adversarial partner checkpoints
-    TODO: Limit training against the last adversarial checkpoints instead.
     '''
     prev_ego_params, prev_conf_params, prev_br_params, rng, oel_iter_idx = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)

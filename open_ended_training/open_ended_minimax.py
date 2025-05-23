@@ -201,9 +201,7 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
                             -config["CLIP_EPS"], config["CLIP_EPS"])
                         value_losses_ego = jnp.square(value_ego - target_v_ego)
                         value_losses_clipped_ego = jnp.square(value_pred_ego_clipped - target_v_ego)
-                        value_loss_ego = (
-                            0.5 * jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
-                        )
+                        value_loss_ego = jnp.maximum(value_losses_ego, value_losses_clipped_ego).mean()
 
                         # Policy gradient loss for interaction with ego agent
                         ratio_ego = jnp.exp(log_prob_ego - traj_batch_ego.log_prob)

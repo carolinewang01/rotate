@@ -176,7 +176,6 @@ class PseudoActorWithDoubleCriticPolicy(ActorWithDoubleCriticPolicy):
 
 class ActorWithConditionalCriticPolicy(AgentPolicy):
     """Policy wrapper for ActorWithConditionalCritic
-    WARNING: this policy is not tested and may not work. (TODO: test)
     """
     def __init__(self, action_dim, obs_dim, pop_size, activation="tanh"):
         """
@@ -221,8 +220,6 @@ class ActorWithConditionalCriticPolicy(AgentPolicy):
         dummy_ids = jnp.zeros((self.pop_size,))
         dummy_avail = jnp.ones((self.action_dim,))
         init_x = (dummy_obs, dummy_ids, dummy_avail)
-        # TODO: determine if it's okay to use the basic init function or if we must 
-        # use the init_with_output function
         return self.network.init(rng, init_x)
 
 class PseudoActorWithConditionalCriticPolicy(ActorWithConditionalCriticPolicy):

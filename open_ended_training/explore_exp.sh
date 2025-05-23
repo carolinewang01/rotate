@@ -8,7 +8,7 @@ log_train_out=false
 log_eval_out=false
 conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # choices: sreg-xp_ret-sp_ret-sxp, sreg-xp_sreg-sp_ret-sxp
 ego_teammate="final"
-partner_algo="oe_paired_resets" # choices: oe_paired_resets, oe_paired_comedi
+partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
 ego_ent=0.001
 ego_lr=8e-6
 # pretrain_ppo=false
@@ -27,10 +27,10 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 # algorithms=(
 #     "open_ended_lagrange"
 #     "open_ended_minimax"
-#     "open_ended_paired"
-#     "oe_paired_resets"
-#     "oe_persistent"
-#     "paired_ued"
+#     "rotate_without_pop"
+#     "rotate_with_mixed_play"
+#     "rotate"
+#     "paired"
 #     "open_ended_fcp"
 # )
 
