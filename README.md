@@ -14,8 +14,7 @@
 
 ### Clean Up Code - High Priority: 
 - Open-ended learning implementations
-    - Remove conf-br weight argument from paired-style methods
-    - Rename reinit-conf, reinit br/ego arguments
+    - ROTATE: delete unused objective types
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
     - Use run_episodes
