@@ -16,8 +16,6 @@
 - Open-ended learning implementations
     - Remove conf-br weight argument from paired-style methods
     - Rename reinit-conf, reinit br/ego arguments
-- Minibatch creation
-    - All learners should call the minibatch creation util function rather than redefine it
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
     - Use run_episodes

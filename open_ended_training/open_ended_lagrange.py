@@ -1101,7 +1101,6 @@ def log_metrics(config, logger, outs, metric_names: tuple):
     teammate_metrics = teammate_outs["metrics"] # conf vs ego 
     ego_metrics = ego_outs["metrics"]
 
-    num_seeds = teammate_metrics["returned_episode_returns"].shape[0]
     num_open_ended_iters = ego_metrics["returned_episode_returns"].shape[1]
     num_partner_updates = teammate_metrics["returned_episode_returns"].shape[3]
     num_ego_updates = ego_metrics["returned_episode_returns"].shape[3]
