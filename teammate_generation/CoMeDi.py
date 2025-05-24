@@ -12,17 +12,15 @@ import optax
 from flax.training.train_state import TrainState
 import wandb
 
-from envs import make_env
-from envs.log_wrapper import LogWrapper, LogEnvState
 from agents.agent_interface import ActorWithConditionalCriticPolicy
+from agents.initialize_agents import initialize_actor_with_conditional_critic
 from agents.population_interface import AgentPopulation
 from agents.population_buffer import BufferedPopulation
-from common.ppo_utils import unbatchify
+from common.ppo_utils import Transition, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
-from agents.initialize_agents import initialize_actor_with_conditional_critic
-from common.ppo_utils import Transition
 from common.plot_utils import get_metric_names
-# Initial PPO training
+from envs import make_env
+from envs.log_wrapper import LogWrapper, LogEnvState
 from ppo.ippo import make_train as make_ppo_train
 
 log = logging.getLogger(__name__)
@@ -50,42 +48,6 @@ class ResetTransition(NamedTuple):
     conf_hstate: jnp.ndarray
     partner_hstate: jnp.ndarray
 
-def _create_minibatches(traj_batch, advantages, targets, num_actors, num_minibatches, perm_rng):
-    """Create minibatches for PPO updates, where each leaf has shape 
-        (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
-    This function creates minibatches shuffled only over the num_actors = num_envs * num_agents_per_env
-    dimension, thus ensuring that the rollout (time) dimension is preserved. 
-    This makes the minibatches compatible with recurrent ActorCritics.
-    """
-    # Create batch containing trajectory, advantages, and targets
-
-    batch = (
-        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
-        advantages, # shape (rollout_len, num_actors) = (128, 16)
-        targets # shape (rollout_len, num_actors) = (128, 16)
-    )
-
-    permutation = jax.random.permutation(perm_rng, num_actors)
-
-    # each leaf of shuffled batch has shape (rollout_len, num_actors=num_envs*num_agents_per_env, feat_shape)
-    # except for init_hstate which has shape (1, num_actors=num_envs*num_agents_per_env, hidden_dim)
-    shuffled_batch = jax.tree.map(
-        lambda x: jnp.take(x, permutation, axis=1), batch
-    )
-    # each leaf has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape)
-    # except for init_hstate which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim)
-    minibatches = jax.tree_util.tree_map(
-        lambda x: jnp.swapaxes(
-            jnp.reshape(
-                x,
-                [x.shape[0], num_minibatches, -1] 
-                + list(x.shape[2:]),
-        ), 1, 0,),
-        shuffled_batch,
-    )
-    return minibatches
-
-
 def train_comedi_partners(train_rng, env, config):
     num_agents = env.num_agents
     assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
@@ -102,24 +64,6 @@ def train_comedi_partners(train_rng, env, config):
     config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS_PER_ITERATION"] // ( 4* num_agents * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"])
     config["MINIBATCH_SIZE_EGO"] = ((config["NUM_GAME_AGENTS"]-1) * config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
     config["MINIBATCH_SIZE_BR"] = (config["NUM_ACTORS"] * config["ROLLOUT_LENGTH"]) // config["NUM_MINIBATCHES"]
-
-    # def gather_params(partner_params_pytree, idx_vec):
-    #     """
-    #     partner_params_pytree: pytree with all partner params. Each leaf has shape (n_seeds, m_ckpts, ...).
-    #     idx_vec: a vector of indices with shape (num_envs,) each in [0, n_seeds*m_ckpts).
-
-    #     Return a new pytree where each leaf has shape (num_envs, ...). Each leaf has a sampled
-    #     partner's parameters for each environment.
-    #     """
-    #     # We'll define a function that gathers from each leaf
-    #     # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
-    #     # We'll vmap a slicing function.
-    #     def gather_leaf(leaf):
-    #         def slice_one(idx):
-    #             return leaf[idx]  # shape (...)
-    #         return jax.vmap(slice_one)(idx_vec)
-
-    #     return jax.tree.map(gather_leaf, partner_params_pytree)
 
     def make_comedi_agents(config):
         def linear_schedule(count):
@@ -138,7 +82,6 @@ def train_comedi_partners(train_rng, env, config):
             return out
         
         def train(rng):
-
             # Start by training a single PPO agent via self-play
             ppo_rng, init_conf_rng, rng = jax.random.split(rng, 3)
             rngs = jax.random.split(rng, config["PARTNER_POP_SIZE"])
@@ -775,11 +718,11 @@ def train_comedi_partners(train_rng, env, config):
 
                         def _update_minbatch_conf(train_state_conf, batch_infos):
                             minbatch_xp, minbatch_sp1, minbatch_sp2, minbatch_mp1,  minbatch_mp2, xp_id, sp_id = batch_infos
-                            traj_batch_xp, advantages_xp, returns_xp = minbatch_xp
-                            traj_batch_sp1, advantages_sp1, returns_sp1 = minbatch_sp1
-                            traj_batch_sp2, advantages_sp2, returns_sp2 = minbatch_sp2
-                            traj_batch_mp1, advantages_mp1, returns_mp1 = minbatch_mp1
-                            traj_batch_mp2, advantages_mp2, returns_mp2 = minbatch_mp2
+                            _, traj_batch_xp, advantages_xp, returns_xp = minbatch_xp
+                            _, traj_batch_sp1, advantages_sp1, returns_sp1 = minbatch_sp1
+                            _, traj_batch_sp2, advantages_sp2, returns_sp2 = minbatch_sp2
+                            _, traj_batch_mp1, advantages_mp1, returns_mp1 = minbatch_mp1
+                            _, traj_batch_mp2, advantages_mp2, returns_mp2 = minbatch_mp2
 
                             def _loss_fn_conf(params, traj_batch_xp, gae_xp, target_v_xp, 
                                             traj_batch_sp, gae_sp, target_v_sp, 
@@ -927,29 +870,29 @@ def train_comedi_partners(train_rng, env, config):
 
                         # Create minibatches for each agent and interaction type
                         minibatches_xp = _create_minibatches(
-                            traj_batch_xp, advantages_xp_conf, targets_xp_conf,  
+                            traj_batch_xp, advantages_xp_conf, targets_xp_conf, None,
                             config["NUM_ENVS_XP"], config["NUM_MINIBATCHES"], perm_rng_xp
                         )
                         minibatches_sp_conf = _create_minibatches(
-                            traj_batch_sp_conf, advantages_sp_conf, targets_sp_conf,  
+                            traj_batch_sp_conf, advantages_sp_conf, targets_sp_conf, None, 
                             config["NUM_ENVS_SP"], config["NUM_MINIBATCHES"], perm_rng_sp_conf
                         )
                         minibatches_sp_br = _create_minibatches(
-                            traj_batch_sp_br, advantages_sp_br, targets_sp_br, 
+                            traj_batch_sp_br, advantages_sp_br, targets_sp_br, None, 
                             config["NUM_ENVS_SP"], config["NUM_MINIBATCHES"], perm_rng_sp_br
                         )
                         minibatches_mp_conf = _create_minibatches(
-                            traj_batch_mp_conf, advantages_mp_conf, targets_mp_conf, 
+                            traj_batch_mp_conf, advantages_mp_conf, targets_mp_conf, None,
                             config["NUM_ENVS_MP"], config["NUM_MINIBATCHES"], perm_rng_mp2_conf
                         )
                         minibatches_mp_br = _create_minibatches(
-                            traj_batch_mp_br, advantages_mp_br, targets_mp_br, 
+                            traj_batch_mp_br, advantages_mp_br, targets_mp_br, None,
                             config["NUM_ENVS_MP"], config["NUM_MINIBATCHES"], perm_rng_mp2_br
                         )
 
                         # Update confederate
-                        repeated_xp_id = jnp.repeat(xp_id, minibatches_xp[0].obs.shape[0], axis=0) 
-                        repeated_sp_id = jnp.repeat(sp_id, minibatches_sp_br[0].obs.shape[0], axis=0) 
+                        repeated_xp_id = jnp.repeat(xp_id, minibatches_xp[1].obs.shape[0], axis=0) 
+                        repeated_sp_id = jnp.repeat(sp_id, minibatches_sp_br[1].obs.shape[0], axis=0) 
                         train_state_conf, total_loss_conf = jax.lax.scan(
                             _update_minbatch_conf, train_state_conf, (
                                 minibatches_xp, minibatches_sp_conf, minibatches_sp_br,

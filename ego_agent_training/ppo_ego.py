@@ -13,55 +13,21 @@ import optax
 import hydra
 from flax.training.train_state import TrainState
 
-from envs import make_env
-from envs.log_wrapper import LogWrapper
+
+from agents.population_interface import AgentPopulation
 from common.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
-from agents.population_interface import AgentPopulation
 from common.plot_utils import get_stats, get_metric_names
+from common.ppo_utils import _create_minibatches
 from common.save_load_utils import save_train_run
 from ego_agent_training.utils import initialize_ego_agent
+from envs import make_env
+from envs.log_wrapper import LogWrapper
 from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
-def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors, num_minibatches, perm_rng):
-    """Create minibatches for PPO updates, where each leaf has shape 
-        (num_minibatches, rollout_len, num_actors / num_minibatches, ...) 
-    This function ensures that the rollout (time) dimension is kept separate from the minibatch and num_actors 
-    dimensions, so that the minibatches are compatible with recurrent ActorCritics.
-    """
-    # Create batch containing trajectory, advantages, and targets
-
-    batch = (
-        init_hstate, # shape (1, num_actors, hidden_dim) = (1, 16, 64)
-        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
-        advantages, # shape (rollout_len, num_actors) = (128, 16)
-        targets # shape (rollout_len, num_actors) = (128, 16)
-            )
-
-    permutation = jax.random.permutation(perm_rng, num_actors)
-
-    # each leaf of shuffled batch has shape (rollout_len, num_actors, feat_shape)
-    # except for init_hstate which has shape (1, num_actors, hidden_dim)
-    shuffled_batch = jax.tree.map(
-        lambda x: jnp.take(x, permutation, axis=1), batch
-    )
-    # each leaf has shape (num_minibatches, rollout_len, num_actors/num_minibatches, feat_shape)
-    # except for init_hstate which has shape (num_minibatches, 1, num_actors/num_minibatches, hidden_dim)
-    minibatches = jax.tree_util.tree_map(
-        lambda x: jnp.swapaxes(
-            jnp.reshape(
-                x,
-                [x.shape[0], num_minibatches, -1] 
-                + list(x.shape[2:]),
-        ), 1, 0,),
-        shuffled_batch,
-    )
-
-    return minibatches
 
 def train_ppo_ego_agent(config, env, train_rng, 
                         ego_policy, init_ego_params, n_ego_train_seeds,

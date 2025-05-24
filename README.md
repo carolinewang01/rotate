@@ -27,7 +27,6 @@
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
 - PPO-ego: 
     - Update this code to resample from the agent population each time the episode is done.
-    - Figure out better place to put the initialize_ego_agent helper function
 - Hydra configs: 
     - add structured hydra configs for ego agent training, evaluation, and ppo
 - Update paper visualization code names?

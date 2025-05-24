@@ -35,10 +35,10 @@ def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors
     # Create batch containing trajectory, advantages, and targets
 
     batch = (
-        init_hstate, # shape (1, num_actors, hidden_dim) = (1, 16, 64)
-        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape) = (128, 16, 15) 
-        advantages, # shape (rollout_len, num_actors) = (128, 16)
-        targets # shape (rollout_len, num_actors) = (128, 16)
+        init_hstate, # shape (1, num_actors, hidden_dim)
+        traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape)
+        advantages, # shape (rollout_len, num_actors)
+        targets # shape (rollout_len, num_actors)
             )
 
     permutation = jax.random.permutation(perm_rng, num_actors)
