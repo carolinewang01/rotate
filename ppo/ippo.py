@@ -71,11 +71,10 @@ def make_train(config, env):
         # TRAIN LOOP
         def _update_step(update_runner_state, unused):
             runner_state, update_steps = update_runner_state
-            # COLLECT TRAJECTORIES
+
             def _env_step(runner_state, unused):
                 train_state, env_state, last_obs, last_done, last_hstate, rng = runner_state
 
-                # SELECT ACTION
                 rng, act_rng = jax.random.split(rng)
 
                 obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
@@ -83,13 +82,9 @@ def make_train(config, env):
                 done_batch = batchify(last_done, env.agents, config["NUM_ACTORS"])
                 done_batch = done_batch.reshape(1, config["NUM_ACTORS"])
 
-                # Get actual available actions from environment state
                 avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
                 avail_actions = jax.lax.stop_gradient(batchify(avail_actions, 
                     env.agents, config["NUM_ACTORS"]).astype(jnp.float32))
-
-                # pi, value = network.apply(train_state.params, (obs_batch, avail_batch))
-                # action = pi.sample(seed=_rng)
 
                 action, value, pi, hstate = policy.get_action_value_policy(
                     params=train_state.params,
@@ -108,7 +103,6 @@ def make_train(config, env):
                 env_act = unbatchify(action, env.agents, config["NUM_ENVS"], env.num_agents)
                 env_act = {k:v.flatten() for k,v in env_act.items()}
 
-                # STEP ENV
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
 
@@ -345,13 +339,6 @@ def run_ippo(config, logger):
 
 def log_metrics(config, out, logger):
     '''Save train run output and log to wandb as artifact.'''
-
-    # # check if final ckpt is same as last 
-    # final_ckpt_leaf = jax.tree.leaves(out["checkpoints"])[0][0, -1]
-    # ckpt_leaf_mean = jax.tree.leaves(out["checkpoints"])[0].mean()
-    # final_params_leaf = jax.tree.leaves(out["final_params"])[0]
-    # is_close= jnp.allclose(final_ckpt_leaf, final_params_leaf)
-    # import pdb; pdb.set_trace()
 
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     # save artifacts

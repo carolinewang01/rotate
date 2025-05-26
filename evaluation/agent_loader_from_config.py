@@ -84,11 +84,7 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
     agent_path = agent_config["path"]
     ckpt_key = agent_config.get("ckpt_key", "checkpoints")
     custom_loader_cfg = agent_config.get("custom_loader", None)
-    try: # CLEANUP FLAG
-        agent_ckpt = load_checkpoints(agent_path, ckpt_key=ckpt_key, custom_loader_cfg=custom_loader_cfg)
-    except Exception as e:
-        log.warning(f"Error loading agent checkpoint: {e}. Treating as untrained agent.")
-        import pdb; pdb.set_trace()
+    agent_ckpt = load_checkpoints(agent_path, ckpt_key=ckpt_key, custom_loader_cfg=custom_loader_cfg)
 
     leaf0_shape = jax.tree.leaves(agent_ckpt)[0].shape
 
@@ -119,7 +115,7 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
     if agent_config["actor_type"] == "s5":
         policy, init_params = initialize_s5_agent(agent_config, env, init_rng)
         # Make compatible with old naming for S5 layers
-        if "action_body_0" in agent_params['params'].keys(): #  CLEANUP FLAG
+        if "action_body_0" in agent_params['params'].keys(): # CLEANUP FLAG
             agent_param_keys = list(agent_params['params'].keys())
             for k in agent_param_keys:
                 if "body" in k:
@@ -137,10 +133,6 @@ def initialize_rl_agent_from_config(agent_config, agent_name, env, rng):
     else:
         raise ValueError(f"Invalid actor type: {agent_config['actor_type']}")
 
-    try: # CLEANUP FLAG
-        assert jax.tree.structure(agent_params) == jax.tree.structure(init_params), "Agent parameters and initial parameters must have the same structure."
-    except Exception as e:
-        log.warning(f"Error checking agent parameters and initial parameters: {e}.")
-        import pdb; pdb.set_trace()
+    assert jax.tree.structure(agent_params) == jax.tree.structure(init_params), "Agent parameters and initial parameters must have the same structure."
 
     return policy, agent_params, init_params, idx_labels

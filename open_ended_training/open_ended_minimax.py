@@ -150,9 +150,6 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
                 new_runner_state = (train_state_conf, env_state_next, obs_next, done, new_conf_h, new_ego_h, rng)
                 return new_runner_state, transition
             
-            # --------------------------
-            # 3d) GAE & update step
-            # --------------------------
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
@@ -474,7 +471,7 @@ def train_minimax_partners(config, ego_params, ego_policy, env, partner_rng):
 
         return train
     # ------------------------------
-    # Actually run the adversarial teammate training
+    # Actually run the teammate training
     # ------------------------------
     rngs = jax.random.split(partner_rng, config["PARTNER_POP_SIZE"])
     train_fn = jax.jit(jax.vmap(make_minimax_partner_train(config)))

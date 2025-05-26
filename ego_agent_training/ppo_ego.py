@@ -328,10 +328,9 @@ def train_ppo_ego_agent(config, env, train_rng,
                 train_state = update_state[0]
                 _, loss_terms, avg_grad_norm = losses_and_grads
                 # Resample partner for each env for next rollout
-                # Use the AgentPopulation's sample_agent_indices method
                 rng, p_rng = jax.random.split(rng)
                 new_partner_idx = partner_population.sample_agent_indices(
-                    config["NUM_UNCONTROLLED_ACTORS"], 
+                    config["NUM_UNCONTROLLED_ACTORS"],
                     p_rng
                 )
                 
@@ -340,7 +339,6 @@ def train_ppo_ego_agent(config, env, train_rng,
                 reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
                 obs, env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
                 
-                # Metrics
                 metric = traj_batch.info
                 metric["update_steps"] = update_steps
                 metric["actor_loss"] = loss_terms[1]
@@ -350,7 +348,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 new_runner_state = (train_state, env_state, obs, new_partner_idx, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
-            # 3e) PPO Update and Checkpoint saving
+            # PPO Update and Checkpoint saving
             checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
             num_ckpts = config["NUM_CHECKPOINTS"]
 
@@ -373,9 +371,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 )
                 (train_state, env_state, last_obs, partner_idx, rng, update_steps) = new_runner_state
 
-                # Decide if we store a checkpoint
-                # to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
-                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
                                       jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
 
 
@@ -408,11 +404,9 @@ def train_ppo_ego_agent(config, env, train_rng,
                 return ((train_state, env_state, last_obs, partner_idx, rng, update_steps),
                         checkpoint_array, ckpt_idx, eval_last_infos), metric
 
-            # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
 
-            # init rngs
             rng, rng_eval, rng_train = jax.random.split(rng, 3)
             # Init eval return infos
             eval_partner_indices = jnp.arange(num_total_partners)
@@ -426,8 +420,6 @@ def train_ppo_ego_agent(config, env, train_rng,
 
             # initial runner state for scanning
             update_steps = 0
-            # Initialize partner hidden state
-            # Sample initial partner indices
             rng_train, partner_rng = jax.random.split(rng_train)
             partner_indices = partner_population.sample_agent_indices(config["NUM_UNCONTROLLED_ACTORS"], partner_rng)
 
@@ -441,7 +433,6 @@ def train_ppo_ego_agent(config, env, train_rng,
             )
             state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_eps_last_infos)
             
-            # run training
             state_with_ckpt, metrics = jax.lax.scan(
                 _update_step_with_ckpt,
                 state_with_ckpt,
@@ -551,7 +542,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     average_ego_actor_losses = np.mean(all_ego_actor_losses, axis=(0, 2, 3))
     average_ego_entropy_losses = np.mean(all_ego_entropy_losses, axis=(0, 2, 3))
     average_ego_grad_norms = np.mean(all_ego_grad_norms, axis=(0, 2, 3))
-    
+
     # Log metrics for each update step
     num_updates = len(average_ego_value_losses)
     for step in range(num_updates):
@@ -569,7 +560,7 @@ def log_metrics(config, train_out, logger, metric_names: tuple):
     
     # Saving artifacts
     savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
-    # TODO: in the future, add video logging feature
+
     out_savepath = save_train_run(train_out, savedir, savename="ego_train_run")
     if config["logger"]["log_train_out"]:
         logger.log_artifact(name="ego_train_run", path=out_savepath, type_name="train_run")

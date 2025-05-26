@@ -3,7 +3,7 @@
 ## TODOs
 
 ### Evaluation
-- Heldout eval teammates: write a script to compute the best responses
+- Heldout eval teammates: write a script to compute the best response teammates for all heldout agents
 - Regret-based evaluator: 
     - Figure out how to return regret-maximizing teammates that don't sabotage
 
@@ -12,25 +12,25 @@
 - Implement PLR style FCP baseline (this requires implementing a regret-based curator)
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
-### Clean Up Code - High Priority: 
-- Open-ended learning implementations
-    - ROTATE: delete unused objective types
+### Clean Up Code - ROTATE Release
+- Remove methods that didn't appear in the paper
+- Update paper visualization code names / remove unused methods
+- Add basic documentation
+- Update README
+
+### Clean Up Code - Benchmark Release
+- PPO-ego: 
+    - Update this code to resample from the agent population each time the episode is done.
+- Clean up IPPO: 
+    - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
+- Hydra configs: 
+    - add structured hydra configs for ego agent training, evaluation, and ppo
+- Get codes to work with RNN ego agent
 - Clean up (L)-BRDiv code
     - Consider merging L-BRDiv and BRDiv implementations
     - Use run_episodes
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
-- Clean up IPPO: 
-    - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
-- PPO-ego: 
-    - Update this code to resample from the agent population each time the episode is done.
-- Hydra configs: 
-    - add structured hydra configs for ego agent training, evaluation, and ppo
-- Update paper visualization code names?
-- Add basic documentation
-- Update README
-
-### Clean Up Code - Lower Priority
 - Heuristic agents: 
     - Enable decision-making to account for the available actions
 - Move best response computation code to its own directory?

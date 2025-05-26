@@ -22,15 +22,6 @@ partner_agent:
   ckpt_key: final_buffer
   idx_list: [[0, -1]]
   
-  # name: ippo_mlp # lbf policy!
-  # path: "eval_teammates/lbf/ippo/2025-04-21_23-41-17/saved_train_run"
-  # actor_type: mlp
-  # ckpt_key: final_params
-  # idx_list: null # null to load all agents
-  # provide any necessary args to initialize the agent here
-  # ex) S5_ACTOR_CRITIC_HIDDEN_DIM: 64 
-  # defaults for each actor type will be used if no args are provided
-
 algorithm:
   ALG: ppo_ego
   EGO_ACTOR_TYPE: s5 # options: s5, mlp, rnn

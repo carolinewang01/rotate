@@ -142,11 +142,12 @@ def train_persistent(rng, env, algorithm_config, ego_config):
         br_policy = S5ActorCriticPolicy(
             action_dim=env.action_space(env.agents[0]).n,
             obs_dim=env.observation_space(env.agents[0]).shape[0],
-            d_model=algorithm_config.get("S5_D_MODEL", 16),
-            ssm_size=algorithm_config.get("S5_SSM_SIZE", 16),
+            d_model=algorithm_config.get("S5_D_MODEL", 128),
+            ssm_size=algorithm_config.get("S5_SSM_SIZE", 128),
             n_layers=algorithm_config.get("S5_N_LAYERS", 2),
             blocks=algorithm_config.get("S5_BLOCKS", 1),
-            fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 64),
+            fc_hidden_dim=algorithm_config.get("S5_ACTOR_CRITIC_HIDDEN_DIM", 1024),
+            fc_n_layers=algorithm_config.get("FC_N_LAYERS", 3),
             s5_activation=algorithm_config.get("S5_ACTIVATION", "full_glu"),
             s5_do_norm=algorithm_config.get("S5_DO_NORM", True),
             s5_prenorm=algorithm_config.get("S5_PRENORM", True),
@@ -161,8 +162,7 @@ def train_persistent(rng, env, algorithm_config, ego_config):
     init_br_params = jax.vmap(br_policy.init_params)(init_br_rngs)
     
     # Create persistent partner population with BufferedPopulation
-    # The max_pop_size should be large enough to hold all agents across all iterations
-    # Now we need more space since we're storing all checkpoints
+    # The max_pop_size must be large enough to hold all agents across all iterations
 
     if algorithm_config["EGO_TEAMMATE"] == "final":
         max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_OPEN_ENDED_ITERS"]
@@ -176,7 +176,7 @@ def train_persistent(rng, env, algorithm_config, ego_config):
     if algorithm_config["PRETRAIN_PPO"]:
         max_pop_size += algorithm_config["PRETRAIN_ARGS"]["NUM_AGENTS"] * algorithm_config["PRETRAIN_ARGS"]["NUM_CHECKPOINTS"]
 
-    # hack to initialize the partner population's conf policy class with the right intializer shape
+    # hack to initialize the partner population's conf policy class with the right initializer shape
     conf_policy2, init_conf_params2 = initialize_actor_with_double_critic(algorithm_config, env, init_conf_rng2)
     partner_population = BufferedPopulation(
         max_pop_size=max_pop_size,

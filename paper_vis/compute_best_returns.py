@@ -322,13 +322,6 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
                 best_returns_seed[metric_name] = current_seed_indices.astype(object) # Use object to allow None
                 best_returns_iter[metric_name] = current_iter_indices.astype(object) # Use object to allow None
             else:
-                # # Make sure arrays are the same length
-                # CLEANUP FLAG
-                # if len(current_mean_returns) != len(best_returns[metric_name]):
-                #     print(f"Warning: Skipping {eval_metrics_dir} for metric {metric_name} - "
-                #             f"expected {len(best_returns[metric_name])} values but got {len(current_mean_returns)}")
-                #     continue
-                
                 # Compare and update best returns and their metadata
                 for i in range(len(current_mean_returns)):
                     if current_mean_returns[i] > best_returns[metric_name][i]:

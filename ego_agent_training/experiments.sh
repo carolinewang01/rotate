@@ -26,9 +26,9 @@ log_file="results/ego_agent_training_logs/${algo}/${label}/experiment_${timestam
 
 # Tasks to run
 tasks=(
-    # "overcooked/asymm_advantages"
-    # "overcooked/coord_ring"
-    # "overcooked/counter_circuit"
+    "overcooked/asymm_advantages"
+    "overcooked/coord_ring"
+    "overcooked/counter_circuit"
     "overcooked/cramped_room"
     "overcooked/forced_coord"
     "lbf"
