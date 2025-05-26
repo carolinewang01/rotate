@@ -625,7 +625,7 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+            checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1)
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -660,7 +660,8 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                 ) = new_runner_state
 
                 # Decide if we store a checkpoint
-                to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
+                                          jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                 
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args

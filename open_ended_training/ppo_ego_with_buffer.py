@@ -367,7 +367,6 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 (train_state, env_state, last_obs, partner_idx, buffer, rng, update_steps) = new_runner_state
 
                 # Decide if we store a checkpoint
-                # to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
                 to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
                                         jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
 

@@ -255,7 +255,7 @@ def make_train(config, env):
             runner_state = (train_state, env_state, last_obs, last_done, last_hstate, rng)
             return (runner_state, update_steps), metric
 
-        checkpoint_interval = max(1, config["NUM_UPDATES"] // config["NUM_CHECKPOINTS"])
+        checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1)
         num_ckpts = config["NUM_CHECKPOINTS"]
 
         # build a pytree that can hold the parameters for all checkpoints.
@@ -272,7 +272,8 @@ def make_train(config, env):
             update_runner_state, metric = _update_step(update_runner_state, None)
             _, update_steps = update_runner_state
 
-            to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
+            to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
+                                      jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
 
             def store_ckpt_fn(args):
                 # Write current runner_state[0].params into checkpoint_array at ckpt_idx

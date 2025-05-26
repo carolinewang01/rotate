@@ -809,7 +809,6 @@ def train_regret_maximizing_partners(config, env,
                 rng, update_steps = new_update_runner_state[-2], new_update_runner_state[-1]
 
                 # Decide if we store a checkpoint
-                # to_store = jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0)
                 to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
                                           jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
                 
