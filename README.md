@@ -5,9 +5,7 @@ If you find the code or paper useful, please cite
 ```
 TODO
 ```
-
 ### Cleanup TODOs - ROTATE Release
-- Get codes to work with RNN ego agent (in upstream caht repo)
 - Add comment to ROTATE code explaining why XSP interaction is there and that it should be disabled
  for maximal efficiency
 - Add basic documentation
@@ -22,7 +20,7 @@ TODO
 
 Follow instructions at `install_instructions.md`.
 
-Download and unzip evaluation agents from this [link](https://drive.google.com/file/d/1i7vljIsPbImj89Gw5QE15DkRd84I1n11/view?usp=sharing). The code assumes that the evaluation agents are available in an `eval_teammates/` directory.
+Download and unzip evaluation agents from this [link](https://drive.google.com/file/d/1KjBV2GekKdRBiK6QSGe2vYx2ThXlG7X7/view?usp=sharing). The code assumes that the evaluation agents are available in an `eval_teammates/` directory.
 
 ### Project Structure
 - `agents/`: Contains heuristic agent implementations
@@ -30,11 +28,20 @@ Download and unzip evaluation agents from this [link](https://drive.google.com/f
 - `envs/`: Environment implementations and wrappers
 - `evaluation/`: Evaluation and visualization scripts
 - `ego_agent_training/`: all ego agent learning implementations. Currently only supports PPO.
-- `marl/`: MARL algorithm implementations. Currently only supports PPO.
+- `marl/`: MARL algorithm implementations. Currently only supports IPPO.
 - `open_ended_training`: our open-ended learning methods
 - `teammate_generation/`: teammate generation algorithms
 - `tests/`: Test scripts used during development.
 
+## Reproducing Experiments
+
+To run the experiments for the ROTATE paper, use the provided bash scripts at `teammate_generation/experiments.sh` and `open_ended_training/experiments.sh`. 
+
+
+For teammate generation methods (FCP, BRDiv, CoMeDi), please select the algorithm by modifying `teammate_generation/experiments.sh`. Then, to run the method for all tasks, run `bash teammate_generation/experiments.sh`.
+Similarly, for the open-ended methods (ROTATE, PAIRED, Minimax Return), please select the algorithm by modifying `open_ended_training/experiments.sh`. To run the method for all tasks, run `bash open_ended_training/experiments.sh`.
+
+Note that by default, these scripts log results both locally and to the wandb project specified in the base config file. 
 ## Project Guide
 
 More details about some folders are provided below. 
@@ -44,8 +51,8 @@ More details about some folders are provided below.
 The `agents` directory contains heuristic for Overcooked and LBF environments. 
 You can run the Overcooked heuristic agent by running, `python tests/test_overcooked_agents.py`.
 
-### PPO
-The `ppo/` directory stores our IPPO implementation. 
+### MARL
+The `marl/` directory stores our IPPO implementation. 
 To run it with wandb logging and using the configs, run `python ppo/run_ppo.py`. 
 Results are logged via wandb, but can also be viewed locally in the `results` directory.
 
