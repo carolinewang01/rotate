@@ -1,0 +1,20 @@
+training_state
+figures/
+figures/*
+notebooks/
+notebooks/*
+
+results/
+results/*
+results_sweep/
+results_sweep/*
+eval_teammates/
+eval_teammates/*
+results_explore/
+results_explore/*
+.vscode/
+.vscode/*
+
+# pycache
+**/__pycache__/
+**/*.pyc
