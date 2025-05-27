@@ -8,10 +8,15 @@ TODO
 
 ### Cleanup TODOs - ROTATE Release
 - Get codes to work with RNN ego agent (in upstream caht repo)
-- Remove XSP interactions from ROTATE w/o population / add comment to code about why it's there and that it should be disabled
+- Add comment to ROTATE code explaining why XSP interaction is there and that it should be disabled
  for maximal efficiency
 - Add basic documentation
+    - Explanation of logging system 
+    - How to reproduce experiments in paper
+    - How to reproduced visualizations in paper
+    - Documentation of each folder
 - Update README
+    - Add citation for paper
 
 ## Installation Guide
 
