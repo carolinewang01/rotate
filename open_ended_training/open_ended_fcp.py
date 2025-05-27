@@ -17,7 +17,7 @@ from agents.population_interface import AgentPopulation
 from agents.initialize_agents import initialize_s5_agent
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
-from ppo.ippo import make_train as make_ppo_train
+from marl.ippo import make_train as make_ppo_train
 from ego_agent_training.ppo_ego import train_ppo_ego_agent
 
 log = logging.getLogger(__name__)

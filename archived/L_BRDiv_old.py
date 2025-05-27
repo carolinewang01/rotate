@@ -12,7 +12,7 @@ import wandb
 
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from ppo.ippo import unbatchify
+from marl.ippo import unbatchify
 from common.mlp_actor_critic import ActorWithConditionalCritic
 from common.wandb_visualizations import Logger
 from common.plot_utils import get_metric_names

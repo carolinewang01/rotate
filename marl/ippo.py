@@ -326,13 +326,15 @@ def make_train(config, env):
     return train
 
 def run_ippo(config, logger):
-    env = make_env(config["ENV_NAME"], config["ENV_KWARGS"])
+    algorithm_config = dict(config.algorithm)
+    env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
 
-    rng = jax.random.PRNGKey(config["SEED"])
-    rngs = jax.random.split(rng, config["NUM_SEEDS"])
+    rng = jax.random.PRNGKey(algorithm_config["TRAIN_SEED"])
+    rngs = jax.random.split(rng, algorithm_config["NUM_SEEDS"])
+    
     with jax.disable_jit(False):
-        train_jit = jax.jit(jax.vmap(make_train(config, env)))
+        train_jit = jax.jit(jax.vmap(make_train(algorithm_config, env)))
         out = train_jit(rngs)
 
     log_metrics(config, out, logger)
@@ -350,13 +352,13 @@ def log_metrics(config, out, logger):
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
    
-    metric_names = get_metric_names(config["ENV_NAME"])
+    metric_names = get_metric_names(config.algorithm["ENV_NAME"])
 
     # Generate plots
     all_stats = get_stats(out["metrics"], metric_names)
     figures, _ = plot_train_metrics(all_stats, 
-                                    config["ROLLOUT_LENGTH"], 
-                                    config["NUM_ENVS"],
+                                    config.algorithm["ROLLOUT_LENGTH"], 
+                                    config.algorithm["NUM_ENVS"],
                                     savedir=savedir if config["local_logger"]["save_figures"] else None,
                                     savename="ippo_train_metrics",
                                     show_plots=False

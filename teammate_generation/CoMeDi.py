@@ -21,7 +21,7 @@ from common.save_load_utils import save_train_run
 from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper, LogEnvState
-from ppo.ippo import make_train as make_ppo_train
+from marl.ippo import make_train as make_ppo_train
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

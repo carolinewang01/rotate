@@ -15,7 +15,7 @@ from envs.log_wrapper import LogWrapper
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
 from open_ended_training.rotate_without_pop import train_regret_maximizing_partners, log_metrics
 from open_ended_training.rotate_with_mixed_play import train_regret_maximizing_partners as train_partners_with_mp, log_metrics as log_mp_metrics
-from ppo.ippo import make_train as make_ppo_train
+from marl.ippo import make_train as make_ppo_train
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

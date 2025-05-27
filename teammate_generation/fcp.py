@@ -10,7 +10,7 @@ from agents.agent_interface import MLPActorCriticPolicy
 from agents.population_interface import AgentPopulation
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from ppo.ippo import make_train as make_ppo_train
+from marl.ippo import make_train as make_ppo_train
 from common.plot_utils import get_metric_names, get_stats
 from common.save_load_utils import save_train_run
 

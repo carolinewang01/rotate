@@ -37,7 +37,7 @@ algorithm:
   GAE_LAMBDA: 0.95
   CLIP_EPS: 0.05
   ENT_COEF: 0.001 # TODO: check if this should be larger?
-  VF_COEF: 1.0
+  VF_COEF: 0.5
   MAX_GRAD_NORM: 1.0
   ANNEAL_LR: false
 
