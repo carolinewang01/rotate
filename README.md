@@ -43,10 +43,10 @@ Follow instructions at `install_instructions.md`
 - `common/`: Shared utilities and common code
 - `envs/`: Environment implementations and wrappers
 - `evaluation/`: Evaluation and visualization scripts
-- `ego_agent_training/`: all ego-agent implementations. Currently only PPO
-- `teammate_generation/`: teammate generation algorithms
+- `ego_agent_training/`: all ego agent learning implementations. Currently only supports PPO.
+- `marl/`: MARL algorithm implementations. Currently only supports PPO.
 - `open_ended_training`: our open-ended learning methods
-- `ppo/`: IPPO algorithm implementation
+- `teammate_generation/`: teammate generation algorithms
 - `tests/`: Test scripts used during development.
 
 ## Project Guide
