@@ -11,7 +11,7 @@ from flax.training.train_state import TrainState
 
 from agents.population_interface import AgentPopulation
 from agents.population_buffer import BufferedPopulation
-from common.ppo_utils import Transition, unbatchify, _create_minibatches
+from marl.ppo_utils import Transition, unbatchify, _create_minibatches
 from common.run_episodes import run_episodes
 
 log = logging.getLogger(__name__)

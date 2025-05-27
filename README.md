@@ -27,13 +27,12 @@ Download and unzip evaluation agents from this [link](https://drive.google.com/f
 ### Project Structure
 - `agents/`: Contains heuristic agent implementations
 - `common/`: Shared utilities and common code
-- `ego_agent_training/`: PPO ego agent implementation
-- `envs/`: Environment wrappers
+- `envs/`: Environment implementations and wrappers
 - `evaluation/`: Evaluation and visualization scripts
-- `open_ended_training`: open-ended learning methods (ROTATE, ROTATE variations, Minimax Return, PAIRED)
-- `paper_vis`: Visualization scripts for the plots in the paper.
-- `ppo/`: IPPO algorithm implementation
-- `teammate_generation/`: teammate generation algorithms (BRDiv, FCP, CoMeDi)
+- `ego_agent_training/`: all ego agent learning implementations. Currently only supports PPO.
+- `marl/`: MARL algorithm implementations. Currently only supports PPO.
+- `open_ended_training`: our open-ended learning methods
+- `teammate_generation/`: teammate generation algorithms
 - `tests/`: Test scripts used during development.
 
 ## Project Guide

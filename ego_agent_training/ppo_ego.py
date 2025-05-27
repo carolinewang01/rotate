@@ -1,6 +1,7 @@
 '''
 Script for training a PPO ego agent against a population of partner agents. 
-Warning: this script is used as the main script for ego training throughout the project.
+Only supports a population of homogeneous RL partner agents.
+Warning: modify with caution, as this script is used as the main script for ego training throughout the project.
 '''
 import shutil
 import time
@@ -15,10 +16,10 @@ from flax.training.train_state import TrainState
 
 
 from agents.population_interface import AgentPopulation
-from common.ppo_utils import Transition, unbatchify
+from marl.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
 from common.plot_utils import get_stats, get_metric_names
-from common.ppo_utils import _create_minibatches
+from marl.ppo_utils import _create_minibatches
 from common.save_load_utils import save_train_run
 from ego_agent_training.utils import initialize_ego_agent
 from envs import make_env
@@ -110,24 +111,17 @@ def train_ppo_ego_agent(config, env, train_rng,
                 train_state, env_state, prev_obs, prev_done, hstate_0, partner_hstate, partner_indices, rng = runner_state
                 rng, actor_rng, partner_rng, step_rng = jax.random.split(rng, 4)
 
-                obs_0 = prev_obs["agent_0"]
-                obs_1 = prev_obs["agent_1"]
-
                  # Get available actions for agent 0 from environment state
                 avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
                 avail_actions = jax.lax.stop_gradient(avail_actions)
                 avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
-                
-                # Reshape inputs for S5 (sequence_length, batch_size, features)
-                obs_0_reshaped = obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1)
-                done_0_reshaped = prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"])
-                
+                                
                 # Agent_0 (ego) action, value, log_prob
                 act_0, val_0, pi_0, hstate_0 = ego_policy.get_action_value_policy(
                     params=train_state.params,
-                    obs=obs_0_reshaped,
-                    done=done_0_reshaped,
+                    obs=prev_obs["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
+                    done=prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
                     avail_actions=avail_actions_0,
                     hstate=hstate_0,
                     rng=actor_rng
@@ -139,19 +133,11 @@ def train_ppo_ego_agent(config, env, train_rng,
                 val_0 = val_0.squeeze()
 
                 # Agent_1 (partner) action using the AgentPopulation interface
-                
-                # reshape inputs and parameters so that the first dim corresponds to the number of controlled actors
-                # (the dim that vmapping will be applied over) and the second dim corresponds to the time dimension of (1,)
-                # required by recurrent partner policies
-                obs_1_reshaped = obs_1.reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
-                done_1_reshaped = prev_done["agent_1"].reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1)
-                
-
                 act_1, new_partner_hstate = partner_population.get_actions(
                     partner_params,
                     partner_indices,
-                    obs_1_reshaped,
-                    done_1_reshaped,
+                    prev_obs["agent_1"].reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1),
+                    prev_done["agent_1"].reshape(config["NUM_CONTROLLED_ACTORS"], 1, -1),
                     avail_actions_1,
                     partner_hstate,
                     partner_rng,
@@ -167,7 +153,7 @@ def train_ppo_ego_agent(config, env, train_rng,
 
                 # Step env
                 step_rngs = jax.random.split(step_rng, config["NUM_ENVS"])
-                obs_next, env_state_next, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
+                obs_next, env_state_next, reward, done_next, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     step_rngs, env_state, env_act
                 )
                 # note that num_actors = num_envs * num_agents
@@ -175,19 +161,19 @@ def train_ppo_ego_agent(config, env, train_rng,
 
                 # Store agent_0 data in transition
                 transition = Transition(
-                    done=done["agent_0"],
+                    done=done_next["agent_0"],
                     action=act_0,
                     value=val_0,
                     reward=reward["agent_0"],
                     log_prob=logp_0,
-                    obs=obs_0,
+                    obs=prev_obs["agent_0"],
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
-                new_runner_state = (train_state, env_state_next, obs_next, done, hstate_0, new_partner_hstate, partner_indices, rng)
+                new_runner_state = (train_state, env_state_next, obs_next, done_next, 
+                                    hstate_0, new_partner_hstate, partner_indices, rng)
                 return new_runner_state, transition
 
-            # GAE & update step
             def _calculate_gae(traj_batch, last_val):
                 def _get_advantages(gae_and_next_value, transition):
                     gae, next_value = gae_and_next_value
@@ -472,7 +458,7 @@ def run_ego_training(config, wandb_logger):
     rng, init_partner_rng, init_ego_rng, train_rng = jax.random.split(rng, 4)
     
 
-    partner_agent_config = dict(config["partner_agent"])
+    partner_agent_config = dict(algorithm_config["partner_agent"])
     partner_policy, partner_params, init_partner_params, idx_labels = initialize_rl_agent_from_config(
         partner_agent_config, partner_agent_config["name"], env, init_partner_rng)
 

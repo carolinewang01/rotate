@@ -33,7 +33,6 @@ def _create_minibatches(traj_batch, advantages, targets, init_hstate, num_actors
     dimensions, so that the minibatches are compatible with recurrent ActorCritics.
     """
     # Create batch containing trajectory, advantages, and targets
-
     batch = (
         init_hstate, # shape (1, num_actors, hidden_dim)
         traj_batch, # pytree: obs is shape (rollout_len, num_actors, feat_shape)

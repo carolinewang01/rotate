@@ -5,10 +5,10 @@ from common.plot_utils import get_metric_names
 from common.wandb_visualizations import Logger
 from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from ppo_ego import run_ego_training
-from train_br_vs_single_agent import run_br_training
+from ego_agent_training.ppo_br import run_br_training
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="default")
+@hydra.main(version_base=None, config_path="configs", config_name="base_config_ego")
 def run_training(cfg):
     '''Runs the ego agent training against a fixed partner population.'''
     print(OmegaConf.to_yaml(cfg, resolve=True))

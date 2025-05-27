@@ -1,5 +1,6 @@
 defaults:
   - task: overcooked/cramped_room # task configs
+  - algorithm@algorithm: ppo_ego/${task} # task-specific algorithm configs
   - hydra: hydra_simple
   - ../../evaluation/configs/global_heldout_settings
   - _self_         # Ensures that values in this file override imported ones if needed
@@ -9,44 +10,19 @@ ENV_KWARGS: ${task.ENV_KWARGS}
 ROLLOUT_LENGTH: ${task.ROLLOUT_LENGTH}
 TASK_NAME: ${task.TASK_NAME}
 
-run_heldout_eval: false
+run_heldout_eval: true
 
-partner_agent:
-  independent_agent_0.6:
-    actor_type: independent_agent
-    p_onion_on_counter: 0.6
-    p_plate_on_counter: 0.6
-  # onion_agent_0:  
-  #   actor_type: onion_agent
-  #   p_onion_on_counter: 0.
-  # plate_agent_0:
-  #   actor_type: plate_agent
-  #   p_plate_on_counter: 0.
-
+# partner configs are specified in each algorithm _base_ config file
+# note that ppo_ego and ppo_br support different types of partner configs
 algorithm:
-  ALG: ppo_br
-  EGO_ACTOR_TYPE: s5 # options: s5, mlp, rnn
-  TOTAL_TIMESTEPS: 3e6
   TRAIN_SEED: 12345
-  NUM_EGO_TRAIN_SEEDS: 1
+  NUM_EGO_TRAIN_SEEDS: 3
   NUM_EVAL_EPISODES: 20
-  NUM_CHECKPOINTS: 5
-  NUM_ENVS: 16
   ENV_NAME: ${ENV_NAME}
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
-  LR: 1.e-4 
-  UPDATE_EPOCHS: 15
-  NUM_MINIBATCHES: 4
-  GAMMA: 0.99
-  GAE_LAMBDA: 0.95
-  CLIP_EPS: 0.05
-  ENT_COEF: 0.01
-  VF_COEF: 1.0
-  MAX_GRAD_NORM: 1.0
-  ANNEAL_LR: true
 
-label: "best-response"
+label: ""
 name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}
 
 # WandB Params
@@ -57,10 +33,10 @@ logger:
     - ${algorithm.ALG}
     - ${TASK_NAME}
     - ${label}
-  mode: online # options: online, offline, disabled
+  mode: offline # options: online, offline, disabled
   verbose: false
-  log_train_out: false # whether to log the out dictionary
-  log_eval_out: false # whether to log the eval metrics
+  log_train_out: true # whether to log the out dictionary
+  log_eval_out: true # whether to log the eval metrics
 
 # Local logger
 local_logger:
