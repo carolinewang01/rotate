@@ -18,5 +18,4 @@ print("Filled shape: ", final_buffer["filled"].shape) # (1, 30, 1, 150) num_seed
 
 print("Param leaf shape: ", jax.tree.leaves(final_buffer["params"])[0].shape) # (1, 30, 1, 150, 64) 
 
-
 import pdb; pdb.set_trace()

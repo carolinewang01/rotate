@@ -17,7 +17,7 @@ from common.plot_utils import get_metric_names, get_stats
 from common.save_load_utils import save_train_run
 from common.wandb_visualizations import Logger
 from common.run_episodes import run_episodes
-from common.ppo_utils import Transition, unbatchify
+from marl.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from evaluation.vis_episodes import save_video

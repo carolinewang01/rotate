@@ -1,3 +1,6 @@
+'''Train an ego agent against a single partner agent.
+Supports both RL and heuristic partner agents.
+'''
 from functools import partial
 import time
 import logging
@@ -98,10 +101,7 @@ class HeuristicPolicyPopulation(AgentPopulation):
         return jax.vmap(partial(self.policy_cls.init_hstate, aux_info={"agent_id": 1}))(vmap_dummy_input)
 
 def run_br_training(config, wandb_logger):
-    '''Run ego agent training against the population of partner agents.
-    
-    Args:
-        config: dict, config for the training
+    '''Run ego agent training against a single partner agent.
     '''
     algorithm_config = dict(config["algorithm"])
 
@@ -116,9 +116,9 @@ def run_br_training(config, wandb_logger):
     ego_policy, init_ego_params = initialize_ego_agent(algorithm_config, env, init_rng)
 
     # Initialize partner agent
-    partner_agent_config = dict(config["partner_agent"])
+    partner_agent_config = dict(algorithm_config["partner_agent"])
     heldout_agents = load_heldout_set(partner_agent_config, env, config["TASK_NAME"], config["ENV_KWARGS"], init_rng)
-    assert len(heldout_agents) == 1, "Only supports training against one partner agent for now."
+    assert len(heldout_agents) == 1, "Only supports training against one partner agent. Use ppo_ego.py for training against a population of partner agents."
 
     partner_policy, partner_params, partner_test_mode, _ = list(heldout_agents.values())[0]
 

@@ -16,7 +16,7 @@ from agents.agent_interface import ActorWithConditionalCriticPolicy
 from agents.initialize_agents import initialize_actor_with_conditional_critic
 from agents.population_interface import AgentPopulation
 from agents.population_buffer import BufferedPopulation
-from common.ppo_utils import Transition, unbatchify, _create_minibatches
+from marl.ppo_utils import Transition, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
 from common.plot_utils import get_metric_names
 from envs import make_env

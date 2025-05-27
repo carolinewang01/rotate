@@ -13,7 +13,7 @@ from envs.log_wrapper import LogWrapper
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, \
     initialize_rnn_agent, initialize_pseudo_actor_with_double_critic, initialize_pseudo_actor_with_conditional_critic
 from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
-from common.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
+from marl.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
 from envs import make_env
 
@@ -77,20 +77,18 @@ def make_train(config, env):
 
                 rng, act_rng = jax.random.split(rng)
 
-                obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
-                obs_batch = obs_batch.reshape(1, config["NUM_ACTORS"], -1)
-                done_batch = batchify(last_done, env.agents, config["NUM_ACTORS"])
-                done_batch = done_batch.reshape(1, config["NUM_ACTORS"])
+                last_obs_batch = batchify(last_obs, env.agents, config["NUM_ACTORS"])
+                last_done_batch = batchify(last_done, env.agents, config["NUM_ACTORS"])
 
                 avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
                 avail_actions = jax.lax.stop_gradient(batchify(avail_actions, 
                     env.agents, config["NUM_ACTORS"]).astype(jnp.float32))
 
-                action, value, pi, hstate = policy.get_action_value_policy(
+                action, value, pi, new_hstate = policy.get_action_value_policy(
                     params=train_state.params,
-                    obs=obs_batch,
-                    done=done_batch,
-                    avail_actions=avail_actions,
+                    obs=last_obs_batch.reshape(1, config["NUM_ACTORS"], -1),
+                    done=last_done_batch.reshape(1, config["NUM_ACTORS"]),
+                    avail_actions=avail_actions.reshape(1, config["NUM_ACTORS"], -1),
                     hstate=last_hstate,
                     rng=act_rng
                 )
@@ -106,7 +104,7 @@ def make_train(config, env):
                 rng, _rng = jax.random.split(rng)
                 rng_step = jax.random.split(_rng, config["NUM_ENVS"])
 
-                new_obs, new_env_state, reward, done, info = jax.vmap(env.step, in_axes=(0,0,0))(
+                new_obs, new_env_state, reward, new_done, info = jax.vmap(env.step, in_axes=(0,0,0))(
                     rng_step, env_state, env_act
                 )
                 
@@ -114,16 +112,16 @@ def make_train(config, env):
                 info = jax.tree.map(lambda x: x.reshape((config["NUM_ACTORS"])), info)
 
                 transition = Transition(
-                    batchify(done, env.agents, config["NUM_ACTORS"]).squeeze(), # new done
+                    batchify(new_done, env.agents, config["NUM_ACTORS"]).squeeze(),
                     action,
                     value,
-                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(), # new reward
+                    batchify(reward, env.agents, config["NUM_ACTORS"]).squeeze(),
                     log_prob,
-                    batchify(last_obs, env.agents, config["NUM_ACTORS"]), # old obs
+                    last_obs_batch,
                     info,
                     avail_actions
                 )
-                runner_state = (train_state, new_env_state, new_obs, last_done, last_hstate,rng)
+                runner_state = (train_state, new_env_state, new_obs, new_done, new_hstate, rng)
                 return runner_state, transition
             
             runner_state, traj_batch = jax.lax.scan(

@@ -19,7 +19,7 @@ from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPo
 from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from common.run_episodes import run_episodes
-from common.ppo_utils import Transition, unbatchify
+from marl.ppo_utils import Transition, unbatchify
 from envs import make_env
 from envs.log_wrapper import LogWrapper, LogEnvState
 from ego_agent_training.ppo_ego import train_ppo_ego_agent

@@ -2,31 +2,15 @@
 
 ## TODOs
 
-### Evaluation
-- Heldout eval teammates: write a script to compute the best response teammates for all heldout agents
-- Regret-based evaluator: 
-    - Figure out how to return regret-maximizing teammates that don't sabotage
-
-### Baselines 
-- FIX LBRDIV!
-- Implement PLR style FCP baseline (this requires implementing a regret-based curator)
-- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
-
-### Clean Up Code - ROTATE Release
-- Remove methods that didn't appear in the paper
-- Update paper visualization code names / remove unused methods
-- Add basic documentation
-- Update README
-
 ### Clean Up Code - Benchmark Release
+- Move some core PPO code (e.g. loss and GAE computation) into ppo_utils.py
+- Hydra configs: 
+    - add structured hydra configs for evaluation
 - PPO-ego: 
     - Update this code to resample from the agent population each time the episode is done.
 - Clean up IPPO: 
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
-- Hydra configs: 
-    - add structured hydra configs for ego agent training, evaluation, and ppo
-- Get codes to work with RNN ego agent
-- Clean up (L)-BRDiv code
+- Clean up (L)-BRDiv and CoMeDi code
     - Consider merging L-BRDiv and BRDiv implementations
     - Use run_episodes
     - Consider making ego and br nets the same 
@@ -37,6 +21,15 @@
 - Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because it displays the shaped return in Overcooked. We need to fix this.
 - Final params - we don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
 
+### Evaluation
+- Heldout eval teammates: write a script to compute the best response teammates for all heldout agents
+- Regret-based evaluator: 
+    - Figure out how to return regret-maximizing teammates that don't sabotage
+
+### Baselines 
+- FIX LBRDIV! - Arrasy will do this
+- Implement PLR style FCP baseline (this requires implementing a regret-based curator)
+- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
 ### Code Assumptions
 While cleaning up the code, we should re-examine these assumptions for the benchmark. 

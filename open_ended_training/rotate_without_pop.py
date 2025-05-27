@@ -18,7 +18,7 @@ from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent
 from agents.agent_interface import ActorWithDoubleCriticPolicy, MLPActorCriticPolicy, S5ActorCriticPolicy
 from common.plot_utils import get_metric_names, get_stats
 from common.run_episodes import run_episodes
-from common.ppo_utils import Transition, unbatchify, _create_minibatches
+from marl.ppo_utils import Transition, unbatchify, _create_minibatches
 from common.save_load_utils import save_train_run
 from envs import make_env
 from envs.log_wrapper import LogWrapper, LogEnvState
