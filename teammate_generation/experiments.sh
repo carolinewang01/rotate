@@ -16,7 +16,6 @@ log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timesta
 # algorithms=(
 #     "brdiv"
 #     "fcp"
-#     "lbrdiv"
 #     "comedi"
 # )
 

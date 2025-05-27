@@ -5,7 +5,6 @@ from evaluation.heldout_eval import run_heldout_evaluation, log_heldout_metrics
 from common.plot_utils import get_metric_names
 from common.wandb_visualizations import Logger
 from teammate_generation.BRDiv import run_brdiv
-from teammate_generation.LBRDiv import run_lbrdiv
 from teammate_generation.CoMeDi import run_comedi
 from teammate_generation.fcp import run_fcp
 from teammate_generation.train_ego import train_ego_agent
@@ -22,8 +21,6 @@ def run_training(cfg):
         partner_params, partner_population = run_brdiv(cfg, wandb_logger)
     elif cfg["algorithm"]["ALG"] == "fcp":
         partner_params, partner_population = run_fcp(cfg, wandb_logger)
-    elif cfg["algorithm"]["ALG"] == "lbrdiv":
-        partner_params, partner_population = run_lbrdiv(cfg, wandb_logger)
     elif cfg["algorithm"]["ALG"] == "comedi":
         partner_params, partner_population = run_comedi(cfg, wandb_logger)
     else:

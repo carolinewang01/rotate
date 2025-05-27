@@ -7,8 +7,6 @@ from common.wandb_visualizations import Logger
 from open_ended_training.rotate_without_pop import run_rotate_without_pop
 from open_ended_training.rotate_with_mixed_play import run_rotate_with_mixed_play
 from open_ended_training.rotate import run_rotate
-from open_ended_fcp import run_fcp
-from open_ended_lagrange import run_lagrange
 from open_ended_minimax import run_minimax
 from paired import run_paired
 
@@ -27,10 +25,6 @@ def run_training(cfg):
         ego_policy, final_ego_params, init_ego_params = run_minimax(cfg, wandb_logger)
     elif cfg.algorithm["ALG"] == "paired":
         ego_policy, final_ego_params, init_ego_params = run_paired(cfg, wandb_logger)
-    elif cfg.algorithm["ALG"] == "open_ended_fcp":
-        ego_policy, final_ego_params, init_ego_params = run_fcp(cfg, wandb_logger)
-    elif cfg.algorithm["ALG"] == "open_ended_lagrange":
-        ego_policy, final_ego_params, init_ego_params = run_lagrange(cfg, wandb_logger)
     else:
         raise NotImplementedError("Selected method not implemented.")
 

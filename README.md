@@ -1,59 +1,34 @@
-# continual-aht
+# ROTATE
 
-## TODOs
+This is the official repository containing code for the paper, "ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork.".
+If you find the code or paper useful, please cite
+```
+TODO
+```
 
-### Evaluation
-- Heldout eval teammates: write a script to compute the best response teammates for all heldout agents
-- Regret-based evaluator: 
-    - Figure out how to return regret-maximizing teammates that don't sabotage
-
-### Baselines 
-- FIX LBRDIV!
-- Implement PLR style FCP baseline (this requires implementing a regret-based curator)
-- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
-
-### Clean Up Code - ROTATE Release
-- Remove methods that didn't appear in the paper
-- Update paper visualization code names / remove unused methods
+### Cleanup TODOs - ROTATE Release
+- Get codes to work with RNN ego agent (in upstream caht repo)
+- Remove XSP interactions from ROTATE w/o population / add comment to code about why it's there and that it should be disabled
+ for maximal efficiency
 - Add basic documentation
 - Update README
 
-### Clean Up Code - Benchmark Release
-- PPO-ego: 
-    - Update this code to resample from the agent population each time the episode is done.
-- Clean up IPPO: 
-    - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
-- Hydra configs: 
-    - add structured hydra configs for ego agent training, evaluation, and ppo
-- Get codes to work with RNN ego agent
-- Clean up (L)-BRDiv code
-    - Consider merging L-BRDiv and BRDiv implementations
-    - Use run_episodes
-    - Consider making ego and br nets the same 
-    - Switch from logging BR/Conf losses to SP/XP losses!
-- Heuristic agents: 
-    - Enable decision-making to account for the available actions
-- Move best response computation code to its own directory?
-- Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because it displays the shaped return in Overcooked. We need to fix this.
-- Final params - we don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
-
-
-### Code Assumptions
-While cleaning up the code, we should re-examine these assumptions for the benchmark. 
-- Agent policies are assumed to handle "done" signals and reset internally. 
-
 ## Installation Guide
-Follow instructions at `install_instructions.md`
+
+Follow instructions at `install_instructions.md`.
+
+Download and unzip evaluation agents from this [link](https://drive.google.com/file/d/1i7vljIsPbImj89Gw5QE15DkRd84I1n11/view?usp=sharing). The code assumes that the evaluation agents are available in an `eval_teammates/` directory.
 
 ### Project Structure
 - `agents/`: Contains heuristic agent implementations
 - `common/`: Shared utilities and common code
-- `envs/`: Environment implementations and wrappers
+- `ego_agent_training/`: PPO ego agent implementation
+- `envs/`: Environment wrappers
 - `evaluation/`: Evaluation and visualization scripts
-- `ego_agent_training/`: all ego-agent implementations. Currently only PPO
-- `teammate_generation/`: teammate generation algorithms
-- `open_ended_training`: our open-ended learning methods
+- `open_ended_training`: open-ended learning methods (ROTATE, ROTATE variations, Minimax Return, PAIRED)
+- `paper_vis`: Visualization scripts for the plots in the paper.
 - `ppo/`: IPPO algorithm implementation
+- `teammate_generation/`: teammate generation algorithms (BRDiv, FCP, CoMeDi)
 - `tests/`: Test scripts used during development.
 
 ## Project Guide
@@ -62,15 +37,16 @@ More details about some folders are provided below.
 
 ### Agents
 
-The `agents` directory contains heuristic for each supported environment. 
-Currently, only agents for Overcooked have been implemented.
+The `agents` directory contains heuristic for Overcooked and LBF environments. 
 You can run the Overcooked heuristic agent by running, `python tests/test_overcooked_agents.py`.
-Later, we would want to add pretrained agents to this directory as well. 
+
+### PPO
+The `ppo/` directory stores our IPPO implementation. 
+To run it with wandb logging and using the configs, run `python ppo/run_ppo.py`. 
+Results are logged via wandb, but can also be viewed locally in the `results` directory.
 
 ### Envs
 #### Jumanji (LBF)
-Currently, the only environment supported from the Jumanji suite is Level-Based Foraging (LBF).
-
 The wrapper for the Jumanji LBF environment is stored in the `envs/` directory, at `envs/jumanji_jaxmarl_wrapper.py`. A corresponding test script is stored at `tests/test_jumanji_jaxmarl_wrapper.py`.
 `
 #### Overcooked-v2
@@ -79,13 +55,12 @@ We made some modifications to the JaxMARL Overcooked environment to improve the 
 - Initialization randomization: Previously, setting `random_reset` would lead to random initial agent positions, and randomized initial object states (e.g. pot might be initialized with onions already in it, agents might be initialized holding plates, etc.). We separate the functionality of the argument `random_reset` into two arguments: `random_reset` and `random_obj_state`, where `random_reset` only controls the initial positions of the two agents. 
 - Agent initial positions: previously, in a map with disconnected components, it was possible for two agents to be spawned in the same component, making it impossible to solve the task. The Overcooked-v2 environment initializes agents such that one is always spawned on each side of the map.
 
-### PPO
-The `ppo/` directory stores our IPPO implementation. 
-To run it with wandb logging and using the configs, run `python ppo/run_ppo.py`. 
-Results are logged via wandb, but can also be viewed locally in the `results` directory.
-
-The `ppo/ippo.py` script can also be ran on its own for debugging purposes.
-
 ### Coding Style Notes
 JaxMARL follows a single-script training paradigm, which enables jit-compiling the entire RL training loop and makes it simple for researchers to modify algorithms. 
-We follow a similar paradigm, but importing a couple common utility functions to avoid code duplication. 
+We follow a similar paradigm, but use agent and population interfaces, along with some common utility functions to avoid code duplication. 
+
+### Code Assumptions
+The code makes the following assumptions
+- Agent policies are assumed to handle "done" signals and reset internally. 
+- Environments are assumed to "auto-reset", i.e. when the episode is done, the step function should check for this and reset the environment if needed.
+

@@ -2,14 +2,10 @@
 
 # Algorithm to run
 algo="rotate"
-# partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
-# conf_obj_type="traj_regret" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
-label="paper-v0:minimax2"
+partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
+conf_obj_type="sreg-xp_ret-sp_ret-sxp" # rotate results in paper use sreg-xp_ret-sp_ret-sxp
+label="paper-v0:rotate"
 num_seeds=3
-# s5_d_model=16
-# s5_ssm_size=16
-# s5_actor_critic_hidden_dim=64
-# fc_n_layers=2
 
 # Create log directory if it doesn't exist
 mkdir -p results/oe_logs/${algo}/${label}
@@ -23,7 +19,6 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 #     "rotate"
 #     "open_ended_minimax"
 #     "paired"
-#     "open_ended_fcp"
 # )
 
 # Tasks to run
