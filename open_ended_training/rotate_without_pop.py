@@ -410,6 +410,11 @@ def train_regret_maximizing_partners(config, env,
                     return pg_loss
 
                 def _update_minbatch_conf(train_state_conf, batch_infos):
+                    '''
+                    Teammate update function. Note that this implementation gathers both XSP (XP data from SP start states)
+                    and SXP (SP data from XP start states) data to enable experimenting with different objectives. 
+                    ROTATE uses the "sreg-xp_ret-sp_ret-sxp" objective, which only requires SP, XP and SXP data.
+                    '''
                     minbatch_xp, minbatch_sp, minbatch_xsp, minbatch_sxp = batch_infos
 
                     def _loss_fn_conf(params, minbatch_xp, minbatch_sp, minbatch_xsp, minbatch_sxp):
@@ -507,10 +512,10 @@ def train_regret_maximizing_partners(config, env,
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize trajectory-level regret for all interaction types
-                        elif config["CONF_OBJ_TYPE"] == "gae_per_state_regret": # previously called traj_level_regret but this was a misnomer
+                        elif config["CONF_OBJ_TYPE"] == "gae_per_state_regret":
                             total_xp_objective = -gae_xp
                             total_sp_objective = config["SP_WEIGHT"] * gae_sp
-                            total_xsp_objective = -gae_xsp
+                            total_xsp_objective = jnp.array(0.0)
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         elif config["CONF_OBJ_TYPE"] == "traj_regret":

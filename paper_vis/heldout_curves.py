@@ -52,7 +52,10 @@ def plot_single_task_heldout_curves(results, metric_name: str, aggregate_stat_na
     if save:
         if not os.path.exists(savedir):
             os.makedirs(savedir)
-        plt.savefig(os.path.join(savedir, f"{savename}.pdf"))
+        savepath = os.path.join(savedir, f"{savename}.pdf")
+        plt.savefig(savepath)
+        print(f"Saved plot to {savepath}")
+
     if show_plot:
         plt.show()
 

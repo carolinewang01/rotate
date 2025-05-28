@@ -10,7 +10,7 @@ import jax.numpy as jnp
 
 from envs import make_env
 from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
-from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
+from archived.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
 
 
 def rollout(ego_run_path, partner_run_path, 

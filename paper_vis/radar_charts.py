@@ -1,12 +1,11 @@
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import plotly
 import plotly.graph_objects as go
 import argparse
 
 from paper_vis.process_data import load_results_for_task
-from paper_vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
+from paper_vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE
 from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
     GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
 
@@ -128,7 +127,7 @@ if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Generate radar charts for visualization")
     parser.add_argument("--plot_type", type=str, default="core",
-                        choices=["core", "ablations", "supplemental"],
+                        choices=["core", "ablations_obj", "ablations_pop", "supplemental"],
                         help="Type of plot to generate")
     parser.add_argument("--use_original_normalization", action="store_true",
                         help="Use original normalization instead of best-returns normalization")
