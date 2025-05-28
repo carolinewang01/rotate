@@ -5,22 +5,22 @@ This is the official repository for the paper, "ROTATE: Regret-driven Open-ended
 <!-- TODO: Add your citation information here once available -->
 If you find this work useful, please consider citing the paper:
 ```bibtex
-@article{your_rotate_paper_citation,
+@article{wang2025rotate,
   title={ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork},
-  author={Your Name(s) Here},
+  author={Caroline Wang, Arrasy Rahman, Jiaxun Cui, Yoonchang Sung, Peter Stone},
   journal={Conference/Journal Name},
-  year={Year}
+  year={2025}
 }
 ```
 
-<!-- Optional: Add badges here (e.g., from shields.io for build status, license, etc.) -->
+<!-- image of ROTATE method -->
+<p align="center"><img src="assets/rotate_method.png" width="900"></p>
+
+<!-- badges -->
 <!-- E.g., [![Build Status](https://travis-ci.org/user/repo.svg?branch=master)](https://travis-ci.org/user/repo) -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-<PAPER_ID>-b31b1b.svg)](https://arxiv.org/abs/<PAPER_ID>) -->
-
-<!-- Optional: Add a GIF or representative image of your project in action -->
-<!-- E.g., <p align="center"><img src="path_to_your_gif.gif" width="500"></p> -->
 
 ### Cleanup TODOs - ROTATE Release
 - Add Figure 1
