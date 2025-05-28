@@ -24,7 +24,6 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
     # Define colors for different methods
     colors = plotly.colors.qualitative.Plotly
     max_value = 0    
-    
 
     for i, (method_name, method_results) in enumerate(results.items()):
         # Get the per-agent performance values
@@ -69,13 +68,13 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
         paper_bgcolor='white',
         plot_bgcolor='white',
         margin=dict(
-            l=105, # r=200,
+            l=105, r=50,
             autoexpand=True),
         polar=dict(
             bgcolor='white',
             radialaxis=dict(
                 visible=True,
-                range=[0, max_value * 1.1],  # Add 10% margin for visibility
+                range=[0, max_value * 1.15],  # Add 10% margin for visibility
                 tickfont=dict(size=20),
                 gridcolor='#EEEEEE',
                 linecolor='#CCCCCC'
@@ -98,7 +97,7 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
             yanchor="top",
             y=1.20,
             xanchor="left",
-            x=-0.32,
+            x=-0.20,
             bgcolor="rgba(255, 255, 255, 0.8)",
             bordercolor="rgba(0, 0, 0, 0.2)",
             borderwidth=1
@@ -118,6 +117,7 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
         fig.write_image(pdf_path, 
                         # width=1000, height=900
                         )
+        print(f"Saved radar chart to {pdf_path}")
     
     # Show the plot if requested
     if show_plot:

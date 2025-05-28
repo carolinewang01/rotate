@@ -11,8 +11,8 @@ HELDOUT_CURVES_CACHE_FILENAME = "cached_heldout_curves.pkl"
 
 # Files to look for
 TARGET_FILES = [
-    CACHE_FILENAME,
-    HELDOUT_CURVES_CACHE_FILENAME,
+    # CACHE_FILENAME,
+    # HELDOUT_CURVES_CACHE_FILENAME,
     CACHE_FILENAME.replace('.pkl', '_renormalized.pkl'),
     HELDOUT_CURVES_CACHE_FILENAME.replace('.pkl', '_renormalized.pkl')
 ]

@@ -124,7 +124,7 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
     
     ax.legend(fontsize=LEGEND_FONTSIZE, loc='center', 
               ncols=1 if plot_type != "core" else 2,
-              bbox_to_anchor=(0.83, 0.9), # legend loc if under plot: (0.5, -0.25)
+              bbox_to_anchor=(0.80, 0.9), # legend loc if under plot: (0.5, -0.25)
               framealpha=0.8)
     ax.yaxis.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
