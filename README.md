@@ -22,8 +22,7 @@ If you find this work useful, please consider citing the paper:
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 <!-- [![arXiv](https://img.shields.io/badge/arXiv-<PAPER_ID>-b31b1b.svg)](https://arxiv.org/abs/<PAPER_ID>) -->
 
-### Cleanup TODOs - ROTATE Release
-- Add Figure 1
+### ROTATE Release TODOs
 - <ARXIV RELEASE>
 - Make codebase public
 - Add citation for paper
