@@ -21,6 +21,7 @@ omegaconf
 hydra-core
 plotly
 kaleido
+gdown
 
 jumanji==1.1.0
 jaxmarl==0.0.7

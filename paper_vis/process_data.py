@@ -5,10 +5,10 @@ import pickle
 from common.plot_utils import get_metric_names
 from common.save_load_utils import load_train_run
 from common.stat_utils import compute_aggregate_stat_and_ci_per_task, compute_aggregate_stat_and_ci
-from paper_vis.plot_globals import TASK_TO_ENV_NAME, GLOBAL_HELDOUT_CONFIG, HELDOUT_CURVES_CACHE_FILENAME, get_heldout_agents
+from paper_vis.plot_globals import TASK_TO_ENV_NAME, GLOBAL_HELDOUT_CONFIG, HELDOUT_CURVES_CACHE_FILENAME
 
 # Import from compute_best_returns
-from paper_vis.compute_best_returns import load_best_returns, renormalize_eval_metrics, unnormalize_data
+from paper_vis.compute_best_returns import load_best_returns, renormalize_eval_metrics
 
 
 def load_results_for_task(task_name, method_dict, cache_filename, 

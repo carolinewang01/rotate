@@ -11,7 +11,7 @@ plt.rcParams['ytick.labelsize'] = AXIS_LABEL_FONTSIZE
 
 
 def plot_single_task_heldout_curves(results, metric_name: str, aggregate_stat_name: str,
-                        plot_title: str, save: bool, savedir: str, show_plot: bool, savename: str):
+                        plot_title: str, save: bool, savedir: str, show_plot: bool, savename: str, show_title: bool):
     '''Plots learning curves for different methods on a single task, showing how performance changes over iterations.'''
     fig, ax = plt.subplots(figsize=(10, 6))
     
@@ -38,7 +38,8 @@ def plot_single_task_heldout_curves(results, metric_name: str, aggregate_stat_na
     ax.set_xlabel('Iteration', fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_ylabel(f'{aggregate_stat_name.capitalize()} {metric_name.replace("_", " ").title()} (Normalized)', 
                   fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_title(plot_title, fontsize=TITLE_FONTSIZE)
+    if show_title:
+        ax.set_title(plot_title, fontsize=TITLE_FONTSIZE)
     
     # Add legend
     ax.legend(fontsize=AXIS_LABEL_FONTSIZE)
@@ -51,18 +52,21 @@ def plot_single_task_heldout_curves(results, metric_name: str, aggregate_stat_na
     if save:
         if not os.path.exists(savedir):
             os.makedirs(savedir)
-        plt.savefig(os.path.join(savedir, f"{savename}.pdf"))
+        savepath = os.path.join(savedir, f"{savename}.pdf")
+        plt.savefig(savepath)
+        print(f"Saved plot to {savepath}")
+
     if show_plot:
         plt.show()
 
 if __name__ == "__main__":
-    from paper_vis.plot_globals import OE_BASELINES, OUR_METHOD, ABLATIONS, SUPPLEMENTAL, \
+    from paper_vis.plot_globals import OE_BASELINES, OUR_METHOD, ROTATE_VARS,  \
         GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, HELDOUT_CURVES_CACHE_FILENAME
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Generate heldout learning curves for visualization")
     parser.add_argument("--plot_type", type=str, default="core",
-                        choices=["core", "ablations", "supplemental"],
+                        choices=["core", "all_rotate_vars"],
                         help="Type of plot to generate")
     parser.add_argument("--use_original_normalization", action="store_true",
                         help="Use original normalization instead of best-returns normalization")
@@ -72,6 +76,8 @@ if __name__ == "__main__":
                         help="Directory to save plots")
     parser.add_argument("--tasks", nargs="+", 
                         help="List of tasks to show best returns for. If not provided, all tasks will be computed.")
+    parser.add_argument("--show_title", action="store_true", default=False,
+                        help="Show title on plots")
     args = parser.parse_args()
     
     if args.plot_type == "core":
@@ -79,17 +85,11 @@ if __name__ == "__main__":
             **OUR_METHOD,
             **OE_BASELINES,
         }
-    elif args.plot_type == "ablations":
+    elif args.plot_type == "all_rotate_vars":
         RESULTS_TO_PLOT = {
             **OUR_METHOD,
-            **ABLATIONS
+            **ROTATE_VARS,
         }
-    elif args.plot_type == "supplemental":
-        RESULTS_TO_PLOT = {
-            **OUR_METHOD,
-            **SUPPLEMENTAL
-        }
-
     # Add suffix to savename based on normalization method
     norm_suffix = "original_normalization" if args.use_original_normalization else "br_normalization"
 
@@ -122,10 +122,10 @@ if __name__ == "__main__":
             "savedir": f"{args.save_dir}/{task_name}", 
             "savename": f"heldout_curves_{args.plot_type}_{norm_suffix}",
             "plot_title": TASK_TO_PLOT_TITLE[task_name],
+            "show_title": args.show_title,
             "show_plot": args.show_plots
         }
         plot_single_task_heldout_curves(all_task_results[task_name], metric_name, 
             aggregate_stat_name=GLOBAL_HELDOUT_CONFIG["global_heldout_settings"]["AGGREGATE_STAT"],
             **PLOT_ARGS)
         
-       

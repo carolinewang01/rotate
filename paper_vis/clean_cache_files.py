@@ -1,11 +1,6 @@
-#!/usr/bin/env python3
-
 import os
-import glob
-from pathlib import Path
 import argparse
 
-# From paper_vis.plot_globals import CACHE_FILENAME, HELDOUT_CURVES_CACHE_FILENAME
 CACHE_FILENAME = "cached_summary_metrics.pkl"
 HELDOUT_CURVES_CACHE_FILENAME = "cached_heldout_curves.pkl"
 

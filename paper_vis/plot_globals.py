@@ -57,15 +57,22 @@ OUR_METHOD = {
 ABLATIONS_OBJ = {
     "oe_persistent/paper-v0:1reg": ("open_ended", "ROTATE (per-state)"),
     "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"), 
-    "open_ended_paired/paper-v0": ("open_ended", "ROTATE (per-traj, no SXP)"),
 }
 
 ABLATIONS_POP = {
     "ppo_ego_s5/paper-v0:1reg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"),
     "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"),
 }
+
+ROTATE_VARS = {
+    "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"), 
+    "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
+    "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
+    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"),
+}
+
 SUPPLEMENTAL = {
-    "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE (MP regret)"),
+    "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
     "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
 }
 
