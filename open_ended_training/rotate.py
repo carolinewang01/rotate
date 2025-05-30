@@ -35,14 +35,6 @@ def train_ippo_partners(config, partner_rng, env):
     out = train_jit(rngs)
     return out
 
-def linear_schedule_regret(iter_idx, config):
-    '''Computes the upper and lower regret thresholds based on the iteration index. 
-    Updates the config with the next regret thresholds.'''
-    frac = iter_idx / config["NUM_OPEN_ENDED_ITERS"]
-    config["LOWER_REGRET_THRESHOLD"] = config["LOWER_REGRET_THRESHOLD_START"] + (config["LOWER_REGRET_THRESHOLD_END"] - config["LOWER_REGRET_THRESHOLD_START"]) * frac
-    config["UPPER_REGRET_THRESHOLD"] = config["UPPER_REGRET_THRESHOLD_START"] + (config["UPPER_REGRET_THRESHOLD_END"] - config["UPPER_REGRET_THRESHOLD_START"]) * frac
-    return config
-
 def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_policy, 
                                         partner_population, config, ego_config, env):
     '''
@@ -51,8 +43,6 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
     '''
     prev_ego_params, prev_conf_params, prev_br_params, population_buffer, rng, oel_iter_idx = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
-
-    config = linear_schedule_regret(oel_iter_idx, config) # update regret thresholds
 
     # Initialize or reuse confederate parameters based on config
     if config["REINIT_CONF"]:

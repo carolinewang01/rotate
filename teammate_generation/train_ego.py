@@ -25,7 +25,7 @@ def train_ego_agent(config, logger, partner_params, partner_population):
         partner_params: partner parameters pytree with shape (num_seeds, pop_size, ...)
         partner_population: partner population object
     '''
-    algorithm_config = config["ego_train_algorithm"]
+    algorithm_config = config["algorithm"]["ego_train_algorithm"]
     env = make_env(algorithm_config["ENV_NAME"], algorithm_config["ENV_KWARGS"])
     env = LogWrapper(env)
 

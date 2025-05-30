@@ -22,7 +22,7 @@ algorithm:
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
 
-label: ""
+label: "default_label"
 name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}
 
 # WandB Params
