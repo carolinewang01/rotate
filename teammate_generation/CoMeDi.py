@@ -1019,8 +1019,9 @@ def train_comedi_partners(train_rng, env, config):
                     rng, update_steps = new_update_runner_state[-3], new_update_runner_state[-2]
                     
                     # Decide if we store a checkpoint
-                    to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
-                                            jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
+                    # update steps is 1-indexed because it was incremented at the end of the update step
+                    to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                                            jnp.equal(update_steps, config["NUM_UPDATES"]))
                     
                     def store_and_eval_ckpt(args):
                         ckpt_arr_conf, rng, cidx, _, _ = args

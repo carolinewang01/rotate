@@ -270,8 +270,9 @@ def make_train(config, env):
             update_runner_state, metric = _update_step(update_runner_state, None)
             _, update_steps = update_runner_state
 
-            to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
-                                      jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
+            # update steps is 1-indexed because it was incremented at the end of the update step
+            to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                                    jnp.equal(update_steps, config["NUM_UPDATES"]))
 
             def store_ckpt_fn(args):
                 # Write current runner_state[0].params into checkpoint_array at ckpt_idx
