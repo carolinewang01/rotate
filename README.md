@@ -5,20 +5,32 @@ This is the working repository for the paper, "ROTATE: Regret-driven Open-ended 
 ## TODOs
 
 ### Clean Up Code - Benchmark Release
+High priority issues that may propagate if not fixed:
+
+- Final params 
+  - Verify that final params == last checkpoint - audited FCP and IPPO.
+  - We don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
+
 - Clean up (L)-BRDiv and CoMeDi code
+    - Update codes to use the agent interface
     - Use run_episodes
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
+
+Lower priority fixes / additional features: 
 - Heuristic agents: 
     - Enable decision-making to account for the available actions
 - Evaluation
     - Update regret evaluator
 - Move best response computation code to its own directory?
-- Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because it displays the shaped return in Overcooked. We need to fix this.
-- Final params - we don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
-- README 
-    - Add a figure for the design philosophy! 
 
+Enabling Collaboration
+- Create environment API for our setting
+- Create list of things to check for others when checking PRs
+- Creae list of requirements for each algorithm: 
+  - input 
+  - output
+  - test
 
 ### Benchmark Release
 - Create demo notebook
@@ -98,10 +110,14 @@ Cache files can be cleared by running, `python vis/clean_cache_files.py`.
 JaxMARL follows a single-script training paradigm, which enables jit-compiling the entire RL training loop and makes it simple for researchers to modify algorithms.
 We follow a similar paradigm, but use agent and population interfaces, along with some common utility functions to avoid code duplication.
 
-### ✔️ Code Assumptions
+### ✔️ Code Assumptions/Gotchas
 The code makes the following assumptions:
 - Agent policies are assumed to handle "done" signals and reset internally.
+- Environments have homogeneous agents and discrete actions
 - Environments are assumed to "auto-reset", i.e. when the episode is done, the step function should check for this and reset the environment if needed.
+
+Gotchas
+- The metric, `returned_episode_returns` is automatically tracked and logged by the LogWrapper. It corresponds to summing up the reward returned by env.step() over an episode. Thus, if an environment returns a shaped reward, it corresponds to the shaped return. 
 
 ## 🗺️ Project Structure
 

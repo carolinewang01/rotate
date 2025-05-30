@@ -1,5 +1,6 @@
 '''
 Given an ego agent policy, train a regret-maximizing confederate and best-response pair against the ego policy.
+TODO: this code computes the per-trajectory regret. We may wish to change this to per-state regret or something else. 
 '''
 import os
 import logging
@@ -660,9 +661,10 @@ def train_regret_maximizing_partners(config, ego_params, ego_policy, env, partne
                 ) = new_runner_state
 
                 # Decide if we store a checkpoint
-                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
-                                          jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
-                
+                # update steps is 1-indexed because it was incremented at the end of the update step
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                                        jnp.equal(update_steps, config["NUM_UPDATES"]))
+                              
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
                     ckpt_arr_conf, ckpt_arr_br, prev_ep_infos_br, prev_ep_infos_ego = ckpt_arr_and_ep_infos

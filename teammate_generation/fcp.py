@@ -81,7 +81,6 @@ def run_fcp(config, wandb_logger):
 
 def log_metrics(config, out, logger):
     '''Log statistics, save train run output and log to wandb as artifact.'''   
-    
     metric_names = get_metric_names(config["ENV_NAME"])
     # metrics is a pytree where each leaf has shape 
     # (num_seeds, partner_pop_size, num_partner_updates, rollout_length, agents_per_env * num_envs)

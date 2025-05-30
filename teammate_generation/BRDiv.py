@@ -18,6 +18,7 @@ from agents.agent_interface import ActorWithConditionalCriticPolicy
 from agents.population_interface import AgentPopulation
 from agents.mlp_actor_critic import ActorWithConditionalCritic
 from common.plot_utils import get_metric_names
+from common.run_episodes import run_episodes
 from marl.ppo_utils import unbatchify
 from common.save_load_utils import save_train_run
 
@@ -169,6 +170,7 @@ def train_brdiv_partners(train_rng, env, config):
 
                 # Agent_0 action
                 forward_pass_conf = lambda param, ob, id, avail_act: conf_agent_net.apply(param, (ob, id, avail_act))
+                # TODO: what is this being vmapped across? 
                 pi_0, val_0 = jax.vmap(forward_pass_conf)(conf_params, obs_0, br_agent_id, avail_actions_0)
                 act_0 = pi_0.sample(seed=actor_rng)
                 logp_0 = pi_0.log_prob(act_0)
@@ -659,8 +661,9 @@ def train_brdiv_partners(train_rng, env, config):
                 ) = new_runner_state
 
                 # Decide if we store a checkpoint
-                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0), 
-                                          jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
+                # update steps is 1-indexed because it was incremented at the end of the update step
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                                        jnp.equal(update_steps, config["NUM_UPDATES"]))
                 max_eval_episodes = config["NUM_EVAL_EPISODES"]
                 
                 def store_and_eval_ckpt(args):
@@ -820,6 +823,18 @@ def compute_sp_mask_and_ids(pop_size):
     return sp_mask, agent_id_cartesian_product
 
 def log_metrics(config, outs, logger, metric_names: tuple):
+    import jax.numpy as jnp
+    final_params = outs["final_params_conf"]
+    import pdb; pdb.set_trace() # TODO: verify that we're correctly slicing the checkpoints
+    last_checkpoint = jax.tree.map(lambda x: x[:, :, -1], outs["checkpoints_conf"])
+    last_means = [l.mean() for l in jax.tree.leaves(last_checkpoint)]
+    last_is_zeros = [l == 0 for l in last_means]
+    print("Are all parameters in last_checkpoint zero? ", all(last_is_zeros))
+    is_close_pytree = jax.tree.map(lambda l1, l2: jnp.allclose(l1, l2), final_params, last_checkpoint)
+    all_leaves_are_close = all(jax.tree.leaves(is_close_pytree))
+    print(f"Are all parameters in final_params and last_checkpoint close? {all_leaves_are_close}")
+    import pdb; pdb.set_trace()
+    
     metrics = outs["metrics"]
     # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
     num_seeds, num_updates, _, _, pop_size = metrics["pg_loss_conf_agent"].shape # number of trained pairs

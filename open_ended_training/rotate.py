@@ -52,8 +52,6 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
     prev_ego_params, prev_conf_params, prev_br_params, population_buffer, rng, oel_iter_idx = carry
     rng, partner_rng, ego_rng, conf_init_rng, br_init_rng = jax.random.split(rng, 5)
 
-    # config = linear_schedule_regret(oel_iter_idx, config) # update regret thresholds
-
     # Initialize or reuse confederate parameters based on config
     if config["REINIT_CONF"]:
         init_rngs = jax.random.split(conf_init_rng, config["PARTNER_POP_SIZE"])

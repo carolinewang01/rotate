@@ -272,9 +272,9 @@ def make_train(config, env):
             # Run one PPO update step
             update_runner_state, metric = _update_step(update_runner_state, None)
             _, update_steps = update_runner_state
-
-            to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps, checkpoint_interval), 0),
-                                      jnp.equal(update_steps, config["NUM_UPDATES"] - 1))
+            # update steps is 1-indexed because it was incremented at the end of the update step
+            to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                                      jnp.equal(update_steps, config["NUM_UPDATES"]))
 
             def store_ckpt_fn(args):
                 # Write current runner_state[0].params into checkpoint_array at ckpt_idx
@@ -285,7 +285,8 @@ def make_train(config, env):
                     _checkpoint_array,
                     update_runner_state[0][0].params
                 )
-                return new_checkpoint_array, _ckpt_idx + 1
+                return new_checkpoint_array, _ckpt_idx + 1 
+            # TODO: potential issue is that if this function is always executed regardless of whether to_store is true or false, then _ckpt_idx will be wrong
 
             def skip_ckpt_fn(args):
                 return args  # No changes if we don't store
@@ -322,7 +323,8 @@ def make_train(config, env):
         return {
             "final_params": update_runner_state[0][0].params,
             "metrics": metrics,
-            "checkpoints": checkpoint_array
+            "checkpoints": checkpoint_array,
+            "final_ckpt_idx": final_ckpt_idx # CLEANUP FLAG
         }
     return train
 
@@ -342,8 +344,7 @@ def run_ippo(config, logger):
     return out
 
 def log_metrics(config, out, logger):
-    '''Save train run output and log to wandb as artifact.'''
-
+    '''Save train run output and log to wandb as artifact.'''    
     train_metrics = out["metrics"]
     metric_names = get_metric_names(config["ENV_NAME"])
     train_stats = get_stats(train_metrics, metric_names)
