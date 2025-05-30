@@ -3,19 +3,22 @@ Based on the IPPO implementation from JaxMarl. Trains a parameter-shared, MLP IP
 fully cooperative multi-agent environment. Note that this code is only compatible with MLP policies.
 '''
 import shutil
+
 import hydra
+import numpy as np
 import jax
 import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
-from envs.log_wrapper import LogWrapper
 
 from agents.initialize_agents import initialize_s5_agent, initialize_mlp_agent, \
     initialize_rnn_agent, initialize_pseudo_actor_with_double_critic, initialize_pseudo_actor_with_conditional_critic
-from common.plot_utils import get_stats, plot_train_metrics, get_metric_names
-from marl.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
+from common.plot_utils import get_stats, get_metric_names
 from common.save_load_utils import save_train_run
 from envs import make_env
+from envs.log_wrapper import LogWrapper
+from marl.ppo_utils import Transition, batchify, unbatchify, _create_minibatches
+
 
 def initialize_agent(actor_type, algorithm_config, env, init_rng):
     if actor_type == "s5":
@@ -341,8 +344,26 @@ def run_ippo(config, logger):
 def log_metrics(config, out, logger):
     '''Save train run output and log to wandb as artifact.'''
 
-    savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    train_metrics = out["metrics"]
+    metric_names = get_metric_names(config["ENV_NAME"])
+    train_stats = get_stats(train_metrics, metric_names)
+
+    # each key in train_stats is a metric name, and the value is an array of shape (num_seeds, num_updates, num_agents_per_game)
+    # where the last dimension contains the mean and std of the metric
+    train_stats = {k: np.mean(np.array(v), axis=0) for k, v in train_stats.items()}
+
+    # Log metrics for each update step
+    num_updates = train_metrics["returned_episode"].shape[1] # shape is (num_seeds, num_updates, rollout_len, num_envs*num_agents_per_game)
+    for step in range(num_updates):
+        for stat_name, stat_data in train_stats.items():
+            # second dimension contains the mean and std of the metric
+            stat_mean = stat_data[step, 0]
+            logger.log_item(f"Train/{stat_name}", stat_mean, train_step=step, commit=True)
+
+    logger.commit()
+
     # save artifacts
+    savedir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
     out_savepath = save_train_run(out, savedir, savename="saved_train_run")
     if config["logger"]["log_train_out"]:
         logger.log_artifact(name="saved_train_run", path=out_savepath, type_name="train_run")
@@ -350,18 +371,17 @@ def log_metrics(config, out, logger):
     if not config["local_logger"]["save_train_out"]:
         shutil.rmtree(out_savepath)
    
-    metric_names = get_metric_names(config.algorithm["ENV_NAME"])
-
-    # Generate plots
-    all_stats = get_stats(out["metrics"], metric_names)
-    figures, _ = plot_train_metrics(all_stats, 
-                                    config.algorithm["ROLLOUT_LENGTH"], 
-                                    config.algorithm["NUM_ENVS"],
-                                    savedir=savedir if config["local_logger"]["save_figures"] else None,
-                                    savename="ippo_train_metrics",
-                                    show_plots=False
-                                    )
+    # # Generate matplotlib plots # TODO: remove this code after creating the demo notebook
+    # metric_names = get_metric_names(config.algorithm["ENV_NAME"])
+    # all_stats = get_stats(out["metrics"], metric_names)
+    # figures, _ = plot_train_metrics(all_stats, 
+    #                                 config.algorithm["ROLLOUT_LENGTH"], 
+    #                                 config.algorithm["NUM_ENVS"],
+    #                                 savedir=savedir if config["local_logger"]["save_figures"] else None,
+    #                                 savename="ippo_train_metrics",
+    #                                 show_plots=False
+    #                                 )
     
-    # Log plots to wandb
-    for stat_name, fig in figures.items():
-        logger.log({f"train_metrics/{stat_name}": fig})
+    # # Log plots to wandb
+    # for stat_name, fig in figures.items():
+    #     logger.log({f"train_metrics/{stat_name}": fig})

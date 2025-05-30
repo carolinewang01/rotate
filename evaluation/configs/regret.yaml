@@ -1,5 +1,5 @@
 defaults:
-  - task: lbf # overcooked/cramped_room # task configs
+  - task: lbf # task configs
   - hydra: hydra_simple
   - _self_
 
@@ -58,6 +58,5 @@ logger:
 
 # Local logger
 local_logger:
-  save_figures: false # currently unused
   save_train_out: false
   save_video: false # whether to save the video locally
