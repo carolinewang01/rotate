@@ -1,6 +1,7 @@
 # @package algorithm
 # ^ tells hydra to place these value directly under algorithm key
 ALG: fcp
+ACTOR_TYPE: mlp
 TOTAL_TIMESTEPS: 1e6 # per PARTNER_POP_SIZE trained
 NUM_CHECKPOINTS: 5
 PARTNER_POP_SIZE: 5 # true partner pop size is PARTNER_POP_SIZE * NUM_CHECKPOINTS
