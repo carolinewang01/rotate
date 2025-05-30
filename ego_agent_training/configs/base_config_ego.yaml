@@ -1,5 +1,5 @@
 defaults:
-  - task: overcooked/cramped_room # task configs
+  - task: overcooked-v1/cramped_room # task configs
   - algorithm@algorithm: ppo_ego/${task} # task-specific algorithm configs
   - hydra: hydra_simple
   - ../../evaluation/configs/global_heldout_settings
@@ -22,7 +22,7 @@ algorithm:
   ENV_KWARGS: ${ENV_KWARGS}
   ROLLOUT_LENGTH: ${ROLLOUT_LENGTH}
 
-label: ""
+label: "default_label"
 name: ${TASK_NAME}/${algorithm.ALG}_${algorithm.EGO_ACTOR_TYPE}/${label}
 
 # WandB Params

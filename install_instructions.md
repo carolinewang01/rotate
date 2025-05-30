@@ -1,5 +1,5 @@
 ### Instructions
-Instructions were tested on 4/3/25 with a fresh install w/Python 3.11 on debruyne. 
+Instructions were tested on 4/3/25 with a fresh install w/Python 3.11 on a server with Nvidia A100 GPUs.
 
 1. Create a conda env: 
 
@@ -42,4 +42,4 @@ echo $PYTHONPATH
 ```conda env config vars unset PYTHONPATH```
 
 6. Check if you can run our IPPO implementation: 
-```python ppo/ippo.py```
+```python marl/run.py task=lbf algorithm=ippo/lbf```

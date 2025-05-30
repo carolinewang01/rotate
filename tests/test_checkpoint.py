@@ -1,21 +1,27 @@
 import jax
 import numpy as np
-from common.save_load_utils import load_train_run
+import math
+from common.save_load_utils import load_train_run, save_train_run
 from common.plot_utils import get_stats
 
 
-path = "results/overcooked-v1/cramped_room/oe_persistent_paired/method-explore:uniform/2025-04-30_00-47-07/saved_train_run"
+path = "results/lbf/open_ended_minimax/paper-v0:minimax2/2025-05-14_00-42-54/saved_train_run"
 outs = load_train_run(path)
 teammate_outs, ego_outs = outs
 
-print("Teammate outs: ", teammate_outs.keys()) # dict_keys(['checkpoints_br', 'checkpoints_conf', 'final_params_br', 'final_params_conf', 'metrics'])
-print("Ego outs: ", ego_outs.keys()) # dict_keys(['checkpoints', 'final_buffer', 'final_params', 'metrics'])
+print("Teammate outs: ", teammate_outs.keys()) # dict_keys(['checkpoints', 'final_params', 'metrics])
+print("Ego outs: ", ego_outs.keys()) # dict_keys(['checkpoints', 'final_params', 'metrics'])
 
-final_buffer = ego_outs["final_buffer"] # dict_keys(['ages', 'filled', 'filled_count', 'params', 'scores'])
-
-print("Filled count shape: ", final_buffer["filled_count"].shape) # (1, 30, 1, 1) num_seeds, num_oel_iter, 1, 1
-print("Filled shape: ", final_buffer["filled"].shape) # (1, 30, 1, 150) num_seeds, num_oel_iter, 1, max_buffer_size
-
-print("Param leaf shape: ", jax.tree.leaves(final_buffer["params"])[0].shape) # (1, 30, 1, 150, 64) 
+print("Ego final params shape: ", jax.tree.leaves(ego_outs["final_params"])[0].shape) # (3, 30, 1, 1024)
+print("Total parameters: ", sum([math.prod(l.shape) for l in jax.tree.leaves(ego_outs["final_params"])])) # 427507830
+# print("Ego checkpoints shape:  ", jax.tree.leaves(ego_outs["checkpoints"])[0].shape) # (3, 30, 5, 1024)
 
 import pdb; pdb.set_trace()
+
+# dest_path = "results/test_sizes/"
+# save_train_run(teammate_outs["checkpoints"], dest_path, "tm_checkpoints")
+# save_train_run(teammate_outs["final_params"], dest_path, "tm_final_params")
+# save_train_run(teammate_outs["metrics"], dest_path, "tm_metrics")
+# save_train_run(ego_outs["checkpoints"], dest_path, "ego_checkpoints")
+# save_train_run(ego_outs["final_params"], dest_path, "ego_final_params")
+# save_train_run(ego_outs["metrics"], dest_path, "ego_metrics")

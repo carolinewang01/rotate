@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from envs import make_env
-from evaluation.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
+from archived.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
 
 
 def rollout(ego_run_path, partner_run_path, 
