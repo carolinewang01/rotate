@@ -1,31 +1,30 @@
 # ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork
-
-This is the official repository for the paper, "ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork." We provide the code for the ROTATE algorithm, other open-ended training and teammate generation baselines, and scripts to reproduce the experiments and figures from the paper.
-
-<!-- TODO: Add your citation information here once available -->
-If you find this work useful, please consider citing the paper:
-```bibtex
-@article{wang2025rotate,
-  title={ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork},
-  author={Caroline Wang, Arrasy Rahman, Jiaxun Cui, Yoonchang Sung, Peter Stone},
-  journal={Conference/Journal Name},
-  year={2025}
-}
-```
-
-<!-- image of ROTATE method -->
-<p align="center"><img src="assets/rotate_method.png" width="900"></p>
-
 <!-- badges -->
 <!-- E.g., [![Build Status](https://travis-ci.org/user/repo.svg?branch=master)](https://travis-ci.org/user/repo) -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-<!-- [![arXiv](https://img.shields.io/badge/arXiv-<PAPER_ID>-b31b1b.svg)](https://arxiv.org/abs/<PAPER_ID>) -->
+[![arXiv](https://img.shields.io/badge/arXiv-2505.23686-b31b1b.svg)](https://arxiv.org/abs/2505.23686)
 
-### ROTATE Release TODOs
-- <ARXIV RELEASE>
-- Make codebase public
-- Add citation for paper
+<!-- image of ROTATE method -->
+<p align="center"><img src="assets/rotate_method.png" width="900"></p>
+
+This is the official repository for the paper, "ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork." We provide the code for the ROTATE algorithm, open-ended AHT and teammate generation baselines, and scripts to reproduce the experiments and figures from the paper.
+
+If you find the paper or code useful, please cite the paper:
+```bibtex
+@misc{wang2025rotate,
+  title={ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork},
+  author={Caroline Wang, Arrasy Rahman, Jiaxun Cui, Yoonchang Sung, Peter Stone},
+  archivePrefix={arXiv},
+  primaryClass={cs.AI},
+  url = {http://arxiv.org/abs/2505.23686},
+  eprint={2505.23686},
+  year={2025}
+}
+```
+
+<br />
+
 
 ##  Table of Contents
 - [🚀 Installation Guide](#-installation-guide)
@@ -68,7 +67,7 @@ To run the experiments for the ROTATE paper, use the provided bash scripts at `t
 For teammate generation methods (FCP, BRDiv, CoMeDi), please select the algorithm by modifying `teammate_generation/experiments.sh`. Then, to run the method for all tasks, run `bash teammate_generation/experiments.sh`.
 Similarly, for the open-ended methods (ROTATE, PAIRED, Minimax Return), please select the algorithm by modifying `open_ended_training/experiments.sh`. To run the method for all tasks, run `bash open_ended_training/experiments.sh`.
 
-As a warning, ROTATE results take a large amount of disk space (~5GB for a training run with 3 seeds).
+As a warning, ROTATE training runs take a large amount of disk space (~5GB for a training run with 3 seeds), primarily due to the number of checkpointed policies saved. You can decrease the number of checkpoints to reduce the amount of space used. 
 
 ### 📊 Generating Figures
 
