@@ -411,9 +411,10 @@ def train_lbrdiv_partners(train_rng, env, config):
                         value_losses = jnp.square(value - target_v)
                         value_losses_clipped = jnp.square(value_pred_clipped - target_v)
                         value_loss = jax.lax.cond(
-                            loss_weights.sum() == 0, lambda x: jnp.zeros_like(x).astype(jnp.float32), 
+                            loss_weights.sum() == 0, 
+                            lambda x: jnp.zeros_like(x).astype(jnp.float32), 
                             lambda x: x,
-                            loss_weights * jnp.maximum(value_losses, value_losses_clipped).sum() / loss_weights.sum()
+                            (loss_weights * jnp.maximum(value_losses, value_losses_clipped)).sum() / loss_weights.sum()
                         )
                         
                         # Policy gradient loss

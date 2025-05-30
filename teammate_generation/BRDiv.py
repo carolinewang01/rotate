@@ -391,9 +391,10 @@ def train_brdiv_partners(train_rng, env, config):
                         value_losses = jnp.square(value - target_v)
                         value_losses_clipped = jnp.square(value_pred_clipped - target_v)
                         value_loss = jax.lax.cond(
-                            loss_weights.sum() == 0, lambda x: jnp.zeros_like(x).astype(jnp.float32), 
+                            loss_weights.sum() == 0, 
+                            lambda x: jnp.zeros_like(x).astype(jnp.float32), 
                             lambda x: x,
-                            loss_weights * jnp.maximum(value_losses, value_losses_clipped).sum() / loss_weights.sum()
+                            (loss_weights * jnp.maximum(value_losses, value_losses_clipped)).sum() / loss_weights.sum()
                         )
                         
                         choose_actor_weight = lambda self_id, other_id, rew: jax.lax.cond(
@@ -432,7 +433,6 @@ def train_brdiv_partners(train_rng, env, config):
                         )
                         
                         total_loss = pg_loss + config["VF_COEF"] * value_loss - config["ENT_COEF"] * entropy
-
                         return total_loss, (value_loss, pg_loss, entropy)
 
                     possible_agent_ids = jnp.expand_dims(jnp.arange(config["PARTNER_POP_SIZE"]), 1)

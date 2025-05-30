@@ -151,7 +151,7 @@ if __name__ == "__main__":
                         help="Use original normalization instead of best-returns normalization")
     parser.add_argument("--show_plots", action="store_true",
                         help="Show plots in addition to saving them")
-    parser.add_argument("--save_dir", type=str, default="results/neurips_figures",
+    parser.add_argument("--save_dir", type=str, default="results/figures",
                         help="Directory to save plots")
     parser.add_argument("--tasks", nargs="+", 
                         help="List of tasks to show best returns for. If not provided, all tasks will be computed.")

@@ -22,7 +22,6 @@ This is the working repository for the paper, "ROTATE: Regret-driven Open-ended 
 - Move best response computation code to its own directory?
 - Metrics logging - currently, eval_ep_last_info's returned_episode_returns value is visualized, which is problematic because it displays the shaped return in Overcooked. We need to fix this.
 - Final params - we don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
-- Paper vis - this dirname should be updated and the default save dir should not be called `neurips_figures`
 - README 
     - Add a figure for the design philosophy! 
 

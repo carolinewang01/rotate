@@ -1,0 +1,14 @@
+defaults:
+  - ppo_ego/_base_
+  - _self_ # values from this file override the values from the base file
+
+TOTAL_TIMESTEPS: 3e7
+LR: 1e-4 #  5e-5
+ENT_COEF: 0.01 #  1e-4
+CLIP_EPS: 0.1
+ANNEAL_LR: true # false
+UPDATE_EPOCHS: 15
+S5_D_MODEL: 16 # 128
+S5_SSM_SIZE: 16 # 128
+S5_ACTOR_CRITIC_HIDDEN_DIM: 64 # 1024
+FC_N_LAYERS: 2 # 3

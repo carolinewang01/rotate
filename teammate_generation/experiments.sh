@@ -22,11 +22,11 @@ log_file="results/teammate_generation_logs/${algo}/${label}/experiment_${timesta
 
 # Tasks to run
 tasks=(
-    "overcooked/asymm_advantages"
-    "overcooked/coord_ring"
-    "overcooked/counter_circuit"
-    "overcooked/cramped_room"
-    "overcooked/forced_coord"
+    "overcooked-v1/asymm_advantages"
+    "overcooked-v1/coord_ring"
+    "overcooked-v1/counter_circuit"
+    "overcooked-v1/cramped_room"
+    "overcooked-v1/forced_coord"
     "lbf"
 )
 
