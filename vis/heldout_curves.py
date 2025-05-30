@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 
-from paper_vis.process_data import load_results_for_task
-from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
+from vis.process_data import load_results_for_task
+from vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE
 
 plt.rcParams['xtick.labelsize'] = AXIS_LABEL_FONTSIZE
 plt.rcParams['ytick.labelsize'] = AXIS_LABEL_FONTSIZE
@@ -60,7 +60,7 @@ def plot_single_task_heldout_curves(results, metric_name: str, aggregate_stat_na
         plt.show()
 
 if __name__ == "__main__":
-    from paper_vis.plot_globals import OE_BASELINES, OUR_METHOD, ROTATE_VARS,  \
+    from vis.plot_globals import OE_BASELINES, OUR_METHOD, ROTATE_VARS,  \
         GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, HELDOUT_CURVES_CACHE_FILENAME
     
     # Parse command line arguments

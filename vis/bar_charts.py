@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 
-from paper_vis.process_data import load_results_for_task
-from paper_vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE, LEGEND_FONTSIZE, TASK_TO_AXIS_DISPLAY_NAME
+from vis.process_data import load_results_for_task
+from vis.plot_globals import TITLE_FONTSIZE, AXIS_LABEL_FONTSIZE, LEGEND_FONTSIZE, TASK_TO_AXIS_DISPLAY_NAME
 
 plt.rcParams['xtick.labelsize'] = AXIS_LABEL_FONTSIZE
 plt.rcParams['ytick.labelsize'] = AXIS_LABEL_FONTSIZE
@@ -139,7 +139,7 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
 
 
 if __name__ == "__main__":
-    from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
+    from vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
         GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
     
     # Parse command line arguments

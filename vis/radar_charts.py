@@ -4,9 +4,9 @@ import plotly
 import plotly.graph_objects as go
 import argparse
 
-from paper_vis.process_data import load_results_for_task
-from paper_vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE
-from paper_vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
+from vis.process_data import load_results_for_task
+from vis.plot_globals import get_heldout_agents, TITLE_FONTSIZE
+from vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
     GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
 
 plotly.io.kaleido.scope.mathjax = None # disable mathjax to prevent the "loading mathjax" message

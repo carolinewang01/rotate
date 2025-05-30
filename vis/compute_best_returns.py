@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple
 
 from common.save_load_utils import load_train_run
 from common.plot_utils import get_metric_names
-from paper_vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
+from vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
 
 
 def get_original_performance_bounds(task_name: str) -> Dict[str, List[List[float]]]:

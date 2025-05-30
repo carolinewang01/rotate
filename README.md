@@ -5,15 +5,11 @@ This is the working repository for the paper, "ROTATE: Regret-driven Open-ended 
 ## TODOs
 
 ### Clean Up Code - Benchmark Release
-- Move some core PPO code (e.g. loss and GAE computation) into ppo_utils.py
 - Hydra configs: 
     - add structured hydra configs for evaluation
-- PPO-ego: 
-    - Update this code to resample from the agent population each time the episode is done.
 - Clean up IPPO: 
     - Update IPPO/FCP implementation to use wandb logging that's more aligned with rest of codebase
 - Clean up (L)-BRDiv and CoMeDi code
-    - Consider merging L-BRDiv and BRDiv implementations
     - Use run_episodes
     - Consider making ego and br nets the same 
     - Switch from logging BR/Conf losses to SP/XP losses!
@@ -80,15 +76,15 @@ As a warning, ROTATE results take a large amount of disk space (~5GB for a train
 
 ### 📊 Generating Figures
 
-Code to reproduce the experimental figures in the ROTATE paper is provided at `paper_vis/`, and
-a general workflow to generate the paper figures is provided at `paper_vis/make_paper_plots.sh`.
+Code to reproduce the experimental figures in the ROTATE paper is provided at `vis/`, and
+a general workflow to generate the paper figures is provided at `vis/make_paper_plots.sh`.
 The instructions here assume that you have downloaded the evaluation data already, as specified in the Installation Guide.
 
-1.  Specify experiment paths at `paper_vis/plot_globals.py`
-2.  Run `bash paper_vis/make_paper_plots.sh` to generate and save the paper figures. Figures are stored at `results/neurips_figures` by default.
+1.  Specify experiment paths at `vis/plot_globals.py`
+2.  Run `bash vis/make_paper_plots.sh` to generate and save the paper figures. Figures are stored at `results/neurips_figures` by default.
 
 *Note:* The first time that the code is run, it may take a while to generate the metrics and create the plots---around 5 minutes for each bar chart, and 30 min for each learning curve chart (since all checkpoints' evaluation results must be processed). The first time that a particular experimental result is processed, a cache file is automatically generated and stored within each experimental result directory, which makes subsequent runs of the visualization scripts much faster.
-Cache files can be cleared by running, `python paper_vis/clean_cache_files.py`.
+Cache files can be cleared by running, `python vis/clean_cache_files.py`.
 
 ## 📝 Code Overview
 
@@ -112,9 +108,9 @@ The project structure is described here. Additional notes about some folders are
 - `ego_agent_training/`: All ego agent learning implementations. Currently only supports PPO.
 - `marl/`: MARL algorithm implementations. Currently only supports IPPO.
 - `open_ended_training/`: Open-ended learning methods (ROTATE, PAIRED, Minimax Return).
-- `paper_vis/`: Code to generate the plots shown in the paper.
 - `teammate_generation/`: Teammate generation algorithms (BRDiv, FCP, CoMeDi).
 - `tests/`: Test scripts used during development.
+- `vis/`: Code to generate plots shown in the paper.
 
 ### 💡Algorithm Implementations
 
@@ -196,8 +192,8 @@ As described in the "Getting Started" section, the code in this directory is use
 Here, we comment on how the code in this folder computes normalization bounds.
 
 #### Computing Normalization Bounds
-You can compute your own normalization upper bounds using the `paper_vis/compute_best_returns.py` script to walk your `results/` directory to recompute the best seen returns for each evaluation partner.
-For usage, see the bash script, `paper_vis/get_best_returns.sh`.
+You can compute your own normalization upper bounds using the `vis/compute_best_returns.py` script to walk your `results/` directory to recompute the best seen returns for each evaluation partner.
+For usage, see the bash script, `vis/get_best_returns.sh`.
 
 Alternatively, if you do not wish to recompute the normalization upper bounds or download the provided normalization bounds, you can use the development performance bounds provided directly in `evaluation/configs/global_heldout_settings.yaml` to normalize the results by setting the `renormalize_metrics` argument of the `load_results_for_task()` function to `False`.
 Note that the development upper performance bounds are not as high as the normalization upper bounds downloaded by `download_eval_data.py` as they were computed earlier in the project.

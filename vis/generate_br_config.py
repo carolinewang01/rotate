@@ -3,7 +3,7 @@ import json
 import os
 import yaml
 from common.plot_utils import get_metric_names
-from paper_vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
+from vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
 
 
 OE_DEFAULT_CONFIG = {"actor_type": "s5", "ckpt_key": "final_params", "custom_loader": {"name": "open_ended", "type": "ego"}}
