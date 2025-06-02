@@ -823,18 +823,6 @@ def compute_sp_mask_and_ids(pop_size):
     return sp_mask, agent_id_cartesian_product
 
 def log_metrics(config, outs, logger, metric_names: tuple):
-    import jax.numpy as jnp
-    final_params = outs["final_params_conf"]
-    import pdb; pdb.set_trace() # TODO: verify that we're correctly slicing the checkpoints
-    last_checkpoint = jax.tree.map(lambda x: x[:, :, -1], outs["checkpoints_conf"])
-    last_means = [l.mean() for l in jax.tree.leaves(last_checkpoint)]
-    last_is_zeros = [l == 0 for l in last_means]
-    print("Are all parameters in last_checkpoint zero? ", all(last_is_zeros))
-    is_close_pytree = jax.tree.map(lambda l1, l2: jnp.allclose(l1, l2), final_params, last_checkpoint)
-    all_leaves_are_close = all(jax.tree.leaves(is_close_pytree))
-    print(f"Are all parameters in final_params and last_checkpoint close? {all_leaves_are_close}")
-    import pdb; pdb.set_trace()
-    
     metrics = outs["metrics"]
     # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
     num_seeds, num_updates, _, _, pop_size = metrics["pg_loss_conf_agent"].shape # number of trained pairs

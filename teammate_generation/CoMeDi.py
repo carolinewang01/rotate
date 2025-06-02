@@ -603,7 +603,7 @@ def train_comedi_partners(train_rng, env, config):
                     (train_state, env_state_sp, last_obs_sp, last_dones_sp, rng_sp, num_prev_trained_conf, mp_traj_batch) = runner_state_sp
 
                     # Step 4
-                    # TODO Do MP rollout (based on train_state params and the param in pop_buffer identified in Step 1)
+                    # Do MP rollout (based on train_state params and the param in pop_buffer identified in Step 1)
                     runner_state_mp = (train_state, xp_param, env_state_mp, obsv_mp, last_dones_mp, rng_mp, num_prev_trained_conf)
                     runner_state_mp, traj_batch_mp = jax.lax.scan(
                         _env_step_mixed, runner_state_mp, None, config["ROLLOUT_LENGTH"])
@@ -1011,9 +1011,8 @@ def train_comedi_partners(train_rng, env, config):
                     pop_buffer = update_runner_state[1]
 
                     # Single PPO update
-                    update_input = (update_runner_state, checkpoint_array, ckpt_idx)
                     new_state_with_ckpt, metric = _update_step(
-                        update_input,
+                        (update_runner_state, checkpoint_array, ckpt_idx),
                         None
                     )
                     new_update_runner_state = new_state_with_ckpt[0]
@@ -1060,30 +1059,33 @@ def train_comedi_partners(train_rng, env, config):
                         (checkpoint_array, store_and_eval_rng, ckpt_idx, xp_eval_returns, sp_eval_returns)
                     )
                     
-                    return (new_update_runner_state, checkpoint_array, ckpt_idx, xp_eval_returns, sp_eval_returns), (metric, xp_eval_returns, sp_eval_returns)
+                    return (new_update_runner_state, checkpoint_array, 
+                            ckpt_idx, xp_eval_returns, sp_eval_returns), (metric, xp_eval_returns, sp_eval_returns)
 
-                runner_state, (metric, xp_eval_returns, sp_eval_returns) = jax.lax.scan(
+                new_update_with_ckpt_runner_state, (metric, xp_eval_returns, sp_eval_returns) = jax.lax.scan(
                     _update_step_with_ckpt,
                     update_with_ckpt_runner_state,
                     xs=None,  # No per-step input data
                     length=config["NUM_UPDATES"],
                 )
+                new_update_runner_state, new_checkpoint_array, _, _ ,_ = new_update_with_ckpt_runner_state
+                final_train_state = new_update_runner_state[0]
 
-                updated_pop_buffer = partner_population.add_agent(pop_buffer, runner_state[0][0].params)
-                conf_checkpoints = runner_state[1]
+                updated_pop_buffer = partner_population.add_agent(pop_buffer, final_train_state.params)
+                conf_checkpoints = new_checkpoint_array
                 return updated_pop_buffer, (conf_checkpoints, metric, xp_eval_returns, sp_eval_returns)
             
             iter_ids = jnp.arange(1, config["PARTNER_POP_SIZE"])
-            final_population_buffer, others = jax.lax.scan(
+            final_population_buffer, (conf_checkpoints, metric, xp_eval_returns, sp_eval_returns) = jax.lax.scan(
                 add_conf_policy, population_buffer, (iter_ids, add_conf_iter_rngs)
             )
 
             out = {
                 "final_params_conf": final_population_buffer.params,
-                "checkpoints_conf": others[0],
-                "metrics": others[1],
-                "last_ep_infos_xp": others[2],
-                "last_ep_infos_sp": others[3]
+                "checkpoints_conf": conf_checkpoints,
+                "metrics": metric,
+                "last_ep_infos_xp": xp_eval_returns,
+                "last_ep_infos_sp": sp_eval_returns
             }
             
             return out
@@ -1160,10 +1162,30 @@ def compute_sp_mask_and_ids(pop_size):
     return sp_mask, agent_id_cartesian_product
 
 def log_metrics(config, outs, logger, metric_names: tuple):
+    # TODO: figure out why the last checkpoint is not equal to the last of the final params
+    # TODO: can we add the IPPO checkpoints to the out["checkpoints_conf"] checkpoints?
+    # command to run comedi: python teammate_generation/run.py algorithm=comedi/lbf task=lbf  logger.mode=offline algorithm.TOTAL_TIMESTEPS_PER_ITERATION=3e5 algorithm.PARTNER_POP_SIZE=2 algorithm.NUM_ENVS_SP=8  algorithm.NUM_ENVS_XP=8 algorithm.NUM_ENVS_MP=8 algorithm.UPDATE_EPOCHS=1 algorithm.NUM_MINIBATCHES=1
+    import jax.numpy as jnp
+    # final_params = outs["final_params_conf"]
+    final_params = jax.tree.map(lambda x: x[:, -1], outs["final_params_conf"])
+
+    final_params_leaf0 = jax.tree.leaves(final_params)[0] # when popsize is 2, shape is (1, 2 64)
+    ckpts_leaf0 = jax.tree.leaves(outs["checkpoints_conf"])[0] # shape (1, 1, 5, 64)
+
+    import pdb; pdb.set_trace()
+    last_checkpoint = jax.tree.map(lambda x: x[:, :, -1,], outs["checkpoints_conf"])
+    last_means = [l.mean() for l in jax.tree.leaves(last_checkpoint)]
+    last_is_zeros = [l == 0 for l in last_means]
+    print("Are all parameters in last_checkpoint zero? ", all(last_is_zeros))
+    is_close_pytree = jax.tree.map(lambda l1, l2: jnp.allclose(l1, l2), final_params, last_checkpoint)
+    all_leaves_are_close = all(jax.tree.leaves(is_close_pytree))
+    print(f"Are all parameters in final_params and last_checkpoint close? {all_leaves_are_close}")
+    import pdb; pdb.set_trace()    
+
     metrics = outs["metrics"]
-    # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
     num_seeds, pop_size, num_updates, _, _ = metrics["pg_loss_conf_sp"].shape # number of trained pairs
     # TODO: add the eval_ep_last_info metrics
+
     ### Log evaluation metrics
     # we plot XP return curves separately from SP return curves 
     # shape (num_seeds, num_updates, pop_size,  num_eval_episodes, num_agents_per_game)
