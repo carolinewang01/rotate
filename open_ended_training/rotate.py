@@ -13,7 +13,7 @@ from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
-from open_ended_training.rotate_without_pop import train_regret_maximizing_partners, log_metrics
+from open_ended_training.rotate_without_pop import train_regret_maximizing_partners, log_metrics as log_metrics_without_pop
 from open_ended_training.rotate_with_mixed_play import train_regret_maximizing_partners as train_partners_with_mp, log_metrics as log_mp_metrics
 from marl.ippo import make_train as make_ppo_train
 
@@ -246,7 +246,7 @@ def run_rotate(config, wandb_logger):
 
     # Log metrics
     if algorithm_config["PARTNER_ALGO"] == "rotate_without_pop":
-        log_metrics = log_metrics
+        log_metrics = log_metrics_without_pop
     elif algorithm_config["PARTNER_ALGO"] == "rotate_with_mixed_play":
         log_metrics = log_mp_metrics
     else:
