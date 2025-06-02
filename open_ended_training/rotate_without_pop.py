@@ -845,7 +845,7 @@ def train_regret_maximizing_partners(config, env,
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
+            ckpt_and_eval_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store a ckpt at the last update
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -868,8 +868,8 @@ def train_regret_maximizing_partners(config, env,
 
                 # Decide if we store a checkpoint
                 # update steps is 1-indexed because it was incremented at the end of the update step
-                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
-                                        jnp.equal(update_steps, config["NUM_UPDATES"]))
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, ckpt_and_eval_interval), 0),
+                                          jnp.equal(update_steps, config["NUM_UPDATES"]))
                       
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
@@ -1074,7 +1074,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     return carry, (train_out, ego_out)
 
 
-def train_paired(rng, env, algorithm_config, ego_config):
+def train_rotate_without_pop(rng, env, algorithm_config, ego_config):
     rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     # initialize ego policy and config
@@ -1165,7 +1165,7 @@ def run_rotate_without_pop(config, wandb_logger):
 
     DEBUG = False
     with jax.disable_jit(DEBUG):
-        train_fn = jax.jit(jax.vmap(partial(train_paired, 
+        train_fn = jax.jit(jax.vmap(partial(train_rotate_without_pop, 
                 env=env, algorithm_config=algorithm_config, ego_config=ego_config
                 )
             )
@@ -1197,8 +1197,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
         metric_names: tuple, names of metrics to extract from training logs
     """
     teammate_outs, ego_outs = outs
-
-    teammate_metrics = teammate_outs["metrics"] # conf vs ego 
+    teammate_metrics = teammate_outs["metrics"]
     ego_metrics = ego_outs["metrics"]
 
     num_seeds, num_open_ended_iters, _, num_ego_updates = ego_metrics["returned_episode_returns"].shape[:4]
@@ -1259,11 +1258,11 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/EgoRegret", avg_teammate_sp_returns[iter_idx][step] - avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
+            
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfActorLoss-Against-Ego", avg_actor_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfEntropy-Against-Ego", avg_entropy_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
-            
             logger.log_item("Losses/ConfValLoss-Against-BR", avg_value_losses_teammate_against_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfActorLoss-Against-BR", avg_actor_losses_teammate_against_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfEntropy-Against-BR", avg_entropy_losses_teammate_against_br[iter_idx][step], train_step=global_step)

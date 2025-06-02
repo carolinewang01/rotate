@@ -5,11 +5,7 @@ This is the working repository for the paper, "ROTATE: Regret-driven Open-ended 
 ## TODOs
 
 ### Clean Up Code - Benchmark Release
-High priority issues that may propagate if not fixed:
-
-- Final params 
-  - Verify that final params == last checkpoint - audited FCP and IPPO.
-  - We don't need to store this when the last checkpoint IS the final params, right? Remove the redundancy.
+High priority issues that will propagate if not fixed:
 
 - Clean up (L)-BRDiv and CoMeDi code
     - Update codes to use the agent interface
@@ -25,12 +21,13 @@ Lower priority fixes / additional features:
 - Move best response computation code to its own directory?
 
 Enabling Collaboration
-- Create environment API for our setting
-- Create list of things to check for others when checking PRs
-- Creae list of requirements for each algorithm: 
-  - input 
-  - output
-  - test
+- Create a contribution guide
+  - Create list of things to check for others when checking PRs
+  - Creae list of requirements for each algorithm: 
+    - input 
+    - output
+    - test
+- Create an abstract environment API for our codebase
 
 ### Benchmark Release
 - Create demo notebook

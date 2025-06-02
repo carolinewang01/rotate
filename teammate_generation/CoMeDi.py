@@ -139,7 +139,7 @@ def train_comedi_partners(train_rng, env, config):
                 obsv_mp2, env_state_mp2 = jax.vmap(env.reset, in_axes=(0,))(reset_rngs_mps2)
 
                 # build a pytree that can hold the parameters for all checkpoints.
-                checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1)
+                ckpt_and_eval_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1)
                 num_ckpts = config["NUM_CHECKPOINTS"]
                 def init_ckpt_array(params_pytree):
                     return jax.tree.map(
@@ -1020,7 +1020,7 @@ def train_comedi_partners(train_rng, env, config):
                     
                     # Decide if we store a checkpoint
                     # update steps is 1-indexed because it was incremented at the end of the update step
-                    to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                    to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, ckpt_and_eval_interval), 0),
                                             jnp.equal(update_steps, config["NUM_UPDATES"]))
                                   
                     def store_and_eval_ckpt(args):
@@ -1183,7 +1183,7 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     import pdb; pdb.set_trace()    
 
     metrics = outs["metrics"]
-    num_seeds, pop_size, num_updates, _, _ = metrics["pg_loss_conf_sp"].shape # number of trained pairs
+    num_seeds, pop_size, num_updates, _, _ = metrics["pg_loss_conf_sp"].shape
     # TODO: add the eval_ep_last_info metrics
 
     ### Log evaluation metrics
@@ -1209,15 +1209,15 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     # both xp and xp metrics has shape (num_seeds, pop_size, num_updates, update_epochs, num_minibatches)
     # Average over seeds
     processed_losses = {
-        "ConfPGLossSP": np.asarray(metrics["pg_loss_conf_sp"]).mean(axis=(0, 3, 4)), # .transpose(), # desired shape (pop_size, num_updates)
-        "ConfPGLossXP": np.asarray(metrics["pg_loss_conf_xp"]).mean(axis=(0, 3, 4)),  # .transpose(),
-        "ConfPGLossMP": np.asarray(metrics["pg_loss_conf_mp"]).mean(axis=(0, 3, 4)), # .transpose(),
-        "ConfValLossSP": np.asarray(metrics["value_loss_sp"]).mean(axis=(0, 3, 4)), # .transpose(),
-        "ConfValLossXP": np.asarray(metrics["value_loss_xp"]).mean(axis=(0, 3, 4)), # .transpose(),
-        "ConfValLossMP": np.asarray(metrics["value_loss_mp"]).mean(axis=(0, 3, 4)), # .transpose(),
-        "EntropySP": np.asarray(metrics["entropy_conf_sp"]).mean(axis=(0, 3, 4)), # .transpose(),
-        "EntropyXP": np.asarray(metrics["entropy_conf_xp"]).mean(axis=(0, 3, 4)), # .transpose(),
-        "EntropyMP": np.asarray(metrics["entropy_conf_mp"]).mean(axis=(0, 3, 4)), # .transpose(),
+        "ConfPGLossSP": np.asarray(metrics["pg_loss_conf_sp"]).mean(axis=(0, 3, 4)), # desired shape (pop_size, num_updates)
+        "ConfPGLossXP": np.asarray(metrics["pg_loss_conf_xp"]).mean(axis=(0, 3, 4)),
+        "ConfPGLossMP": np.asarray(metrics["pg_loss_conf_mp"]).mean(axis=(0, 3, 4)),
+        "ConfValLossSP": np.asarray(metrics["value_loss_sp"]).mean(axis=(0, 3, 4)),
+        "ConfValLossXP": np.asarray(metrics["value_loss_xp"]).mean(axis=(0, 3, 4)),
+        "ConfValLossMP": np.asarray(metrics["value_loss_mp"]).mean(axis=(0, 3, 4)),
+        "EntropySP": np.asarray(metrics["entropy_conf_sp"]).mean(axis=(0, 3, 4)),
+        "EntropyXP": np.asarray(metrics["entropy_conf_xp"]).mean(axis=(0, 3, 4)),
+        "EntropyMP": np.asarray(metrics["entropy_conf_mp"]).mean(axis=(0, 3, 4)),
     }
     
     xs = list(range(num_updates))

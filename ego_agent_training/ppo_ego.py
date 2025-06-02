@@ -318,7 +318,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 return (new_runner_state, metric)
 
             # PPO Update and Checkpoint saving
-            checkpoint_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
+            ckpt_and_eval_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1)  # -1 because we store a ckpt at the last update
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all FCP checkpoints
@@ -342,7 +342,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                  rng, update_steps) = new_update_state
 
                 # update steps is 1-indexed because it was incremented at the end of the update step
-                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, checkpoint_interval), 0),
+                to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, ckpt_and_eval_interval), 0),
                                         jnp.equal(update_steps, config["NUM_UPDATES"]))
 
 

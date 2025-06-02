@@ -13,7 +13,7 @@ from common.plot_utils import get_metric_names
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from open_ended_training.ppo_ego_with_buffer import train_ppo_ego_agent_with_buffer
-from open_ended_training.rotate_without_pop import train_regret_maximizing_partners, log_metrics
+from open_ended_training.rotate_without_pop import train_regret_maximizing_partners, log_metrics as log_metrics_without_pop
 from open_ended_training.rotate_with_mixed_play import train_regret_maximizing_partners as train_partners_with_mp, log_metrics as log_mp_metrics
 from marl.ippo import make_train as make_ppo_train
 
@@ -87,9 +87,14 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
         
     elif config["EGO_TEAMMATE"] == "all":
         n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-        all_conf_params = jax.tree.map(
+        conf_ckpt_params= jax.tree.map(
             lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
             train_out["checkpoints_conf"]
+        )
+        all_conf_params = jax.tree.map(
+            lambda x, y: jnp.concatenate([x, y], axis=0),
+            conf_ckpt_params,
+            train_out["final_params_conf"]
         )
     
     # Add all checkpoints and final parameters of all partners to the buffer
@@ -165,8 +170,7 @@ def train_persistent(rng, env, algorithm_config, ego_config):
     if algorithm_config["EGO_TEAMMATE"] == "final":
         max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_OPEN_ENDED_ITERS"]
     elif algorithm_config["EGO_TEAMMATE"] == "all":
-        max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
-                       algorithm_config["NUM_CHECKPOINTS"] * \
+        max_pop_size = (algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"] + 1) * \
                        algorithm_config["NUM_OPEN_ENDED_ITERS"]
     else:
         raise ValueError(f"Invalid EGO_TEAMMATE value: {algorithm_config['EGO_TEAMMATE']}")
@@ -254,7 +258,7 @@ def run_rotate(config, wandb_logger):
 
     # Log metrics
     if algorithm_config["PARTNER_ALGO"] == "rotate_without_pop":
-        log_metrics = log_metrics
+        log_metrics = log_metrics_without_pop
     elif algorithm_config["PARTNER_ALGO"] == "rotate_with_mixed_play":
         log_metrics = log_mp_metrics
     else:
