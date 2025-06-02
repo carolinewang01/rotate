@@ -4,7 +4,7 @@ This is the working repository for the paper, "ROTATE: Regret-driven Open-ended 
 
 ## TODOs
 
-### Clean Up Code - Benchmark Release
+### Clean Up Code
 High priority issues that will propagate if not fixed:
 
 - Clean up (L)-BRDiv and CoMeDi code
@@ -20,7 +20,7 @@ Lower priority fixes / additional features:
     - Update regret evaluator
 - Move best response computation code to its own directory?
 
-Enabling Collaboration
+### Enabling Collaboration
 - Create a contribution guide
   - Create list of things to check for others when checking PRs
   - Creae list of requirements for each algorithm: 

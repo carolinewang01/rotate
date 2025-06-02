@@ -1162,26 +1162,6 @@ def compute_sp_mask_and_ids(pop_size):
     return sp_mask, agent_id_cartesian_product
 
 def log_metrics(config, outs, logger, metric_names: tuple):
-    # TODO: figure out why the last checkpoint is not equal to the last of the final params
-    # TODO: can we add the IPPO checkpoints to the out["checkpoints_conf"] checkpoints?
-    # command to run comedi: python teammate_generation/run.py algorithm=comedi/lbf task=lbf  logger.mode=offline algorithm.TOTAL_TIMESTEPS_PER_ITERATION=3e5 algorithm.PARTNER_POP_SIZE=2 algorithm.NUM_ENVS_SP=8  algorithm.NUM_ENVS_XP=8 algorithm.NUM_ENVS_MP=8 algorithm.UPDATE_EPOCHS=1 algorithm.NUM_MINIBATCHES=1
-    import jax.numpy as jnp
-    # final_params = outs["final_params_conf"]
-    final_params = jax.tree.map(lambda x: x[:, -1], outs["final_params_conf"])
-
-    final_params_leaf0 = jax.tree.leaves(final_params)[0] # when popsize is 2, shape is (1, 2 64)
-    ckpts_leaf0 = jax.tree.leaves(outs["checkpoints_conf"])[0] # shape (1, 1, 5, 64)
-
-    import pdb; pdb.set_trace()
-    last_checkpoint = jax.tree.map(lambda x: x[:, :, -1,], outs["checkpoints_conf"])
-    last_means = [l.mean() for l in jax.tree.leaves(last_checkpoint)]
-    last_is_zeros = [l == 0 for l in last_means]
-    print("Are all parameters in last_checkpoint zero? ", all(last_is_zeros))
-    is_close_pytree = jax.tree.map(lambda l1, l2: jnp.allclose(l1, l2), final_params, last_checkpoint)
-    all_leaves_are_close = all(jax.tree.leaves(is_close_pytree))
-    print(f"Are all parameters in final_params and last_checkpoint close? {all_leaves_are_close}")
-    import pdb; pdb.set_trace()    
-
     metrics = outs["metrics"]
     num_seeds, pop_size, num_updates, _, _ = metrics["pg_loss_conf_sp"].shape
     # TODO: add the eval_ep_last_info metrics
