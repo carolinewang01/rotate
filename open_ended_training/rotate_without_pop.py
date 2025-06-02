@@ -1044,7 +1044,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     return carry, (train_out, ego_out)
 
 
-def train_paired(rng, env, algorithm_config, ego_config):
+def train_rotate_without_pop(rng, env, algorithm_config, ego_config):
     rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     # initialize ego policy and config
@@ -1135,7 +1135,7 @@ def run_rotate_without_pop(config, wandb_logger):
 
     DEBUG = False
     with jax.disable_jit(DEBUG):
-        train_fn = jax.jit(jax.vmap(partial(train_paired, 
+        train_fn = jax.jit(jax.vmap(partial(train_rotate_without_pop, 
                 env=env, algorithm_config=algorithm_config, ego_config=ego_config
                 )
             )

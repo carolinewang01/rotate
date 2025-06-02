@@ -1014,7 +1014,7 @@ def open_ended_training_step(carry, ego_policy, conf_policy, br_policy, partner_
     return carry, (train_out, ego_out)
 
 
-def train_paired(rng, env, algorithm_config, ego_config): # Added ego_config
+def train_rotate_mp(rng, env, algorithm_config, ego_config): # Added ego_config
     rng, init_ego_rng, init_conf_rng, init_br_rng, train_rng = jax.random.split(rng, 5)
     
     ego_policy, init_ego_params = initialize_s5_agent(algorithm_config, env, init_ego_rng)
@@ -1103,7 +1103,7 @@ def run_rotate_with_mixed_play(config, wandb_logger):
 
     DEBUG = False
     with jax.disable_jit(DEBUG):
-        train_fn = jax.jit(jax.vmap(partial(train_paired, 
+        train_fn = jax.jit(jax.vmap(partial(train_rotate_mp, 
                 env=env, algorithm_config=algorithm_config, ego_config=ego_config # Pass ego_config
                 )
             )

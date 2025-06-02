@@ -79,9 +79,14 @@ def persistent_open_ended_training_step(carry, ego_policy, conf_policy, br_polic
         
     elif config["EGO_TEAMMATE"] == "all":
         n_ckpts = config["PARTNER_POP_SIZE"] * config["NUM_CHECKPOINTS"]
-        all_conf_params = jax.tree.map(
+        conf_ckpt_params= jax.tree.map(
             lambda x: x.reshape((n_ckpts,) + x.shape[2:]), 
             train_out["checkpoints_conf"]
+        )
+        all_conf_params = jax.tree.map(
+            lambda x, y: jnp.concatenate([x, y], axis=0),
+            conf_ckpt_params,
+            train_out["final_params_conf"]
         )
     
     # Add all checkpoints and final parameters of all partners to the buffer
@@ -153,12 +158,10 @@ def train_persistent(rng, env, algorithm_config, ego_config):
     
     # Create persistent partner population with BufferedPopulation
     # The max_pop_size must be large enough to hold all agents across all iterations
-
     if algorithm_config["EGO_TEAMMATE"] == "final":
         max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_OPEN_ENDED_ITERS"]
     elif algorithm_config["EGO_TEAMMATE"] == "all":
-        max_pop_size = algorithm_config["PARTNER_POP_SIZE"] * \
-                       algorithm_config["NUM_CHECKPOINTS"] * \
+        max_pop_size = (algorithm_config["PARTNER_POP_SIZE"] * algorithm_config["NUM_CHECKPOINTS"] + 1) * \
                        algorithm_config["NUM_OPEN_ENDED_ITERS"]
     else:
         raise ValueError(f"Invalid EGO_TEAMMATE value: {algorithm_config['EGO_TEAMMATE']}")
