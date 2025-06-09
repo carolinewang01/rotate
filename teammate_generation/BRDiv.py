@@ -2,14 +2,13 @@
 python teammate_generation/run.py algorithm=brdiv/lbf task=lbf label=test_brdiv algorithm.ego_train_algorithm.TOTAL_TIMESTEPS=3e6
 
 Debug command: 
-python teammate_generation/run.py algorithm=brdiv/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5 algorithm.PARTNER_POP_SIZE=2 algorithm.NUM_ENVS=16 train_ego=false run_heldout_eval=false
+python teammate_generation/run.py algorithm=brdiv/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5 algorithm.PARTNER_POP_SIZE=2 train_ego=false run_heldout_eval=false
 
 Cleanup Steps: 
 1. Convert code to use the agent interface (done)
 2. Use run_episodes to run evaluation episodes (done)
 3. Replace minibatch creation code with create_minibatches utility function (done)
-4. Remove unnecessary vmaps (not needed)
-5. Refactor NUM_CONTROLLED_ACTORS->NUM_CONF_ACTORS, NUM_BR_ACTORS
+5. Refactor NUM_CONTROLLED_ACTORS->NUM_CONF_ACTORS, NUM_BR_ACTORS (done)
 5. Use AgentPopulation object to manage agent parameters
 '''
 import shutil
@@ -55,11 +54,13 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
     assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
 
     # Define different minibatch sizes for interactions with ego agent and one with BR agent
-    config["SP_COLLECT_SIZE"] = config["NUM_ENVS"] // 2
-    config["XP_COLLECT_SIZE"] = config["NUM_ENVS"] - config["SP_COLLECT_SIZE"]
+    # config["SP_COLLECT_SIZE"] = config["NUM_ENVS"] // 2 # CLEANUP FLAG
+    # config["XP_COLLECT_SIZE"] = config["NUM_ENVS"] - config["SP_COLLECT_SIZE"]
     config["NUM_GAME_AGENTS"] = num_agents
-    config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
-    config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"] // config["NUM_GAME_AGENTS"]
+    # config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"] # CLEANUP FLAG
+    # config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"] // config["NUM_GAME_AGENTS"]
+    config["NUM_CONF_ACTORS"] = config["NUM_ENVS"]
+    config["NUM_BR_ACTORS"] = config["NUM_ENVS"] - config["NUM_CONF_ACTORS"]
     config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"])
 
     def gather_params(partner_params_pytree, idx_vec):
@@ -363,10 +364,17 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         #     )
                         
                         # actor_weights_v0 = jax.vmap(jax.vmap(choose_actor_weight))(traj_batch.self_id, traj_batch.oppo_id, traj_batch.reward)
+                        n = config["PARTNER_POP_SIZE"]
+                        # Apply different loss weights for SP and XP data
+                        # Loss weights consist of two parts: the first term is the weighting from the BRDiv loss fucntion
+                        # The second term is a reweighting term to compensate for the data collection process, which uniformly and independently 
+                        # samples the conf and br ids from 1, ..., n, resulting in P(SP) = 1/n and P(XP) = (n-1)/n.
+                        # To prevent the XP loss term from dominating the SP loss term, we would like P(SP) = P(XP) = 1/2.
+                        # Thus, we set the 2nd term of the SP weight to n/2, and the 2nd term of the XP weight to n/(2 * (n-1)).
                         
                         is_sp = jnp.equal(jnp.argmax(traj_batch.self_id, axis=-1), jnp.argmax(traj_batch.oppo_id, axis=-1))
-                        sp_weight = 1 + 2*config["XP_LOSS_WEIGHTS"]
-                        xp_weight = config["XP_LOSS_WEIGHTS"]
+                        sp_weight = (1 + 2*config["XP_LOSS_WEIGHTS"]) * (n/2)
+                        xp_weight = config["XP_LOSS_WEIGHTS"] * (n / (2 * (n-1)))
                         actor_weights = jnp.where(is_sp, sp_weight, xp_weight)
                         
                         # Policy gradient loss
@@ -437,9 +445,9 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 rng, perm_rng_conf, perm_rng_br = jax.random.split(rng, 3)
 
                 minibatches_conf = _create_minibatches(traj_batch_conf, advantages_conf, targets_conf, init_conf_hstate, 
-                                                       config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_conf)
+                                                       config["NUM_CONF_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_conf)
                 minibatches_br = _create_minibatches(traj_batch_br, advantages_br, targets_br, init_br_hstate, 
-                                                     config["NUM_CONTROLLED_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br)
+                                                     config["NUM_BR_ACTORS"], config["NUM_MINIBATCHES"], perm_rng_br)
 
                 # Update both policies
                 (train_state_conf, train_state_br), all_losses = jax.lax.scan(
@@ -554,8 +562,8 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
 
                 # 3) PPO update
                 rng, update_rng = jax.random.split(rng, 2)
-                init_conf_hstate = conf_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-                init_br_hstate = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+                init_conf_hstate = conf_policy.init_hstate(config["NUM_CONF_ACTORS"])
+                init_br_hstate = br_policy.init_hstate(config["NUM_BR_ACTORS"])
                 update_state = (
                     all_train_state_conf, all_train_state_br, 
                     init_conf_hstate, init_br_hstate,
@@ -668,8 +676,8 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
             init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
 
             # Initialize conf and br hstates
-            init_conf_h = conf_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_br_h = br_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_conf_h = conf_policy.init_hstate(config["NUM_CONF_ACTORS"])
+            init_br_h = br_policy.init_hstate(config["NUM_BR_ACTORS"])
 
             update_runner_state = (
                 all_conf_optims, all_br_optims, 
@@ -837,7 +845,9 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     xs = list(range(num_updates))
     keys = [f"pair {i}" for i in range(pop_size)]
     for loss_name, loss_data in processed_losses.items():
-        import pdb; pdb.set_trace()
+        if np.isnan(loss_data).any():
+            print(f"Found nan in loss {loss_name}")
+            import pdb; pdb.set_trace()
         logger.log_item(f"Losses/{loss_name}", 
             wandb.plot.line_series(xs=xs, ys=loss_data, keys=keys, 
             title=loss_name, xname="train_step")
