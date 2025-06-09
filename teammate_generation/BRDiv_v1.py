@@ -89,7 +89,6 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
             rng, init_conf_rng, init_br_rng = jax.random.split(rng, 3)
             all_conf_init_rngs = jax.random.split(init_conf_rng, config["PARTNER_POP_SIZE"])
             all_br_init_rngs = jax.random.split(init_br_rng, config["PARTNER_POP_SIZE"])
-            identity_matrix = jnp.eye(config["PARTNER_POP_SIZE"])
 
             def init_train_states(rng_agents, rng_brs):
                 def init_single_pair_optimizers(rng_agent, rng_br):
@@ -160,25 +159,8 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 Returns updated runner_state, and Transitions for agent_0 and agent_1
                 """
                 conf_params, br_params, conf_agent_id, br_agent_id, env_state, last_obs, last_done, last_conf_h, last_br_h, rng = runner_state
-                rng, act0_rng, act1_rng, step_rng, conf_sampling_rng, br_sampling_rng = jax.random.split(rng, 6)
 
-                # For done envs, resample partner ids
-                needs_resample = last_done["__all__"][:, jnp.newaxis] # shape (NUM_ENVS, 1) bool
-                resampled_conf_ids = identity_matrix[jax.random.randint(conf_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])]
-                resampled_br_ids = identity_matrix[jax.random.randint(br_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])]
-
-                # Determine final indices based on whether resampling was needed for each env
-                updated_conf_ids = jnp.where(
-                    needs_resample,         # Mask shape (NUM_ENVS, 1)
-                    resampled_conf_ids,     # Use newly sampled index if True
-                    conf_agent_id           # Else, keep index from previous step
-                )
-
-                updated_br_ids = jnp.where(
-                    needs_resample,         # Mask shape (NUM_ENVS, 1)
-                    resampled_br_ids,       # Use newly sampled index if True
-                    br_agent_id             # Else, keep index from previous step
-                )
+                rng, act0_rng, act1_rng, step_rng = jax.random.split(rng, 4)
 
                 # Get available actions for agent 0 from environment state
                 avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
@@ -189,7 +171,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 # Agent_0 action
                 act0_rng = jax.random.split(act0_rng, config["NUM_ENVS"])
                 act_0, val_0, pi_0, new_conf_h = jax.vmap(forward_pass_conf)(conf_params, 
-                        last_obs["agent_0"], updated_br_ids, last_done["agent_0"], avail_actions_0, 
+                        last_obs["agent_0"], br_agent_id, last_done["agent_0"], avail_actions_0, 
                         last_conf_h, act0_rng)
                 logp_0 = pi_0.log_prob(act_0)
                 act_0, val_0, logp_0 = act_0.squeeze(), val_0.squeeze(), logp_0.squeeze()
@@ -197,7 +179,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 # Agent_1 action
                 act1_rng = jax.random.split(act1_rng, config["NUM_ENVS"])
                 act_1, val_1, pi_1, new_br_h = jax.vmap(forward_pass_br)(br_params, 
-                        last_obs["agent_1"], updated_conf_ids, last_done["agent_1"], avail_actions_1, 
+                        last_obs["agent_1"], conf_agent_id, last_done["agent_1"], avail_actions_1, 
                         last_br_h, act1_rng)
                 logp_1 = pi_1.log_prob(act_1)
                 act_1, val_1, logp_1 = act_1.squeeze(), val_1.squeeze(), logp_1.squeeze()
@@ -224,16 +206,16 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     jnp.argmax(conf_id, axis=-1), jnp.argmax(br_id, axis=-1)
                 ), lambda x: x, lambda x: -x, agent0_rew)
 
-                agent_0_rews = jax.vmap(indiv_conf_rew_compute)(updated_conf_ids, updated_br_ids, reward["agent_1"])
-                agent_1_rews = jax.vmap(indiv_ego_rew_compute)(updated_conf_ids, updated_br_ids, reward["agent_0"])
+                agent_0_rews = jax.vmap(indiv_conf_rew_compute)(conf_agent_id, br_agent_id, reward["agent_1"])
+                agent_1_rews = jax.vmap(indiv_ego_rew_compute)(conf_agent_id, br_agent_id, reward["agent_0"])
                 
                 # Store agent_0 data in transition
                 transition_0 = XPTransition(
                     done=done["agent_0"],
                     action=act_0,
                     value=val_0,
-                    self_id=updated_conf_ids,
-                    oppo_id=updated_br_ids,
+                    self_id=conf_agent_id,
+                    oppo_id=br_agent_id,
                     reward=agent_0_rews,
                     log_prob=logp_0,
                     obs=last_obs["agent_0"],
@@ -245,15 +227,15 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     done=done["agent_1"],
                     action=act_1,
                     value=val_1,
-                    self_id=updated_br_ids,
-                    oppo_id=updated_conf_ids,
+                    self_id=br_agent_id,
+                    oppo_id=conf_agent_id,
                     reward=agent_1_rews,
                     log_prob=logp_1,
                     obs=last_obs["agent_1"],
                     info=info_1,
                     avail_actions=avail_actions_1
                 )
-                new_runner_state = (conf_params, br_params, updated_conf_ids, updated_br_ids, 
+                new_runner_state = (conf_params, br_params, conf_agent_id, br_agent_id, 
                                     env_state_next, obs_next, done, new_conf_h, new_br_h, rng)
                 return new_runner_state, (transition_0, transition_1)
             
@@ -313,25 +295,22 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     minbatch_conf, minbatch_br = all_data
 
                     def _loss_fn(param, agent_policy, minbatch, agent_id):
-                        '''Compute loss for agent corresponding to agent_id.
-                        '''
                         init_hstate, traj_batch, gae, target_v = minbatch
                         # get policy and value of confederate versus ego and best response agents respectively
                         param = jax.tree.map(lambda x: jnp.squeeze(x, 0), param)
-                        # pi, value = agent_policy.network.apply(param, (traj_batch.obs, traj_batch.oppo_id, traj_batch.avail_actions)) # DEBUG FLAG
-                        # log_prob = pi.log_prob(traj_batch.action)
-                        
-                        # import pdb; pdb.set_trace()
-                        _, value, pi, _ = agent_policy.get_action_value_policy(
-                            params=param,
-                            obs=traj_batch.obs,
-                            done=traj_batch.done,
-                            avail_actions=traj_batch.avail_actions,
-                            hstate=init_hstate,
-                            rng=jax.random.PRNGKey(0), # only used for action sampling, which is not used here 
-                            aux_obs=traj_batch.oppo_id
-                        )
+                        pi, value = agent_policy.network.apply(param, (traj_batch.obs, traj_batch.oppo_id, traj_batch.avail_actions)) # DEBUG FLAG
                         log_prob = pi.log_prob(traj_batch.action)
+
+                        # _, value, pi, _ = agent_policy.get_action_value_policy(
+                        #     params=param,
+                        #     obs=traj_batch.obs,
+                        #     done=traj_batch.done,
+                        #     avail_actions=traj_batch.avail_actions,
+                        #     hstate=init_hstate,
+                        #     rng=jax.random.PRNGKey(0), # only used for action sampling, which is not used here 
+                        #     aux_obs=traj_batch.oppo_id
+                        # )
+                        # log_prob = pi.log_prob(traj_batch.action)
 
                         is_relevant = jnp.equal(
                             jnp.argmax(traj_batch.self_id, axis=-1), 
@@ -353,8 +332,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                             (loss_weights * jnp.maximum(value_losses, value_losses_clipped)).sum() / loss_weights.sum()
                         )
                         
-                        # CLEANUP FLAG
-                        # def choose_actor_weight(self_id, other_id, rew): 
+                        # def choose_actor_weight(self_id, other_id, rew):
                         #     return jax.lax.cond(
                         #     jnp.equal(jnp.argmax(self_id, axis=-1), jnp.argmax(other_id, axis=-1)), 
                         #     lambda x: (1 + 2*config["XP_LOSS_WEIGHTS"]) * jnp.ones_like(x), # true fn
@@ -469,27 +447,24 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
 
                 rng, conf_sampling_sp_rng, conf_sampling_rng, br_sampling_rng = jax.random.split(rng, 4)
 
-                # # Sampling IDs for SP data collection
-                # ids_sp = jax.random.randint(conf_sampling_sp_rng, (config["SP_COLLECT_SIZE"],), 0, config["PARTNER_POP_SIZE"])
+                # Sampling IDs for SP data collection
+                ids_sp = jax.random.randint(conf_sampling_sp_rng, (config["SP_COLLECT_SIZE"],), 0, config["PARTNER_POP_SIZE"])
 
-                # # Sampling IDs for XP data collection
-                # conf_ids_xp = jax.random.randint(conf_sampling_rng, (config["XP_COLLECT_SIZE"],), 0, config["PARTNER_POP_SIZE"])
+                # Sampling IDs for XP data collection
+                conf_ids_xp = jax.random.randint(conf_sampling_rng, (config["XP_COLLECT_SIZE"],), 0, config["PARTNER_POP_SIZE"])
 
-                # br_sampling_rngs = jax.random.split(br_sampling_rng, config["XP_COLLECT_SIZE"]+1)
+                br_sampling_rngs = jax.random.split(br_sampling_rng, config["XP_COLLECT_SIZE"]+1)
 
-                # # Sample BR IDs that are different from conf id
-                # br_ids_xp = jax.random.randint(br_sampling_rngs[0], (config["XP_COLLECT_SIZE"],), 0, config["PARTNER_POP_SIZE"])
-                # sample_new_id = lambda a: (jax.random.split(a[0], 2)[1], jax.random.randint(a[0], a[1].shape, minval=0, maxval=config["PARTNER_POP_SIZE"]))
-                # loop_logic = lambda z, x, y: jax.lax.while_loop(lambda a: jnp.equal(z,a[1]), sample_new_id, (x, y))
-                # _, br_ids_xp = jax.vmap(loop_logic)(conf_ids_xp, br_sampling_rngs[1:], br_ids_xp)
+                # Sample BR IDs that are different from conf id
+                br_ids_xp = jax.random.randint(br_sampling_rngs[0], (config["XP_COLLECT_SIZE"],), 0, config["PARTNER_POP_SIZE"])
+                sample_new_id = lambda a: (jax.random.split(a[0], 2)[1], jax.random.randint(a[0], a[1].shape, minval=0, maxval=config["PARTNER_POP_SIZE"]))
+                loop_logic = lambda z, x, y: jax.lax.while_loop(lambda a: jnp.equal(z,a[1]), sample_new_id, (x, y))
+                _, br_ids_xp = jax.vmap(loop_logic)(conf_ids_xp, br_sampling_rngs[1:], br_ids_xp)
                 
-                # conf_ids = jnp.concatenate([ids_sp, conf_ids_xp], axis=-1)
-                # br_ids = jnp.concatenate([ids_sp, br_ids_xp], axis=-1)
+                conf_ids = jnp.concatenate([ids_sp, conf_ids_xp], axis=-1)
+                br_ids = jnp.concatenate([ids_sp, br_ids_xp], axis=-1)
 
-                # ALT SAMPLING METHOD
-                conf_ids = jax.random.randint(conf_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])
-                br_ids = jax.random.randint(br_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])
-
+                identity_matrix = jnp.eye(config["PARTNER_POP_SIZE"])
                 conf_one_hots = identity_matrix[conf_ids]
                 br_one_hots = identity_matrix[br_ids]
                 
@@ -502,7 +477,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 )
                 runner_state, traj_batch = jax.lax.scan(
                     _env_step, runner_state, None, config["ROLLOUT_LENGTH"])
-                (gather_conf_params, gather_br_params, last_conf_one_hots, last_br_one_hots, 
+                (gather_conf_params, gather_br_params, conf_one_hots, br_one_hots, 
                  last_env_state, last_obs, last_done, last_conf_h, last_br_h, rng) = runner_state
 
                 # Get agent 0 and agent 1 trajectories from interaction between conf policy and its BR policy.
@@ -513,7 +488,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 _, last_val_conf, _, _ = jax.vmap(forward_pass_conf)(
                     params=gather_conf_params,
                     obs=last_obs["agent_0"],
-                    id=last_br_one_hots,
+                    id=br_one_hots,
                     done=last_done["agent_0"],
                     avail_actions=avail_actions_0,
                     hstate=last_conf_h,
@@ -527,7 +502,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 _, last_val_br, _, _ = jax.vmap(forward_pass_br)(
                     params=gather_br_params,
                     obs=last_obs["agent_1"],
-                    id=last_conf_one_hots,
+                    id=conf_one_hots,
                     done=last_done["agent_1"],
                     avail_actions=avail_actions_1,
                     hstate=last_br_h,

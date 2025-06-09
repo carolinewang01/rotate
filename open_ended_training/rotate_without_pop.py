@@ -306,7 +306,7 @@ def train_regret_maximizing_partners(config, env,
                 val_1 = val_1.squeeze()
 
                 # Combine actions into the env format
-                combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
+                combined_actions = jnp.concatenate([act_0, act_1], axis=0)
                 env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
                 env_act = {k: v.flatten() for k, v in env_act.items()}
 

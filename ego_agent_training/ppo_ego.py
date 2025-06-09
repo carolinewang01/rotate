@@ -15,15 +15,14 @@ import hydra
 from flax.training.train_state import TrainState
 
 from agents.population_interface import AgentPopulation
-from marl.ppo_utils import Transition, unbatchify
 from common.run_episodes import run_episodes
 from common.plot_utils import get_stats, get_metric_names
-from marl.ppo_utils import _create_minibatches
 from common.save_load_utils import save_train_run
 from ego_agent_training.utils import initialize_ego_agent
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
+from marl.ppo_utils import _create_minibatches, Transition, unbatchify
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

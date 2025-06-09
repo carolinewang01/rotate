@@ -280,7 +280,6 @@ def train_comedi_partners(train_rng, env, config):
 
                     rng, rng_xp, rng_sp, rng_mp, rng_mp2 = jax.random.split(rng, 5)
 
-                    # Do the updates as in oe_paired_comedi
                     def _env_step_conf_ego(runner_state, unused):
                         """
                         agent_0 = confederate, agent_1 = ego

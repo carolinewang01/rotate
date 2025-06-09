@@ -96,7 +96,7 @@ a general workflow to generate the paper figures is provided at `vis/make_paper_
 The instructions here assume that you have downloaded the evaluation data already, as specified in the Installation Guide.
 
 1.  Specify experiment paths at `vis/plot_globals.py`
-2.  Run `bash vis/make_paper_plots.sh` to generate and save the paper figures. Figures are stored at `results/neurips_figures` by default.
+2.  Run `bash vis/make_paper_plots.sh` to generate and save the paper figures. Figures are stored at `results/figures` by default.
 
 *Note:* The first time that the code is run, it may take a while to generate the metrics and create the plots---around 5 minutes for each bar chart, and 30 min for each learning curve chart (since all checkpoints' evaluation results must be processed). The first time that a particular experimental result is processed, a cache file is automatically generated and stored within each experimental result directory, which makes subsequent runs of the visualization scripts much faster.
 Cache files can be cleared by running, `python vis/clean_cache_files.py`.
