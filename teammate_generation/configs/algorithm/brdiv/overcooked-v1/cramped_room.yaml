@@ -9,7 +9,7 @@ NUM_ENVS: 64
 # Thus, as XP weight -> 0, SP/(SP+XP) -> 1.
 # If XP weight -> infinity, XP/(SP+XP) -> 1/3, and SP/(SP+XP) -> 2/3.
 XP_LOSS_WEIGHTS: 0.5 # 10
-LR: .0001
+LR: 1e-4
 UPDATE_EPOCHS: 15
 NUM_MINIBATCHES: 16
 CLIP_EPS: 0.05
