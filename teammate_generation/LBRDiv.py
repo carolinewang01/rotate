@@ -485,8 +485,9 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     (minibatches_conf, minibatches_br, repeated_lms_vertical, repeated_lms_horizontal)
                 )
 
-                def compute_lagrange_grads_same(params, batch, target_value, ids):
+                def compute_lagrange_grads_same(params_br, batch, target_value, ids):
                     '''
+                    TODO: remove these shapes and add more informative comments
                     conf_id: int
                     br_id: int
                     batch.obs: 128, 64, 15
@@ -500,15 +501,6 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     target_value: 128, 64
                     '''
                     conf_id, _ = ids
-                    # TODO: can we avoid squashing batch dims until after the passes through the policy network?
-                    # all_obs = jnp.reshape(
-                    #     batch.obs, (-1, jnp.shape(batch.obs)[-1])
-                    # )
-
-
-                    # all_avail_actions = jnp.reshape(
-                    #     batch.avail_actions, (-1, jnp.shape(batch.avail_actions)[-1])
-                    # )
 
                     all_target_value = jnp.reshape(
                         target_value, (-1, 1)
@@ -519,26 +511,16 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         config["PARTNER_POP_SIZE"], 
                         axis=0
                     )
-
-                    # TODO: refactor all instances of net.apply to instead use get_action_value_policy
+                    # TODO: check that value_sp is not supposed to be used
                     # _, value_sp = br_policy.network.apply(
                     #     param, (all_obs, all_self_id, all_avail_actions)
                     # )
-                    # _, value_sp = br_policy.get_action_value_policy(
-                    #     params=param,
-                    #     obs=all_obs[jnp.newaxis, ...],
-                    #     done=batch.done[jnp.newaxis, ...],
-                    #     avail_actions=all_avail_actions,
-                    #     hstate=hstate,
-                    #     rng=rng,
-                    #     aux_obs=all_self_id[jnp.newaxis, ...]
-                    # )
 
                     ##### Compute grad_sp_vary_conf
-                    relevant_conf_params = gather_params(params, jnp.reshape(conf_id, (1,)))
+                    relevant_conf_params = gather_params(params_br, jnp.reshape(conf_id, (1,)))
                     relevant_conf_params = jax.tree.map(lambda x: jnp.squeeze(x, 0), relevant_conf_params)
                     def _get_value_xp_vary_conf(param, agent_onehot_id):
-                        # TODO: check if we should be using the BR policy here
+                        # TODO: check if we should be using the BR policy here, since params are called relevant_conf_params
                         ts, bs = batch.obs.shape[:2]
                         agent_onehot_id = agent_onehot_id[jnp.newaxis, jnp.newaxis, ...].repeat(ts, axis=0).repeat(bs, axis=1)
                         _, value_xp_vary_conf, _, _ = br_policy.get_action_value_policy(
@@ -564,15 +546,14 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     offsetting_thresholds = offsetting_thresholds.at[conf_id].set(
                         config["TOLERANCE_FACTOR"] * jnp.ones_like(offsetting_thresholds[conf_id])
                     )
-                    # + offsetting_thresholds
-                    # - config["TOLERANCE_FACTOR"]
                     grad_sp_vary_conf = repeated_value_sp + offsetting_thresholds  - (
                         all_possible_value_xp_vary_conf + config["TOLERANCE_FACTOR"] * jnp.ones_like(offsetting_thresholds)
                     )
 
                     ##### Compute grad_sp_vary_br
-                    # TODO: check with Arrasy why this vmaps over relevant_params instead of 
-                    relevant_params = gather_params(params, jnp.arange(config["PARTNER_POP_SIZE"]))
+                    # TODO: check with Arrasy why this vmaps over the params rather than over the ids like 
+                    # _get_value_xp_vary_conf does
+                    relevant_params = gather_params(params_br, jnp.arange(config["PARTNER_POP_SIZE"]))
                     def _get_value_xp_vary_br(param):
                         ts, bs = batch.obs.shape[:2]
                         _, value_xp_vary_br, _, _ = br_policy.get_action_value_policy(
@@ -601,9 +582,10 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         batch.oppo_onehot_id, (-1, jnp.shape(batch.oppo_onehot_id)[-1])
                     ).argmax(axis=-1)
 
-                    # TODO: double check that this AND statement is formulated properly
-                    is_relevant = jnp.equal(all_self_id_int, conf_id) * jnp.equal(all_oppo_id_int, conf_id)
-                    loss_weights = jnp.where(is_relevant, 1, 0).astype(jnp.float32)
+                    # TODO: double check that we want both self and oppo to be conf
+                    self_is_conf = jnp.equal(all_self_id_int, conf_id).astype(jnp.float32)
+                    oppo_is_conf = jnp.equal(all_oppo_id_int, conf_id).astype(jnp.float32)
+                    loss_weights = self_is_conf * oppo_is_conf
                     repeated_loss_weights = jnp.repeat(
                         jnp.expand_dims(loss_weights, axis=0),
                         config["PARTNER_POP_SIZE"],
@@ -638,20 +620,16 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         batch.oppo_onehot_id, (-1, jnp.shape(batch.oppo_onehot_id)[-1])
                     ).argmax(axis=-1)
 
-                    # CLEANUP FLAG
-                    # all_avail_actions = np.reshape(
-                    #     batch.avail_actions, (-1, jnp.shape(batch.avail_actions)[-1])
-                    # )
-
                     all_target_returns = jnp.reshape(
                         target_returns, (-1, 1)
                     )
 
                     # Compute data weights based on whether selected ID
                     # is relevant for the gradient computation process
-                    is_conf = jnp.equal(all_oppo_id_int, conf_id)
-                    is_br = jnp.equal(all_self_id_int, br_id)
-                    loss_weights = jnp.where(is_conf, 1, 0).astype(jnp.float32) * jnp.where(is_br, 1, 0).astype(jnp.float32)
+                    # TODO: double check that we want oppo to be conf and self to be br
+                    oppo_is_conf = jnp.equal(all_oppo_id_int, conf_id).astype(jnp.float32)
+                    self_is_br = jnp.equal(all_self_id_int, br_id).astype(jnp.float32)
+                    loss_weights = oppo_is_conf * self_is_br
 
                     bs, ts = batch.obs.shape[:2]
                     _, value_sp_pop_is_br, _, _ = br_policy.get_action_value_policy(
@@ -675,15 +653,6 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         aux_obs=batch.oppo_onehot_id
                     )
                     value_sp_pop_is_not_br = value_sp_pop_is_not_br.reshape(bs*ts)
-                    # CLEANUP FLAG
-                    # _, value_sp_pop_is_br = br_policy.network.apply(
-                    #     param_br_id, (all_obs, all_self_id, all_avail_actions)
-                    # )
-
-                    # _, value_sp_pop_is_not_br = br_policy.network.apply(
-                    #     param_conf_id, (all_obs, all_oppo_id, all_avail_actions)
-                    # )
-
                     vertical_diff = value_sp_pop_is_br - all_target_returns - config["TOLERANCE_FACTOR"]
                     horizontal_diff = value_sp_pop_is_not_br - all_target_returns - config["TOLERANCE_FACTOR"]
 
@@ -698,6 +667,7 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     return output_grad_matrix_vertical, output_grad_matrix_horizontal
                 
                 def _compute_indiv_lagrange_grads(conf_id, br_id):
+                    # TODO: check that we want to use train_state_br.params, traj_batch_br, and targets_br for both cases
                     return jax.lax.cond(
                     conf_id == br_id, 
                     lambda ids: compute_lagrange_grads_same(train_state_br.params, traj_batch_br, targets_br, ids),
