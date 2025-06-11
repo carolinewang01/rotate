@@ -1,8 +1,10 @@
-'''Implementation of the BRDiv teammate generation algorithm (Rahman et al. 2023)
+'''Implementation of the BRDiv teammate generation algorithm (Rahman et al., TMLR 2023)
 https://arxiv.org/abs/2207.14138
 
 Command to run BRDiv only on LBF: 
 python teammate_generation/run.py algorithm=brdiv/lbf task=lbf label=test_brdiv run_heldout_eval=false train_ego=false
+
+Limitations: does not support recurrent actors.
 '''
 import shutil
 import time
@@ -41,6 +43,16 @@ class XPTransition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
     avail_actions: jnp.ndarray
+
+def _get_all_ids(pop_size):
+    cross_product = np.meshgrid(
+        np.arange(pop_size),
+        np.arange(pop_size)
+    )
+    agent_id_cartesian_product = np.stack([g.ravel() for g in cross_product], axis=-1)
+    all_conf_ids = agent_id_cartesian_product[:, 1]
+    all_br_ids = agent_id_cartesian_product[:, 0]
+    return all_conf_ids, all_br_ids
 
 def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
     num_agents = env.num_agents
@@ -239,10 +251,6 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 info_0 = jax.tree.map(lambda x: x[:, 0], info)
                 info_1 = jax.tree.map(lambda x: x[:, 1], info)
 
-                # indiv_rew_compute = lambda conf_id, br_id, agent_rew: jax.lax.cond(jnp.equal(
-                #     jnp.argmax(conf_id, axis=-1), jnp.argmax(br_id, axis=-1)
-                # ), lambda x: x, lambda x: -x, agent_rew)
-
                 def _compute_rewards(conf_id, br_id, agent_rew):
                     return jax.lax.cond(jnp.equal(
                         jnp.argmax(conf_id, axis=-1), jnp.argmax(br_id, axis=-1)
@@ -310,15 +318,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                 return advantages, advantages + traj_batch.value
             
             def run_all_episodes(rng, train_state_conf, train_state_br):
-                cross_product = jnp.meshgrid(
-                    jnp.arange(config["PARTNER_POP_SIZE"]),
-                    jnp.arange(config["PARTNER_POP_SIZE"])
-                )
-                agent_id_cartesian_product = jnp.stack([g.ravel() for g in cross_product], axis=-1)
-
-                conf_ids = agent_id_cartesian_product[:, 0]
-                br_ids = agent_id_cartesian_product[:, 1]
-
+                conf_ids, br_ids = _get_all_ids(config["PARTNER_POP_SIZE"])
                 gathered_conf_model_params = gather_params(train_state_conf.params, conf_ids)
                 gathered_br_model_params = gather_params(train_state_br.params, br_ids)
 
@@ -483,7 +483,7 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     rng, update_steps
                 ) = update_runner_state
 
-                rng, conf_sampling_sp_rng, conf_sampling_rng, br_sampling_rng = jax.random.split(rng, 4)
+                rng, conf_sampling_rng, br_sampling_rng = jax.random.split(rng, 3)
 
                 conf_ids = jax.random.randint(conf_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])
                 br_ids = jax.random.randint(br_sampling_rng, (config["NUM_ENVS"],), 0, config["PARTNER_POP_SIZE"])
@@ -762,17 +762,6 @@ def run_brdiv(config, wandb_logger):
     return partner_params, partner_population
 
 
-def compute_sp_mask_and_ids(pop_size):
-    cross_product = np.meshgrid(
-        np.arange(pop_size),
-        np.arange(pop_size)
-    )
-    agent_id_cartesian_product = np.stack([g.ravel() for g in cross_product], axis=-1)
-    conf_ids = agent_id_cartesian_product[:, 0]
-    ego_ids = agent_id_cartesian_product[:, 1]
-    sp_mask = (conf_ids == ego_ids)
-    return sp_mask, agent_id_cartesian_product
-
 def log_metrics(config, outs, logger, metric_names: tuple):
     metrics = outs["metrics"]
     # metrics now has shape (num_seeds, num_updates, _, _, pop_size)
@@ -784,7 +773,8 @@ def log_metrics(config, outs, logger, metric_names: tuple):
     all_returns = np.asarray(metrics["eval_ep_last_info"]["returned_episode_returns"])
     xs = list(range(num_updates))
     
-    sp_mask, agent_id_cartesian_product = compute_sp_mask_and_ids(pop_size)
+    all_conf_ids, all_br_ids = _get_all_ids(pop_size)
+    sp_mask = (all_conf_ids == all_br_ids)
     sp_returns = all_returns[:, :, sp_mask]
     xp_returns = all_returns[:, :, ~sp_mask]
     
