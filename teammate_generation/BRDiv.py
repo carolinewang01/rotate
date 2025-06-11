@@ -54,6 +54,24 @@ def _get_all_ids(pop_size):
     all_br_ids = agent_id_cartesian_product[:, 0]
     return all_conf_ids, all_br_ids
 
+def gather_params(partner_params_pytree, idx_vec):
+    """
+    partner_params_pytree: pytree with all partner params. Each leaf has shape (n_seeds, m_ckpts, ...).
+    idx_vec: a vector of indices with shape (num_envs,) each in [0, n_seeds*m_ckpts).
+
+    Return a new pytree where each leaf has shape (num_envs, ...). Each leaf has a sampled
+    partner's parameters for each environment.
+    """
+    # We'll define a function that gathers from each leaf
+    # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
+    # We'll vmap a slicing function.
+    def gather_leaf(leaf):
+        def slice_one(idx):
+            return leaf[idx]  # shape (...)
+        return jax.vmap(slice_one)(idx_vec)
+
+    return jax.tree.map(gather_leaf, partner_params_pytree)
+
 def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
     num_agents = env.num_agents
     assert num_agents == 2, "This code assumes the environment has exactly 2 agents."
@@ -63,24 +81,6 @@ def train_brdiv_partners(train_rng, env, config, conf_policy, br_policy):
     config["NUM_CONF_ACTORS"] = config["NUM_ENVS"]
     config["NUM_BR_ACTORS"] = config["NUM_ENVS"]
     config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"])
-
-    def gather_params(partner_params_pytree, idx_vec):
-        """
-        partner_params_pytree: pytree with all partner params. Each leaf has shape (n_seeds, m_ckpts, ...).
-        idx_vec: a vector of indices with shape (num_envs,) each in [0, n_seeds*m_ckpts).
-
-        Return a new pytree where each leaf has shape (num_envs, ...). Each leaf has a sampled
-        partner's parameters for each environment.
-        """
-        # We'll define a function that gathers from each leaf
-        # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
-        # We'll vmap a slicing function.
-        def gather_leaf(leaf):
-            def slice_one(idx):
-                return leaf[idx]  # shape (...)
-            return jax.vmap(slice_one)(idx_vec)
-
-        return jax.tree.map(gather_leaf, partner_params_pytree)
 
     def make_brdiv_agents(config):
         def linear_schedule(count):

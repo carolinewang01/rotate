@@ -8,15 +8,14 @@ Suggested Debug command:
 python teammate_generation/run.py algorithm=lbrdiv/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5 algorithm.PARTNER_POP_SIZE=2 train_ego=false run_heldout_eval=false
 
 Cleanup Steps: 
-1. Refactor code so that BRDiv->LBRDiv everywhere
-1. Add LBRDiv updates to this code
+1. Refactor code so that BRDiv->LBRDiv everywhere (done)
+1. Add LBRDiv updates to this code (done)
 
 Limitations: does not support recurrent actors.
 '''
 import shutil
 import time
 import logging
-from typing import NamedTuple
 from functools import partial
 
 import hydra
@@ -35,7 +34,7 @@ from common.save_load_utils import save_train_run
 from envs import make_env
 from envs.log_wrapper import LogWrapper
 from marl.ppo_utils import unbatchify, _create_minibatches
-from teammate_generation.BRDiv import _get_all_ids, XPTransition
+from teammate_generation.BRDiv import _get_all_ids, XPTransition, gather_params
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -50,24 +49,6 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
     config["NUM_CONF_ACTORS"] = config["NUM_ENVS"]
     config["NUM_BR_ACTORS"] = config["NUM_ENVS"]
     config["NUM_UPDATES"] = config["TOTAL_TIMESTEPS"] // (num_agents * config["ROLLOUT_LENGTH"] * config["NUM_ENVS"])
-
-    def gather_params(partner_params_pytree, idx_vec):
-        """
-        partner_params_pytree: pytree with all partner params. Each leaf has shape (n_seeds, m_ckpts, ...).
-        idx_vec: a vector of indices with shape (num_envs,) each in [0, n_seeds*m_ckpts).
-
-        Return a new pytree where each leaf has shape (num_envs, ...). Each leaf has a sampled
-        partner's parameters for each environment.
-        """
-        # We'll define a function that gathers from each leaf
-        # where leaf has shape (n_seeds, m_ckpts, ...), we want [idx_vec[i]] for each i.
-        # We'll vmap a slicing function.
-        def gather_leaf(leaf):
-            def slice_one(idx):
-                return leaf[idx]  # shape (...)
-            return jax.vmap(slice_one)(idx_vec)
-
-        return jax.tree.map(gather_leaf, partner_params_pytree)
 
     def make_lbrdiv_agents(config):
         def linear_schedule(count):
@@ -374,7 +355,7 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         # )
                                                 
                         def _gather_sp_weights(ids):
-                            s_id, o_id = ids
+                            s_id, _ = ids
                             return jnp.sum(lms_vertical, axis=0)[s_id], jnp.sum(lms_horizontal, axis=-1)[s_id]
 
                         def _gather_xp_weights(ids):
