@@ -1,7 +1,16 @@
 '''
-Script for training a PPO ego agent against a population of partner agents. 
+Script for training a PPO ego agent against a population of homogeneous partner agents. 
+
 Only supports a population of homogeneous RL partner agents.
 Warning: modify with caution, as this script is used as the main script for ego training throughout the project.
+
+Command to run PPO ego training:
+python ego_agent_training/run.py algorithm=ppo_ego/lbf task=lbf label=test_ppo_ego
+
+Suggested Debug command:
+python ego_agent_training/run.py algorithm=ppo_ego/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5
+
+Limitations: does not support recurrent actors.
 '''
 import shutil
 import time
@@ -87,7 +96,9 @@ def train_ppo_ego_agent(config, env, train_rng,
                 params=init_ego_params,
                 tx=tx,
             )
-
+            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
+            
             def _env_step(runner_state, unused):
                 """
                 One step of the environment:
@@ -103,9 +114,31 @@ def train_ppo_ego_agent(config, env, train_rng,
                 avail_actions = jax.lax.stop_gradient(avail_actions)
                 avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
-                                
+
+                # Conditionally resample partners based on prev_done["__all__"]                
+                needs_resample = prev_done["__all__"] # shape (NUM_ENVS,) bool
+                sampled_indices_all = partner_population.sample_agent_indices(config["NUM_CONTROLLED_ACTORS"], partner_rng)
+
+                # Determine final indices based on whether resampling was needed for each env
+                updated_partner_indices = jnp.where(
+                    needs_resample,         # Mask shape (NUM_ENVS,)
+                    sampled_indices_all,    # Use newly sampled index if True
+                    partner_indices         # Else, keep index from previous step
+                )
+
+                # For resampled envs, we need to reset the hiden states for both the ego and partner agents
+                # Note that the hstate is a pytree of arrays, so we need to use jax.tree.map to apply the where operation to each array
+                if ego_hstate is not None:
+                    ego_hstate = jax.tree.map(lambda init_hstate, curr_hstate: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
+                                                                                         init_hstate, curr_hstate),
+                                                                                         init_ego_hstate, ego_hstate)
+                if partner_hstate is not None:
+                    partner_hstate = jax.tree.map(lambda init_hstate, curr_hstate: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
+                                                                                             init_hstate, curr_hstate),
+                                                                                             init_partner_hstate, partner_hstate)
+
                 # Agent_0 (ego) action, value, log_prob
-                act_0, val_0, pi_0, ego_hstate = ego_policy.get_action_value_policy(
+                act_0, val_0, pi_0, new_ego_hstate = ego_policy.get_action_value_policy(
                     params=train_state.params,
                     obs=prev_obs["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
                     done=prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
@@ -120,17 +153,6 @@ def train_ppo_ego_agent(config, env, train_rng,
                 val_0 = val_0.squeeze()
 
                 # Agent_1 (partner) action using the AgentPopulation interface
-                # Conditionally resample partners based on prev_done["__all__"]                
-                needs_resample = prev_done["__all__"] # shape (NUM_ENVS,) bool
-                sampled_indices_all = partner_population.sample_agent_indices(config["NUM_CONTROLLED_ACTORS"], partner_rng)
-
-                # Determine final indices based on whether resampling was needed for each env
-                updated_partner_indices = jnp.where(
-                    needs_resample,         # Mask shape (NUM_ENVS,)
-                    sampled_indices_all,    # Use newly sampled index if True
-                    partner_indices         # Else, keep index from previous step
-                )
-
                 act_1, new_partner_hstate = partner_population.get_actions(
                     partner_params,
                     updated_partner_indices,
@@ -169,7 +191,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                     avail_actions=avail_actions_0
                 )
                 new_runner_state = (train_state, env_state_next, obs_next, done_next, 
-                                    ego_hstate, new_partner_hstate, updated_partner_indices, rng)
+                                    new_ego_hstate, new_partner_hstate, updated_partner_indices, rng)
                 return new_runner_state, transition
 
             def _calculate_gae(traj_batch, last_val):
@@ -291,7 +313,6 @@ def train_ppo_ego_agent(config, env, train_rng,
                 advantages, targets = _calculate_gae(traj_batch, last_val)
 
                 # 3) PPO update
-                init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
                 update_state = (
                     train_state,
                     init_ego_hstate, # shape is (num_controlled_actors, gru_hidden_dim) with all-0s value
