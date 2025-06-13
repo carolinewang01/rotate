@@ -9,8 +9,6 @@ python ego_agent_training/run.py algorithm=ppo_ego/lbf task=lbf label=test_ppo_e
 
 Suggested Debug command:
 python ego_agent_training/run.py algorithm=ppo_ego/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5
-
-Limitations: does not support recurrent actors.
 '''
 import shutil
 import time
@@ -96,6 +94,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 params=init_ego_params,
                 tx=tx,
             )
+            #  Init ego and partner hstates
             init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
             init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
             
@@ -407,10 +406,6 @@ def train_ppo_ego_agent(config, env, train_rng,
             rng, partner_rng = jax.random.split(rng)
             init_partner_indices = partner_population.sample_agent_indices(config["NUM_CONTROLLED_ACTORS"], partner_rng)
             
-            # Init ego and partner hstates
-            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
-
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
 

@@ -1,6 +1,7 @@
 '''
-Script for training a PPO ego agent against a buffered population of partner agents 
-that can 
+Script for training a PPO ego agent against a buffered population of homogeneous partner agents.
+In comparison to ego_agent_training/ppo_ego.py, this script permits a nonstationary sampling 
+distribution over partners and a changing buffer size. 
 '''
 import logging
 
@@ -9,8 +10,7 @@ import jax.numpy as jnp
 import optax
 from flax.training.train_state import TrainState
 
-from agents.population_interface import AgentPopulation
-from agents.population_buffer import BufferedPopulation
+from agents.population_buffer import BufferedPopulation, PopulationBuffer
 from marl.ppo_utils import Transition, unbatchify, _create_minibatches
 from common.run_episodes import run_episodes
 
@@ -20,8 +20,8 @@ logging.basicConfig(level=logging.INFO)
 
 def train_ppo_ego_agent_with_buffer(config, env, train_rng, 
                            ego_policy, init_ego_params, n_ego_train_seeds,
-                           partner_population: AgentPopulation, 
-                           population_buffer: BufferedPopulation
+                           partner_population: BufferedPopulation, 
+                           population_buffer: PopulationBuffer
                            ):
     '''
     Train PPO ego agent using partners from the BufferedPopulation.
@@ -75,6 +75,10 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 tx=tx,
             )
 
+            #  Init ego and partner hstates
+            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
+            init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
+
             def _env_step(runner_state, unused):
                 """
                 One step of the environment:
@@ -85,35 +89,12 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                 train_state, env_state, prev_obs, prev_done, ego_hstate, partner_hstate, population_buffer, partner_indices, rng = runner_state
                 rng, actor_rng, partner_rng, partner_sample_rng, step_rng = jax.random.split(rng, 5)
 
-                obs_0 = prev_obs["agent_0"]
-                obs_1 = prev_obs["agent_1"]
-
                  # Get available actions for agent 0 from environment state
                 avail_actions = jax.vmap(env.get_avail_actions)(env_state.env_state)
                 avail_actions = jax.lax.stop_gradient(avail_actions)
                 avail_actions_0 = avail_actions["agent_0"].astype(jnp.float32)
                 avail_actions_1 = avail_actions["agent_1"].astype(jnp.float32)
-                
-                # Reshape inputs for S5 (sequence_length, batch_size, features)
-                obs_0_reshaped = obs_0.reshape(1, config["NUM_CONTROLLED_ACTORS"], -1)
-                done_0_reshaped = prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"])
-                
-                # Agent_0 (ego) action, value, log_prob
-                act_0, val_0, pi_0, ego_hstate = ego_policy.get_action_value_policy(
-                    params=train_state.params,
-                    obs=obs_0_reshaped,
-                    done=done_0_reshaped,
-                    avail_actions=avail_actions_0,
-                    hstate=ego_hstate,
-                    rng=actor_rng
-                )
-                logp_0 = pi_0.log_prob(act_0)
 
-                act_0 = act_0.squeeze()
-                logp_0 = logp_0.squeeze()
-                val_0 = val_0.squeeze()
-
-                # Agent_1 (partner) action using the BufferedPopulation interface
                 # Conditionally resample partners based on prev_done["__all__"]                
                 needs_resample = prev_done["__all__"] # shape (NUM_ENVS,) bool
 
@@ -133,19 +114,42 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     partner_indices         # Else, keep index from previous step
                 )
                 
-                # reshape inputs as necessary for partner
-                obs_1_reshaped = obs_1.reshape(config["NUM_UNCONTROLLED_ACTORS"], 1, -1)
-                done_1_reshaped = prev_done["agent_1"].reshape(config["NUM_UNCONTROLLED_ACTORS"], 1, -1)
+                # For resampled envs, we need to reset the hiden states for both the ego and partner agents
+                # Note that the hstate is a pytree of arrays, so we need to use jax.tree.map to apply the where operation to each array
+                if ego_hstate is not None:
+                    ego_hstate = jax.tree.map(lambda init_hstate, curr_hstate: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
+                                                                                         init_hstate, curr_hstate),
+                                                                                         init_ego_hstate, ego_hstate)
+                if partner_hstate is not None:
+                    partner_hstate = jax.tree.map(lambda init_hstate, curr_hstate: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
+                                                                                             init_hstate, curr_hstate),
+                                                                                             init_partner_hstate, partner_hstate)
 
-                # Get actions using the final indices and the updated buffer
+
+                # Agent_0 (ego) action, value, log_prob
+                act_0, val_0, pi_0, ego_hstate = ego_policy.get_action_value_policy(
+                    params=train_state.params,
+                    obs=prev_obs["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"], -1),
+                    done=prev_done["agent_0"].reshape(1, config["NUM_CONTROLLED_ACTORS"]),
+                    avail_actions=avail_actions_0,
+                    hstate=ego_hstate,
+                    rng=actor_rng
+                )
+                logp_0 = pi_0.log_prob(act_0)
+
+                act_0 = act_0.squeeze()
+                logp_0 = logp_0.squeeze()
+                val_0 = val_0.squeeze()
+
+                # Agent_1 (partner) action using the BufferedPopulation interface
                 act_1, new_partner_hstate = partner_population.get_actions(
-                    updated_buffer,    # Use buffer with correct ages
-                    updated_partner_indices,  # Use the final selected indices
-                    obs_1_reshaped,
-                    done_1_reshaped,
-                    avail_actions_1,
-                    partner_hstate,
-                    partner_rng,
+                    buffer=updated_buffer,              # Use buffer with correct ages
+                    agent_indices=updated_partner_indices,  # Use the final selected indices
+                    obs=prev_obs["agent_1"].reshape(config["NUM_UNCONTROLLED_ACTORS"], 1, -1),
+                    done=prev_done["agent_1"].reshape(config["NUM_UNCONTROLLED_ACTORS"], 1, -1),
+                    avail_actions=avail_actions_1,
+                    hstate=partner_hstate,
+                    rng=partner_rng,
                     env_state=env_state,
                     aux_obs=None
                 )
@@ -171,7 +175,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
                     value=val_0,
                     reward=reward["agent_0"],
                     log_prob=logp_0,
-                    obs=obs_0,
+                    obs=prev_obs["agent_0"],
                     info=info_0,
                     avail_actions=avail_actions_0
                 )
@@ -408,11 +412,7 @@ def train_ppo_ego_agent_with_buffer(config, env, train_rng,
             init_partner_indices, current_buffer = partner_population.sample_agent_indices(
                 population_buffer, config["NUM_UNCONTROLLED_ACTORS"], partner_rng
             )
-            
-            #  Init ego and partner hstates
-            init_ego_hstate = ego_policy.init_hstate(config["NUM_CONTROLLED_ACTORS"])
-            init_partner_hstate = partner_population.init_hstate(config["NUM_UNCONTROLLED_ACTORS"])
-
+        
             # init checkpoint array
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
