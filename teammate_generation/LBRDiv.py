@@ -7,10 +7,6 @@ python teammate_generation/run.py algorithm=lbrdiv/lbf task=lbf label=test_lbrdi
 Suggested Debug command: 
 python teammate_generation/run.py algorithm=lbrdiv/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5 algorithm.PARTNER_POP_SIZE=2 train_ego=false run_heldout_eval=false
 
-Cleanup Steps: 
-1. Refactor code so that BRDiv->LBRDiv everywhere (done)
-1. Add LBRDiv updates to this code (done)
-
 Limitations: does not support recurrent actors.
 '''
 import shutil
@@ -395,6 +391,7 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         # # To prevent the XP loss term from dominating the SP loss term, we would like P(SP) = P(XP) = 1/2.
                         # # Thus, we set the 2nd term of the SP weight to n/2, and the 2nd term of the XP weight to n/(2 * (n-1)).
                         
+                        # TODO: should we apply the n/2  and n/(2*(n-1)) corrections to the actor_weights?
                         # is_sp = jnp.equal(jnp.argmax(traj_batch.self_onehot_id, axis=-1), jnp.argmax(traj_batch.oppo_onehot_id, axis=-1))
                         # sp_weight = (1 + 2*config["XP_LOSS_WEIGHTS"]) * (n/2)
                         # xp_weight = config["XP_LOSS_WEIGHTS"] * (n / (2 * (n-1)))

@@ -3,6 +3,8 @@ https://openreview.net/forum?id=MljeRycu9s
 
 Command to run CoMeDi only on LBF: 
 python teammate_generation/run.py algorithm=comedi/lbf task=lbf label=test_comedi run_heldout_eval=false train_ego=false
+
+Limitations: does not support recurrent actors.
 '''
 from functools import partial
 import logging
@@ -49,8 +51,8 @@ def train_comedi_partners(train_rng, env, config):
 
     # Define 4 types of rollouts: SP, XP, MP, MP2
     config["NUM_GAME_AGENTS"] = num_agents
-    config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
 
+    config["NUM_ACTORS"] = num_agents * config["NUM_ENVS"]
     # Right now assume control of both agent and its BR
     config["NUM_CONTROLLED_ACTORS"] = config["NUM_ACTORS"]
 
@@ -235,7 +237,7 @@ def train_comedi_partners(train_rng, env, config):
                         val_0 = val_0.squeeze()
 
                         # Agent_1 (ego) action using policy interface
-                        act_1, _, _, new_ego_h = policy.get_action_value_policy(
+                        act_1, _, _, _ = policy.get_action_value_policy(
                             params=xp_param,
                             obs=obs_1.reshape(1, config["NUM_ENVS"], -1),
                             done=last_dones["agent_1"].reshape(1, config["NUM_ENVS"]),
@@ -339,7 +341,7 @@ def train_comedi_partners(train_rng, env, config):
                         )
 
                         aux_obs = jnp.repeat(sp_one_hot_id, config["NUM_ENVS"], 1)
-                        act_0, val_0, pi_0, new_conf_h = policy.get_action_value_policy(
+                        act_0, val_0, pi_0, _ = policy.get_action_value_policy(
                             params=train_state.params,
                             obs=obs_0.reshape(1, config["NUM_ENVS"], -1),
                             done=dones_0.reshape(1, config["NUM_ENVS"]),
@@ -355,7 +357,7 @@ def train_comedi_partners(train_rng, env, config):
                         val_0 = val_0.squeeze()
 
                         # Agent 1 (best response) action
-                        act_1, val_1, pi_1, new_br_h = policy.get_action_value_policy(
+                        act_1, val_1, pi_1, _ = policy.get_action_value_policy(
                             params=train_state.params,
                             obs=obs_1.reshape(1, config["NUM_ENVS"], -1),
                             done=dones_1.reshape(1, config["NUM_ENVS"]),
@@ -436,7 +438,7 @@ def train_comedi_partners(train_rng, env, config):
                         aux_obs = jnp.repeat(xp_one_hot_id, config["NUM_ENVS"], axis=1)
 
                         # Agent_0 (confederate) action using policy interface
-                        act_0, val_0, pi_0, new_conf_h = policy.get_action_value_policy(
+                        act_0, val_0, pi_0, _ = policy.get_action_value_policy(
                             params=train_state_conf.params,
                             obs=obs_0.reshape(1, config["NUM_ENVS"], -1),
                             done=last_dones["agent_0"].reshape(1, config["NUM_ENVS"]),
@@ -452,7 +454,7 @@ def train_comedi_partners(train_rng, env, config):
                         val_0 = val_0.squeeze()
 
                         ### Compute both the ego action and the best response action
-                        act_ego, _, _, new_ego_h = policy.get_action_value_policy(
+                        act_ego, _, _, _ = policy.get_action_value_policy(
                             params=ego_param,
                             obs=obs_1.reshape(1, config["NUM_ENVS"], -1),
                             done=last_dones["agent_1"].reshape(1, config["NUM_ENVS"]),
@@ -461,7 +463,7 @@ def train_comedi_partners(train_rng, env, config):
                             rng=ego_act_rng,
                             aux_obs=aux_obs
                         )
-                        act_br, _, _, new_br_h = policy.get_action_value_policy(
+                        act_br, _, _, _ = policy.get_action_value_policy(
                             params=train_state.params,
                             obs=obs_1.reshape(1, config["NUM_ENVS"], -1),
                             done=last_dones["agent_1"].reshape(1, config["NUM_ENVS"]),
@@ -643,7 +645,6 @@ def train_comedi_partners(train_rng, env, config):
                                             traj_batch_mp, gae_mp, target_v_mp,
                                             traj_batch_mp2, gae_mp2, target_v_mp2):
                                 # get policy and value of confederate versus ego and best response agents respectively
-                                
                                 xp_one_hot_id = jnp.eye(config["POP_SIZE"])[xp_id]                    
                                 xp_one_hot_id = jnp.expand_dims(
                                     jnp.expand_dims(
@@ -752,9 +753,9 @@ def train_comedi_partners(train_rng, env, config):
                                 mp2_loss = mp2_pg_weight * pg_loss_mp2 + config["VF_COEF"] * value_loss_mp2 - config["ENT_COEF"] * entropy_mp2
 
                                 total_loss = sp_loss + sp2_loss + xp_loss + mp2_loss + mp_loss
-                                return total_loss, (value_loss_xp, value_loss_sp + value_loss_sp2, value_loss_mp2 + value_loss_mp, 
-                                                    pg_loss_xp, pg_loss_sp + pg_loss_sp2, pg_loss_mp2 + pg_loss_mp, 
-                                                    entropy_xp, entropy_sp + entropy_sp2, entropy_mp2 + entropy_mp)
+                                return total_loss, (value_loss_xp, value_loss_sp + value_loss_sp2, value_loss_mp + value_loss_mp2, 
+                                                    pg_loss_xp, pg_loss_sp + pg_loss_sp2, pg_loss_mp + pg_loss_mp2, 
+                                                    entropy_xp, entropy_sp + entropy_sp2, entropy_mp + entropy_mp2)
 
                             grad_fn = jax.value_and_grad(_loss_fn_conf, has_aux=True)
                             (loss_val, aux_vals), grads = grad_fn(
@@ -860,9 +861,9 @@ def train_comedi_partners(train_rng, env, config):
                     # Metrics
                     metric = traj_batch_xp.info
                     metric["update_steps"] = update_steps
-                    metric["value_loss_xp"] = conf_value_loss_xp
-                    metric["value_loss_sp"] = conf_value_loss_sp
-                    metric["value_loss_mp"] = conf_value_loss_mp
+                    metric["value_loss_conf_xp"] = conf_value_loss_xp
+                    metric["value_loss_conf_sp"] = conf_value_loss_sp
+                    metric["value_loss_conf_mp"] = conf_value_loss_mp
 
                     metric["pg_loss_conf_xp"] = conf_pg_loss_xp
                     metric["pg_loss_conf_sp"] = conf_pg_loss_sp
