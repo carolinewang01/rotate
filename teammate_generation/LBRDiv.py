@@ -358,7 +358,6 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                             (loss_weights * jnp.maximum(value_losses, value_losses_clipped)).sum() / (loss_weights.sum() + 1e-8)
                         )
                         
-                        # n = config["PARTNER_POP_SIZE"]
                         # # Apply different loss weights for SP and XP data
                         # # Loss weights consist of two parts: the first term is the weighting from the (L)BRDiv loss fucntion
                         # # which is based on the sum of Lagrange multipliers for a given confederate-ego pair expected returns 
@@ -467,18 +466,10 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
 
                 def compute_lagrange_grads_same(params_br, batch, target_value, ids):
                     '''
-                    TODO: remove these shapes and add more informative comments
                     conf_id: int
                     br_id: int
-                    batch.obs: 128, 64, 15
-                    batch.self_onehot_id: 128, 64, 2
-                    batch.oppo_onehot_id: 128, 64, 2
-                    batch.avail_actions: 128, 64, 6
-                    batch.done: 128, 64
-                    batch.action: 128, 64
-                    batch.value: 128, 64
-                    batch.log_prob: 128, 64
-                    target_value: 128, 64
+                    batch: a pytree where all leaves have shape (rollout_len, num_envs, -1)
+                    target_value: (rollout_len, num_envs)
                     '''
                     conf_id, br_id = ids
 
@@ -530,9 +521,7 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     )
 
                     ##### Compute grad_sp_vary_br
-                    # TODO: check with Arrasy why this vmaps over the params rather than over the ids like 
-                    # _get_value_xp_vary_conf does
-                    # This one tries to measure the expected returns of the ego agent had the BR policy been 
+                    # This code tries to measure the expected returns of the ego agent had the BR policy been 
                     # substituted by another BR policy
 
                     # Lets say that R_{i,-j} is the ego agent's returns when following the BR policy of the i^th pair
@@ -588,8 +577,7 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                         batch.oppo_onehot_id, (-1, jnp.shape(batch.oppo_onehot_id)[-1])
                     ).argmax(axis=-1)
 
-                    # TODO: double check that we want both self and oppo to be conf
-                    # Yes we do. Because here in SP conf_id = br_id
+                    # check if self and oppo ids both correspond to the confederate for the self-play update
                     self_is_conf = jnp.equal(all_self_id_int, conf_id).astype(jnp.float32)
                     oppo_is_conf = jnp.equal(all_oppo_id_int, conf_id).astype(jnp.float32)
                     loss_weights = self_is_conf * oppo_is_conf
@@ -685,7 +673,6 @@ def train_lbrdiv_partners(train_rng, env, config, conf_policy, br_policy):
                     return output_grad_matrix_vertical, output_grad_matrix_horizontal
                 
                 def _compute_indiv_lagrange_grads(conf_id, br_id):
-                    # TODO: check that we want to use train_state_br.params, traj_batch_br, and targets_br for both cases
                     return jax.lax.cond(
                     conf_id == br_id, 
                     lambda ids: compute_lagrange_grads_same(train_state_br.params, traj_batch_br, targets_br, ids),
