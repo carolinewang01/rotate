@@ -7,7 +7,7 @@ Warning: modify with caution, as this script is used as the main script for ego 
 Command to run PPO ego training:
 python ego_agent_training/run.py algorithm=ppo_ego/lbf task=lbf label=test_ppo_ego
 
-Suggested Debug command:
+Suggested debug command:
 python ego_agent_training/run.py algorithm=ppo_ego/lbf task=lbf logger.mode=disabled label=debug algorithm.TOTAL_TIMESTEPS=1e5
 '''
 import shutil
@@ -28,7 +28,7 @@ from common.save_load_utils import save_train_run
 from ego_agent_training.utils import initialize_ego_agent
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from evaluation.agent_loader_from_config import initialize_rl_agent_from_config
+from common.agent_loader_from_config import initialize_rl_agent_from_config
 from marl.ppo_utils import _create_minibatches, Transition, unbatchify
 
 log = logging.getLogger(__name__)
@@ -125,17 +125,9 @@ def train_ppo_ego_agent(config, env, train_rng,
                     partner_indices         # Else, keep index from previous step
                 )
 
-                # For resampled envs, we need to reset the hiden states for both the ego and partner agents
-                # Note that the hstate is a pytree of arrays, so we need to use jax.tree.map to apply the where operation to each array
-                if ego_hstate is not None:
-                    ego_hstate = jax.tree.map(lambda init_hstate, curr_hstate: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
-                                                                                         init_hstate, curr_hstate),
-                                                                                         init_ego_hstate, ego_hstate)
-                if partner_hstate is not None:
-                    partner_hstate = jax.tree.map(lambda init_hstate, curr_hstate: jnp.where(needs_resample[jnp.newaxis, :, jnp.newaxis], 
-                                                                                             init_hstate, curr_hstate),
-                                                                                             init_partner_hstate, partner_hstate)
-
+                # Note that we do not need to reset the hiden states for both the ego and partner agents
+                # as the recurrent states are automatically reset when done is True, and the partner indices are only reset when done is True.
+                
                 # Agent_0 (ego) action, value, log_prob
                 act_0, val_0, pi_0, new_ego_hstate = ego_policy.get_action_value_policy(
                     params=train_state.params,
@@ -287,10 +279,17 @@ def train_ppo_ego_agent(config, env, train_rng,
                 2. Compute advantage
                 3. PPO updates
                 """
-                (train_state, last_env_state, last_obs, last_done, last_ego_hstate, last_partner_hstate, last_partner_indices, rng, update_steps) = update_runner_state
+                (train_state, rng, update_steps) = update_runner_state
+                # Init envs & partner indices
+                rng, reset_rng, p_rng = jax.random.split(rng, 3)
+                reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
+                init_obs, init_env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
+                init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
+                new_partner_indices = partner_population.sample_agent_indices(config["NUM_UNCONTROLLED_ACTORS"], p_rng)
 
                 # 1) rollout
-                runner_state = (train_state, last_env_state, last_obs, last_done, last_ego_hstate, last_partner_hstate, last_partner_indices, rng)
+                runner_state = (train_state, init_env_state, init_obs, init_done, init_ego_hstate, init_partner_hstate, new_partner_indices, rng)
+
                 runner_state, traj_batch = jax.lax.scan(
                     _env_step, runner_state, None, config["ROLLOUT_LENGTH"])
                 (train_state, env_state, obs, done, ego_hstate, partner_hstate, partner_indices, rng) = runner_state
@@ -331,9 +330,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                 metric["value_loss"] = loss_terms[0]
                 metric["entropy_loss"] = loss_terms[2]
                 metric["avg_grad_norm"] = avg_grad_norm
-                new_runner_state = (train_state, env_state, obs, done, 
-                                    ego_hstate, partner_hstate, partner_indices, 
-                                    rng, update_steps + 1)
+                new_runner_state = (train_state, rng, update_steps + 1)
                 return (new_runner_state, metric)
 
             # PPO Update and Checkpoint saving
@@ -356,9 +353,7 @@ def train_ppo_ego_agent(config, env, train_rng,
                     update_state,
                     None
                 )
-                (train_state, env_state, obs, done, 
-                 ego_hstate, partner_hstate, partner_indices, 
-                 rng, update_steps) = new_update_state
+                (train_state, rng, update_steps) = new_update_state
 
                 # update steps is 1-indexed because it was incremented at the end of the update step
                 to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, ckpt_and_eval_interval), 0),
@@ -391,21 +386,9 @@ def train_ppo_ego_agent(config, env, train_rng,
                 )
 
                 metric["eval_ep_last_info"] = eval_last_infos
-                return ((train_state, env_state, obs, done, 
-                         ego_hstate, partner_hstate, partner_indices, 
-                         rng, update_steps),
+                return ((train_state, rng, update_steps),
                          checkpoint_array, ckpt_idx, eval_last_infos), metric
 
-            # Init envs & partner indices
-            rng, reset_rng = jax.random.split(rng)
-            reset_rngs = jax.random.split(reset_rng, config["NUM_ENVS"])
-            init_obs, init_env_state = jax.vmap(env.reset, in_axes=(0,))(reset_rngs)
-            init_done = {k: jnp.zeros((config["NUM_ENVS"]), dtype=bool) for k in env.agents + ["__all__"]}
-
-            # Each environment picks a partner index in [0, n_seeds*m_ckpts)
-            rng, partner_rng = jax.random.split(rng)
-            init_partner_indices = partner_population.sample_agent_indices(config["NUM_CONTROLLED_ACTORS"], partner_rng)
-            
             checkpoint_array = init_ckpt_array(train_state.params)
             ckpt_idx = 0
 
@@ -424,17 +407,7 @@ def train_ppo_ego_agent(config, env, train_rng,
             update_steps = 0
             rng_train, partner_rng = jax.random.split(rng_train)
 
-            update_runner_state = (
-                train_state,
-                init_env_state,
-                init_obs,
-                init_done,
-                init_ego_hstate,
-                init_partner_hstate,
-                init_partner_indices,
-                rng_train,
-                update_steps
-            )
+            update_runner_state = (train_state, rng_train, update_steps)
             state_with_ckpt = (update_runner_state, checkpoint_array, ckpt_idx, eval_eps_last_infos)
             
             state_with_ckpt, metrics = jax.lax.scan(

@@ -5,19 +5,12 @@ This is the working repository for the paper, "ROTATE: Regret-driven Open-ended 
 ## TODOs
 
 ### Clean Up Code
-High priority issues that will propagate if not fixed:
-
-- Clean up (L)-BRDiv and CoMeDi code
-    - Update codes to use the agent interface
-    - Use run_episodes
-    - Consider making ego and br nets the same 
-    - Switch from logging BR/Conf losses to SP/XP losses!
-
 Lower priority fixes / additional features: 
+- LBRDiv logging - lagrange multipliers are not logged correctly, we need to fix this.
 - Heuristic agents: 
     - Enable decision-making to account for the available actions
 - Evaluation
-    - Update regret evaluator
+    - Fix regret evaluator
 - Move best response computation code to its own directory?
 
 ### Enabling Collaboration
@@ -27,9 +20,12 @@ Lower priority fixes / additional features:
     - input 
     - output
     - test
-- Create an abstract environment API for our codebase
+- Create an abstract environment API for our codebase (Jiaxun)
 
 ### Benchmark Release
+- Ego agent training: 
+   - Add option to train IPPO teammates for training
+   - Make compatible with option to specify teammates in the ego agent
 - Create demo notebook
 - Remove ROTATE-specific paths throughout the codebase
 - README 
@@ -42,7 +38,6 @@ Lower priority fixes / additional features:
     - Figure out how to return regret-maximizing teammates that don't sabotage
 
 ### Baselines 
-- FIX LBRDIV! - Arrasy will do this
 - Implement PLR style FCP baseline (this requires implementing a regret-based curator)
 - Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
 
