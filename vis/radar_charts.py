@@ -96,7 +96,7 @@ def plot_radar_chart(results, metric_name: str, aggregate_stat_name: str,
             yanchor="top",
             y=1.20,
             xanchor="left",
-            x=-0.20,
+            x=-0.25,
             bgcolor="rgba(255, 255, 255, 0.8)",
             bordercolor="rgba(0, 0, 0, 0.2)",
             borderwidth=1
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, default=f"{RESULTS_DIR}/figures",
                         help="Directory to save plots")
     parser.add_argument("--tasks", nargs="+", 
-                        help="List of tasks to show best returns for. If not provided, all tasks will be computed.")
+                        help="List of tasks to generate plots for. If not provided, plots will be generated for all tasks.")
     parser.add_argument("--show_legend", action="store_true",
                         help="Show legend in the plot")
     parser.add_argument("--show_title", action="store_true",
@@ -201,6 +201,6 @@ if __name__ == "__main__":
         )
         metric_name = TASK_TO_METRIC_NAME[task]
         aggregate_stat_name = GLOBAL_HELDOUT_CONFIG["global_heldout_settings"]["AGGREGATE_STAT"]
-        heldout_agent_dict = get_heldout_agents(task, task_config_path=f"open_ended_training/configs/task/{task.replace('-v1', '')}.yaml")
+        heldout_agent_dict = get_heldout_agents(task, task_config_path=f"open_ended_training/configs/task/{task}.yaml")
         heldout_names = list(heldout_agent_dict.keys())
         plot_radar_chart(results, metric_name, aggregate_stat_name, heldout_names, **PLOT_ARGS)

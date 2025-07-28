@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from envs import make_env
-from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
+from envs.overcooked_v1.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
 from archived.policy_loaders import MLPActorCriticLoader, S5ActorCriticLoader, RandomActor
 
 

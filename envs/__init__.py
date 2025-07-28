@@ -6,8 +6,8 @@ from jumanji.environments.routing.lbf.generator import RandomGenerator as LbfGen
 
 from envs.lbf.adhoc_lbf_viewer import AdHocLBFViewer
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
-from envs.overcooked.overcooked_wrapper import OvercookedWrapper
-from envs.overcooked.augmented_layouts import augmented_layouts
+from envs.overcooked_v1.overcooked_wrapper import OvercookedWrapper
+from envs.overcooked_v1.augmented_layouts import augmented_layouts
 
 def process_default_args(env_kwargs: dict, default_args: dict):
     '''Helper function to process generator and viewer args for Jumanji environments. 

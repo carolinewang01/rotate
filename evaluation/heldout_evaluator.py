@@ -10,7 +10,7 @@ import os
 import hydra
 
 from agents.lbf.agent_policy_wrappers import LBFRandomPolicyWrapper, LBFSequentialFruitPolicyWrapper
-from agents.overcooked.agent_policy_wrappers import (OvercookedIndependentPolicyWrapper, 
+from agents.overcooked_v1.agent_policy_wrappers import (OvercookedIndependentPolicyWrapper, 
     OvercookedOnionPolicyWrapper,
     OvercookedPlatePolicyWrapper,
     OvercookedStaticPolicyWrapper,
@@ -23,7 +23,7 @@ from common.plot_utils import get_metric_names
 from common.stat_utils import compute_aggregate_stat_and_ci_per_task
 from envs import make_env
 from envs.log_wrapper import LogWrapper
-from envs.overcooked.augmented_layouts import augmented_layouts
+from envs.overcooked_v1.augmented_layouts import augmented_layouts
 
 
 def extract_params(params, init_params, idx_labels=None):
