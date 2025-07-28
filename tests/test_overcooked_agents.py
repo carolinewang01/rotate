@@ -168,8 +168,8 @@ if __name__ == "__main__":
     NUM_EPISODES = 1
 
     layout_names = [
-        # "cramped_room", 
-        "asymm_advantages", 
+        "cramped_room", 
+        # "asymm_advantages", 
         # "coord_ring", 
         # "counter_circuit", 
         # "forced_coord"

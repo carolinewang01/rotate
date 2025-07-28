@@ -3,7 +3,7 @@ import json
 import os
 import yaml
 from common.plot_utils import get_metric_names
-from vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
+from vis.plot_globals import TASK_TO_ENV_NAME, RESULTS_DIR, get_heldout_agents
 
 
 OE_DEFAULT_CONFIG = {"actor_type": "s5", "ckpt_key": "final_params", "custom_loader": {"name": "open_ended", "type": "ego"}}
@@ -86,13 +86,13 @@ if __name__ == "__main__":
 
     br_config = {}
     for task_name in TASK_NAMES:
-        br_json_path = f"results/{task_name}/best_heldout_returns.json"
+        br_json_path = f"{RESULTS_DIR}/{task_name}/best_heldout_returns.json"
         br_json_dir = os.path.dirname(br_json_path)
         task_config = generate_br_config(br_json_path=br_json_path, task_name=task_name)
         br_config[task_name] = task_config
 
     # Dump to yaml file
-    out_path = "results/best_heldout_returns_br_config.yaml"
+    out_path = f"{RESULTS_DIR}/best_heldout_returns_br_config.yaml"
     with open(out_path, "w") as f:
         yaml.dump(br_config, f)
     print(f"Wrote BR config to {out_path}")

@@ -11,7 +11,7 @@ from vis.plot_globals import TASK_TO_ENV_NAME, GLOBAL_HELDOUT_CONFIG, HELDOUT_CU
 from vis.compute_best_returns import load_best_returns, renormalize_eval_metrics, unnormalize_data
 
 
-def load_results_for_task(task_name, method_dict, cache_filename, 
+def load_results_for_task(task_name, results_dir, method_dict, cache_filename, 
                           load_from_cache: bool = True, renormalize_metrics: bool = True):
     '''Loads the latest results for the given task, and caches the computed statistics. 
     If the cache does not exist or load_from_cache is False, the results are computed and saved to the cache.
@@ -26,7 +26,7 @@ def load_results_for_task(task_name, method_dict, cache_filename,
 
     results = {}
     for method_subpath, (method_type, display_name) in method_dict.items():
-        method_dir = f"results/{task_name}/{method_subpath}"
+        method_dir = f"{results_dir}/{task_name}/{method_subpath}"
         # method_dir should have one subdirectory based on the date of the run
         # get all subdirectories in method_dir
         subdirs = [d for d in os.listdir(method_dir) if os.path.isdir(os.path.join(method_dir, d))]

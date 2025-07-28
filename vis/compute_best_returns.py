@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple
 
 from common.save_load_utils import load_train_run
 from common.plot_utils import get_metric_names
-from vis.plot_globals import TASK_TO_ENV_NAME, get_heldout_agents
+from vis.plot_globals import TASK_TO_ENV_NAME, RESULTS_DIR, get_heldout_agents
 
 
 def get_original_performance_bounds(task_name: str) -> Dict[str, List[List[float]]]:
@@ -35,7 +35,7 @@ def get_original_performance_bounds(task_name: str) -> Dict[str, List[List[float
     Returns:
         Dict mapping metric names to a list of [lower_bound, upper_bound] pairs for each agent
     """
-    task_config_path = f"open_ended_training/configs/task/{task_name.replace('-v1', '')}.yaml"
+    task_config_path = f"open_ended_training/configs/task/{task_name}.yaml"
     heldout_agents_dict = get_heldout_agents(task_name, task_config_path)
     
     # Extract the agent-specific performance bounds
@@ -79,7 +79,7 @@ def extract_returns_for_method(eval_metrics_dir: str, env_name: str,
         raise ValueError(f"No metric names found for environment {env_name}")
     
     # Get the original performance bounds for each heldout agent
-    task_config_path = f"open_ended_training/configs/task/{task_name.replace('-v1', '')}.yaml"
+    task_config_path = f"open_ended_training/configs/task/{task_name}.yaml"
     heldout_agents_dict = get_heldout_agents(task_name, task_config_path)
     
     # Extract the agent-specific performance bounds
@@ -258,7 +258,7 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
         - metric_name_seed: List of seed indices that achieved each best return
         - metric_name_iter: List of iteration indices that achieved each best return
     """
-    task_dir = f"results/{task_name}"
+    task_dir = f"{RESULTS_DIR}/{task_name}"
     env_name = TASK_TO_ENV_NAME[task_name]
     
     # Find all evaluation metrics directories for this task
@@ -369,7 +369,7 @@ def compute_best_returns(task_name: str) -> Dict[str, List[float]]:
 
 def save_best_returns(task_name: str, best_returns: Dict[str, List[float]]):
     """Save the computed best returns to a file."""
-    results_dir = f"results/{task_name}"
+    results_dir = f"{RESULTS_DIR}/{task_name}"
     os.makedirs(results_dir, exist_ok=True)
     
     output_file = os.path.join(results_dir, "best_heldout_returns.json")
@@ -381,7 +381,7 @@ def save_best_returns(task_name: str, best_returns: Dict[str, List[float]]):
 
 def load_best_returns(task_name: str) -> Dict[str, List[float]]:
     """Load the best returns for a task."""
-    file_path = f"results/{task_name}/best_heldout_returns.json"
+    file_path = f"{RESULTS_DIR}/{task_name}/best_heldout_returns.json"
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
             return json.load(f)
@@ -395,7 +395,7 @@ def load_best_returns(task_name: str) -> Dict[str, List[float]]:
 def unnormalize_data(eval_metrics: Dict[str, np.ndarray], config, task_name: str) -> Dict[str, np.ndarray]:
     '''Unnormalize the data based on the original performance bounds for each metric.'''
     # Get original performance bounds from the heldout agents config
-    task_config_path = f"open_ended_training/configs/task/{task_name.replace('-v1', '')}.yaml"
+    task_config_path = f"open_ended_training/configs/task/{task_name}.yaml"
     heldout_agents_dict = get_heldout_agents(task_name, task_config_path)
     
     # Extract performance bounds (same bounds apply to all heldout agents)
@@ -430,7 +430,7 @@ def renormalize_eval_metrics(eval_metrics: Dict[str, np.ndarray],
     observed returns: new_normalized = unnormalized / best_return
     """
     # First get the agent-specific performance bounds
-    task_config_path = f"open_ended_training/configs/task/{task_name.replace('-v1', '')}.yaml"
+    task_config_path = f"open_ended_training/configs/task/{task_name}.yaml"
     heldout_agents_dict = get_heldout_agents(task_name, task_config_path)
     
     # Extract the agent-specific performance bounds
@@ -513,7 +513,7 @@ def renormalize_eval_metrics(eval_metrics: Dict[str, np.ndarray],
 def find_all_tasks():
     """Find all available tasks in the results directory."""
     tasks = []
-    results_dir = "results"
+    results_dir = RESULTS_DIR
     if os.path.exists(results_dir):
         for item in os.listdir(results_dir):
             item_path = os.path.join(results_dir, item)
@@ -570,7 +570,7 @@ if __name__ == "__main__":
             print(f"\nProcessing task: {task_name}")
             
             # Check if best returns file already exists
-            best_returns_file = f"results/{task_name}/best_heldout_returns.json"
+            best_returns_file = f"{RESULTS_DIR}/{task_name}/best_heldout_returns.json"
             if os.path.exists(best_returns_file) and not args.force:
                 print(f"Best returns file already exists for {task_name}. Use --force to recompute.")
                 continue

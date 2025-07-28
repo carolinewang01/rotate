@@ -74,13 +74,15 @@ ROTATE_VARS = {
 }
 
 SUPPLEMENTAL = {
-    "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
-    "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
-    # "oe_persistent/paper-v0:1reg:s5-s": ("open_ended", "rotate, s5-small"),
-    # "oe_persistent/paper-v0:breg:s5-s": ("open_ended", "rotate (obj 0), s5-small"),
-    # "ppo_ego_s5/paper-v0:breg-ego-v-pop": ("teammate_generation", "ppo on rotate pop (obj 0)"),
-    # "oe_persistent/paper-v0:breg": ("open_ended", "rotate (obj 0) w/sp regret"),
+    # "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
+    # "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
+    # # "oe_persistent/paper-v0:1reg:s5-s": ("open_ended", "rotate, s5-small"),
+    # # "oe_persistent/paper-v0:breg:s5-s": ("open_ended", "rotate (obj 0), s5-small"),
+    # # "ppo_ego_s5/paper-v0:breg-ego-v-pop": ("teammate_generation", "ppo on rotate pop (obj 0)"),
+    "oe_persistent/paper-v0:breg": ("open_ended", "rotate (obj 0) w/sp regret"),
 }
+
+RESULTS_DIR = "results_neurips"
 
 GLOBAL_HELDOUT_CONFIG = omegaconf.OmegaConf.load("evaluation/configs/global_heldout_settings.yaml")
 CACHE_FILENAME = "cached_summary_metrics.pkl"
