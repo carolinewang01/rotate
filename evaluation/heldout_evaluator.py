@@ -15,6 +15,7 @@ from agents.overcooked_v1.agent_policy_wrappers import (OvercookedIndependentPol
     OvercookedPlatePolicyWrapper,
     OvercookedStaticPolicyWrapper,
     OvercookedRandomPolicyWrapper)
+from agents.overcooked_v1.bc_agent import BCPolicy
 
 from common.agent_loader_from_config import initialize_rl_agent_from_config
 from common.run_episodes import run_episodes
@@ -150,6 +151,9 @@ def load_heldout_set(heldout_config, env, task_name, env_kwargs, rng):
                 policy = OvercookedPlatePolicyWrapper(
                     aug_layout_dict, using_log_wrapper=True, 
                     p_plate_on_counter=agent_config.get("p_plate_on_counter", 0.0))
+            elif agent_config["actor_type"] == 'bc_proxy':
+                policy = BCPolicy(layout_name=env_kwargs["layout"], using_log_wrapper=True)
+
         else:
             raise ValueError(f"Unknown task: {task_name}")
         

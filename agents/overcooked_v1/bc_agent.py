@@ -1,4 +1,8 @@
-'''Behavior cloning human proxy agent for Overcooked-v1'''
+'''Behavior cloning human proxy agent for Overcooked-v1. Implementation 
+based on https://github.com/overcookedv2/experiments/tree/main
+
+Results:
+'''
 from functools import partial
 from pathlib import Path
 
@@ -11,7 +15,9 @@ import orbax.checkpoint as ocp
 from jaxmarl.environments.overcooked.layouts import overcooked_layouts
 from jaxmarl.environments.overcooked.overcooked import Actions
 
+from envs import make_env
 from envs.overcooked_v1.overcooked_v1 import OvercookedV1
+from envs.overcooked_v1.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked_v1.augmented_layouts import augmented_layouts
 from agents.agent_interface import AgentPolicy
 from agents.overcooked_v1.bc_featurizer import BCFeaturizer
@@ -22,29 +28,36 @@ STATE_HISTORY_LEN = 3
 
 
 # Layout name to base directory mapping
+# Get path to repo root
+REPO_ROOT = Path(__file__).parent.parent.parent
 LAYOUT_TO_BASE_DIR = {
-    # TODO: decide whether to have people specify the path in the global config or not
-    "cramped_room": "/scratch/cluster/clw4542/explore_marl/continual-aht/eval_teammates/overcooked-v1/cramped_room/bc_proxy/models",
-    # Add more layouts as needed
+    "cramped_room": REPO_ROOT / "eval_teammates/overcooked-v1/cramped_room/bc_proxy/models",
+    "asymm_advantages": REPO_ROOT / "eval_teammates/overcooked-v1/asymm_advantages/bc_proxy/models",
+    "counter_circuit": REPO_ROOT / "eval_teammates/overcooked-v1/counter_circuit/bc_proxy/models",
+    "coord_ring": REPO_ROOT / "eval_teammates/overcooked-v1/coord_ring/bc_proxy/models",
+    "forced_coord": REPO_ROOT / "eval_teammates/overcooked-v1/forced_coord/bc_proxy/models",
 }
 
 
 class BCPolicy(AgentPolicy):
     """Behavior Cloning policy that directly implements the AgentPolicy interface."""
-    
-    def __init__(self, layout_name):
+    def __init__(self, layout_name, using_log_wrapper=True):
         """
         Initialize BC policy with layout name.
         The agent_id must be provided through init_hstate via aux_info.
         
         Args:
             layout_name: Name of the layout (e.g., "cramped_room")
+            using_log_wrapper: If True, assume that the agent is interacting with the wrapped Overcooked-v1
+                environment. If False, assume that the agent is interacting with the original Overcooked-v1
+                environment. 
         """
         super().__init__(action_dim=ACTION_DIM, obs_dim=None)
         self.network = BCModel(action_dim=ACTION_DIM, hidden_dims=(64, 64))
         self.layout_name = layout_name
         self.run_id = 0 # checkpoints are available from 0 to 4
         self.unblock_if_stuck = True
+        self.using_log_wrapper = using_log_wrapper
         
         # Load parameters from checkpoint
         self.params = self._load_params()
@@ -81,7 +94,7 @@ class BCPolicy(AgentPolicy):
             hstate: Hidden state
             rng: Random key
             aux_obs: Ignored
-            env_state: Environment state (required if featurizer is provided)
+            env_state: wrapped Overcooked environment state
             test_mode: If True, use deterministic action selection
         
         Returns:
@@ -91,8 +104,11 @@ class BCPolicy(AgentPolicy):
         policy_hstate = BCPolicyHState.from_numpy(hstate[0])
         agent_id = policy_hstate.agent_id
         
-        # Get featurized observations as array indexed by agent_id
-        featurized_obs_array = self.featurizer.featurize_state_as_array(env_state)
+        if self.using_log_wrapper:
+            featurized_obs_array = self.featurizer.featurize_state_as_array(env_state.env_state.env_state)
+        else:
+            featurized_obs_array = self.featurizer.featurize_state_as_array(env_state.env_state)
+
         feat_obs = featurized_obs_array[agent_id]
 
         logits = self.network.apply({"params": self.params}, feat_obs)
@@ -244,7 +260,7 @@ class BCHState:
     actions: chex.Array  # Shape: (STATE_HISTORY_LEN,)
     pos: chex.Array  # Shape: (STATE_HISTORY_LEN, 2)
     dir: chex.Array  # Shape: (STATE_HISTORY_LEN, 4)
-    
+
     @staticmethod
     def from_numpy(arr: jnp.ndarray):
         history_len = STATE_HISTORY_LEN
@@ -321,24 +337,35 @@ class BCHState:
 
         return pos_equal & dir_equal
 
-def main():
+def test_bc_policy(layout_name: str, num_episodes=64, test_mode=True, do_reward_shaping=True):
     """Load and evaluate a BC policy on Overcooked-v1"""
-    
-    # Simple argument parsing - you can modify these defaults or add command line args
-    layout_name = "cramped_room"  # Change this as needed
-    num_episodes = 10
+    assert layout_name in LAYOUT_TO_BASE_DIR, f"Layout {layout_name} not found in LAYOUT_TO_BASE_DIR"
+
     num_timesteps = 400
     seed = 0
-    test_mode = True
     
     print(f"Loading BC policy for layout: {layout_name}")
     
     # Load environment
-    env = OvercookedV1(layout=augmented_layouts[layout_name], max_steps=num_timesteps)
+    env = make_env(env_name="overcooked-v1", 
+                   env_kwargs={
+                       "layout": layout_name, 
+                       "max_steps": num_timesteps,
+                       "random_obj_state": True,
+                       "do_reward_shaping": do_reward_shaping,
+                       "reward_shaping_params": {
+                            "PLACEMENT_IN_POT_REW": .5,
+                            "PLATE_PICKUP_REWARD": .1,
+                            "SOUP_PICKUP_REWARD": 1.0,
+                            "ONION_PICKUP_REWARD": .1,
+                            "COUNTER_PICKUP_REWARD": 0,
+                            "COUNTER_DROP_REWARD": 0,
+                        }
+                    })
+    # env = OvercookedWrapper(layout=augmented_layouts[layout_name], max_steps=num_timesteps)
     
-    # Load policy - now much simpler with built-in featurizer
-    policy0 = BCPolicy(layout_name)
-    policy1 = BCPolicy(layout_name)
+    policy0 = BCPolicy(layout_name, using_log_wrapper=False)
+    policy1 = BCPolicy(layout_name, using_log_wrapper=False)
     
     # Initialize random key
     key = jax.random.PRNGKey(seed)
@@ -448,40 +475,14 @@ def main():
     # Print results
     mean_reward = jnp.mean(all_ep_rewards)
     std_reward = jnp.std(all_ep_rewards)
-    print(f"Results for {layout_name}:")
-    print(f"Mean reward: {mean_reward:.3f} ± {std_reward:.3f}")
-    print(f"Min reward: {jnp.min(all_ep_rewards):.3f}")
-    print(f"Max reward: {jnp.max(all_ep_rewards):.3f}")
-    print(f"All episode rewards: {all_ep_rewards}")
-    
+    print(f"Results for {layout_name}, reward shaping={do_reward_shaping}:")
+    print(f"Mean reward: {mean_reward:.3f} ± {std_reward:.3f}")    
     return mean_reward, std_reward, all_ep_rewards
 
 if __name__ == "__main__":
-    main()
-    '''
-    Previous results before refactor: 
-    Successfully loaded BC policy
-    Running evaluation over 10 episodes...
-    Results for cramped_room:
-    Mean reward: 164.000 ± 76.837
-    Min reward: 40.000
-    Max reward: 280.000
-    All episode rewards: [ 80.  40. 200. 240. 240.  80. 200. 160. 280. 120.]
-
-
-    New results after refactor:
-    Running evaluation over 10 episodes...
-    Results for cramped_room:
-    Mean reward: 164.000 ± 76.837
-    Min reward: 40.000
-    Max reward: 280.000
-    All episode rewards: [ 80.  40. 200. 240. 240.  80. 200. 160. 280. 120.]
-
-    Results with test_mode=True:
-    Running evaluation over 10 episodes...
-    Results for cramped_room:
-    Mean reward: 272.000 ± 16.000
-    Min reward: 240.000
-    Max reward: 280.000
-    All episode rewards: [280. 240. 280. 280. 280. 240. 280. 280. 280. 280.]
-    '''
+    for layout_name in LAYOUT_TO_BASE_DIR.keys():
+        test_bc_policy(layout_name, 
+                       num_episodes=64, 
+                       test_mode=True,
+                       do_reward_shaping=True
+                       )
