@@ -1,5 +1,5 @@
 defaults:
-  - task: overcooked-v1/asymm_advantages # task configs
+  - task: overcooked-v1/cramped_room # task configs
   - hydra: hydra_simple
   - _self_
 
