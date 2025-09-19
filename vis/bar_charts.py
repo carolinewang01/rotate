@@ -140,7 +140,7 @@ def plot_all_tasks_bar_chart(all_task_results, metric_name: str, aggregate_stat_
 
 if __name__ == "__main__":
     from vis.plot_globals import OE_BASELINES, TEAMMATE_GEN_BASELINES, OUR_METHOD, ABLATIONS_OBJ, ABLATIONS_POP, SUPPLEMENTAL, \
-        GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME
+        GLOBAL_HELDOUT_CONFIG, TASK_TO_PLOT_TITLE, TASK_TO_METRIC_NAME, CACHE_FILENAME, RESULTS_DIR
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Generate bar charts for visualization")
@@ -151,7 +151,7 @@ if __name__ == "__main__":
                         help="Use original normalization instead of best-returns normalization")
     parser.add_argument("--show_plots", action="store_true",
                         help="Show plots in addition to saving them")
-    parser.add_argument("--save_dir", type=str, default="results/figures",
+    parser.add_argument("--save_dir", type=str, default=f"{RESULTS_DIR}/figures",
                         help="Directory to save plots")
     parser.add_argument("--tasks", nargs="+", 
                         help="List of tasks to show best returns for. If not provided, all tasks will be computed.")
@@ -199,6 +199,7 @@ if __name__ == "__main__":
         # Pass the normalization flag to load_results_for_task
         all_task_results[task_name] = load_results_for_task(
             task_name, 
+            RESULTS_DIR,
             RESULTS_TO_PLOT, 
             CACHE_FILENAME, 
             load_from_cache=True,

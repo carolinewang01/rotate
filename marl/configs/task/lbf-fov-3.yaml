@@ -1,0 +1,4 @@
+ENV_NAME: lbf-fov-3
+ROLLOUT_LENGTH: 128
+ENV_KWARGS: {}
+TASK_NAME: lbf-fov-3

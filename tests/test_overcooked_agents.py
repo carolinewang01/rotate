@@ -2,9 +2,9 @@ import numpy as np
 from typing import Dict, Tuple
 
 import jax
-from envs.overcooked.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
-from envs.overcooked.overcooked_wrapper import OvercookedWrapper
-from envs.overcooked.augmented_layouts import augmented_layouts
+from envs.overcooked_v1.adhoc_overcooked_visualizer import AdHocOvercookedVisualizer
+from envs.overcooked_v1.overcooked_wrapper import OvercookedWrapper
+from envs.overcooked_v1.augmented_layouts import augmented_layouts
 from envs import make_env
 from agents.overcooked import OnionAgent, PlateAgent, IndependentAgent, StaticAgent, RandomAgent
 import time
@@ -168,8 +168,8 @@ if __name__ == "__main__":
     NUM_EPISODES = 1
 
     layout_names = [
-        # "cramped_room", 
-        "asymm_advantages", 
+        "cramped_room", 
+        # "asymm_advantages", 
         # "coord_ring", 
         # "counter_circuit", 
         # "forced_coord"
