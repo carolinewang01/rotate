@@ -84,7 +84,7 @@ SUPPLEMENTAL = {
     "oe_persistent/paper-v0:breg": ("open_ended", "rotate (obj 0) w/sp regret"),
 }
 
-RESULTS_DIR = "results_neurips"
+RESULTS_DIR = "results"
 
 GLOBAL_HELDOUT_CONFIG = omegaconf.OmegaConf.load("evaluation/configs/global_heldout_settings.yaml")
 CACHE_FILENAME = "cached_summary_metrics.pkl"
