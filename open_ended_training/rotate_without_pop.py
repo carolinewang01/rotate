@@ -515,7 +515,7 @@ def train_regret_maximizing_partners(config, env,
                         elif config["CONF_OBJ_TYPE"] == "gae_per_state_regret":
                             total_xp_objective = -gae_xp
                             total_sp_objective = config["SP_WEIGHT"] * gae_sp
-                            total_xsp_objective = jnp.array(0.0)
+                            total_xsp_objective = -gae_xsp # jnp.array(0.0)
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         elif config["CONF_OBJ_TYPE"] == "traj_regret":

@@ -52,25 +52,27 @@ TEAMMATE_GEN_BASELINES = {
 }
 
 OUR_METHOD = {
-    "oe_persistent/paper-v0:1reg": ("open_ended", "ROTATE"),
+    "oe_persistent/paper-v0:breg": ("open_ended", "ROTATE"),
+    # "oe_persistent/paper-v0:1reg": ("open_ended", "ROTATE"), # Old regret objective
 }
 
 ABLATIONS_OBJ = {
-    "oe_persistent/paper-v0:1reg": ("open_ended", "ROTATE (per-state)"),
+    "oe_persistent/paper-v0:breg": ("open_ended", "ROTATE (per-state)"),
+    # "oe_persistent/paper-v0:1reg": ("open_ended", "ROTATE (per-state)"), # Old regret objective
     "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"), 
     # "open_ended_paired/paper-v0": ("open_ended", "ROTATE (per-traj, no SXP)"), # TODO: remove locally and rerun this result!
 }
 
 ABLATIONS_POP = {
-    "ppo_ego_s5/paper-v0:1reg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"),
-    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"),
+    "ppo_ego_s5/paper-v0:1reg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"), # TODO: update this result
+    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"), # TODO: update this result
 }
 
 ROTATE_VARS = {
     "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"), 
     "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
     "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
-    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"),
+    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"), # TODO: update this result
 }
 
 SUPPLEMENTAL = {

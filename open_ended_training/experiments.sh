@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="rotate"
+algo="rotate_without_pop"
 # partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
-# conf_obj_type="traj_regret" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
-label="paper-v0:minimax2"
+conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
+label="paper-v0:breg"
 num_seeds=3
 # s5_d_model=16
 # s5_ssm_size=16
@@ -31,9 +31,9 @@ tasks=(
     "overcooked-v1/asymm_advantages"
     "overcooked-v1/coord_ring"
     "overcooked-v1/counter_circuit"
-    "overcooked-v1/cramped_room"
-    "overcooked-v1/forced_coord"
-    "lbf"
+    # "overcooked-v1/cramped_room"
+    # "overcooked-v1/forced_coord"
+    # "lbf"
 )
 
 # Function to log messages
@@ -52,6 +52,7 @@ for task in "${tasks[@]}"; do
     log "Starting task: ${algo}/${task}"
     
     if python open_ended_training/run.py algorithm="${algo}/${task}" task="${task}" label="${label}" \
+        algorithm.CONF_OBJ_TYPE="${conf_obj_type}" \
         algorithm.NUM_SEEDS="${num_seeds}" \
         2>> "${log_file}"; then
         log "✅ Successfully completed task: ${algo}/${task}"
