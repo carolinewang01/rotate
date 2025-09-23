@@ -44,7 +44,7 @@ class MatrixGame(MultiAgentEnv):
     Each agent observes the full history of joint actions taken by both agents.
     """
     
-    def __init__(self, max_steps: int = 10, max_history_len: int = 100):
+    def __init__(self, max_steps: int = 10, max_history_len: int = 10):
         """
         Initialize the matrix game environment.
         
@@ -172,9 +172,10 @@ class MatrixGame(MultiAgentEnv):
         }
         
         # Create info dictionary
+        # IPPO expects info values to be arrays that can be reshaped
+        step_array = jnp.full((self.num_agents,), new_step)
         infos = {
-            "agent_0": {"step": new_step},
-            "agent_1": {"step": new_step}
+            "step": step_array
         }
         
         return observations, new_state, rewards, dones, infos
