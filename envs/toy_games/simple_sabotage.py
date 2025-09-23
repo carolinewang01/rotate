@@ -1,5 +1,5 @@
 """
-Two-player iterated matrix game environment following JAXMarl MultiAgentEnv interface.
+Two-player iterated simple sabotage game environment following JAXMarl MultiAgentEnv interface.
 
 The payoff matrix is: 
 [[1, 0, -1], [0, 1, -1], [-1, -1, -1]]
@@ -18,8 +18,8 @@ from jaxmarl.environments import spaces
 
 
 @chex.dataclass
-class MatrixGameState:
-    """State of the matrix game environment."""
+class SimpleSabotageState:
+    """State of the simple sabotage game environment."""
     # Current step in the episode
     step: int
     # History of actions taken by both agents [timestep, agent_id]
@@ -28,9 +28,9 @@ class MatrixGameState:
     done: bool
 
 
-class MatrixGame(MultiAgentEnv):
+class SimpleSabotage(MultiAgentEnv):
     """
-    Two-player iterated matrix game environment.
+    Two-player iterated simple sabotage game environment.
     
     Actions:
     - 0: Head (H) - Cooperate option 1
@@ -46,7 +46,7 @@ class MatrixGame(MultiAgentEnv):
     
     def __init__(self, max_steps: int = 10, max_history_len: int = 10):
         """
-        Initialize the matrix game environment.
+        Initialize the simple sabotage game environment.
         
         Args:
             max_steps: Maximum number of steps in an episode
@@ -85,7 +85,7 @@ class MatrixGame(MultiAgentEnv):
         }
     
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey, params: Optional[Dict] = None) -> Tuple[Dict[str, jnp.ndarray], MatrixGameState]:
+    def reset(self, key: chex.PRNGKey, params: Optional[Dict] = None) -> Tuple[Dict[str, jnp.ndarray], SimpleSabotageState]:
         """
         Reset the environment.
         
@@ -101,7 +101,7 @@ class MatrixGame(MultiAgentEnv):
         action_history = jnp.full((self.max_history_len, 2), -1, dtype=jnp.int32)
         
         # Create initial state
-        state = MatrixGameState(
+        state = SimpleSabotageState(
             step=0,
             action_history=action_history,
             done=False
@@ -116,10 +116,10 @@ class MatrixGame(MultiAgentEnv):
     def step(
         self, 
         key: chex.PRNGKey, 
-        state: MatrixGameState, 
+        state: SimpleSabotageState, 
         actions: Dict[str, int],
         params: Optional[Dict] = None
-    ) -> Tuple[Dict[str, jnp.ndarray], MatrixGameState, Dict[str, float], Dict[str, bool], Dict[str, Any]]:
+    ) -> Tuple[Dict[str, jnp.ndarray], SimpleSabotageState, Dict[str, float], Dict[str, bool], Dict[str, Any]]:
         """
         Step the environment forward.
         
@@ -155,7 +155,7 @@ class MatrixGame(MultiAgentEnv):
         done = new_step >= self.max_steps
         
         # Create new state
-        new_state = MatrixGameState(
+        new_state = SimpleSabotageState(
             step=new_step,
             action_history=new_action_history,
             done=done
@@ -180,7 +180,7 @@ class MatrixGame(MultiAgentEnv):
         
         return observations, new_state, rewards, dones, infos
     
-    def _get_observations(self, state: MatrixGameState) -> Dict[str, jnp.ndarray]:
+    def _get_observations(self, state: SimpleSabotageState) -> Dict[str, jnp.ndarray]:
         """
         Get observations for all agents.
         
@@ -210,7 +210,7 @@ class MatrixGame(MultiAgentEnv):
         return self.action_spaces[agent]
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_avail_actions(self, state: MatrixGameState) -> Dict[str, jnp.ndarray]:
+    def get_avail_actions(self, state: SimpleSabotageState) -> Dict[str, jnp.ndarray]:
         """
         Get available actions for each agent.
         All actions are always available.
@@ -221,7 +221,7 @@ class MatrixGame(MultiAgentEnv):
             "agent_1": avail_actions
         }
     
-    def render(self, state: MatrixGameState, mode: str = "human") -> Optional[Any]:
+    def render(self, state: SimpleSabotageState, mode: str = "human") -> Optional[Any]:
         """
         Render the current state.
         
@@ -251,7 +251,7 @@ class MatrixGame(MultiAgentEnv):
     @property 
     def name(self) -> str:
         """Environment name."""
-        return "MatrixGame"
+        return "SimpleSabotage"
     
     @property
     def num_actions(self) -> int:

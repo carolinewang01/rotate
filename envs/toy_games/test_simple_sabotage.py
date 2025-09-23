@@ -1,23 +1,23 @@
 """
-Test script for the MatrixGame environment.
+Test script for the SimpleSabotage environment.
 """
 
 import jax
 import jax.numpy as jnp
-from matrix_game import MatrixGame
+from simple_sabotage import SimpleSabotage
 
 
-def test_matrix_game():
-    """Test the MatrixGame environment implementation."""
+def test_simple_sabotage():
+    """Test the SimpleSabotage environment implementation."""
     
     # Initialize environment
-    env = MatrixGame(max_steps=5, max_history_len=10)
+    env = SimpleSabotage(max_steps=5, max_history_len=10)
     
     # Test reset
     key = jax.random.PRNGKey(0)
     observations, state = env.reset(key)
     
-    print("=== Testing MatrixGame Environment ===")
+    print("=== Testing SimpleSabotage Environment ===")
     print(f"Number of agents: {env.num_agents}")
     print(f"Agents: {env.agents}")
     print(f"Max steps: {env.max_steps}")
@@ -107,7 +107,7 @@ def test_observation_history():
     
     print("\n=== Testing Observation History ===")
     
-    env = MatrixGame(max_steps=3, max_history_len=5)
+    env = SimpleSabotage(max_steps=3, max_history_len=5)
     key = jax.random.PRNGKey(42)
     
     observations, state = env.reset(key)
@@ -141,5 +141,5 @@ def test_observation_history():
 
 
 if __name__ == "__main__":
-    test_matrix_game()
+    test_simple_sabotage()
     test_observation_history()
