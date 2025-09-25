@@ -1,11 +1,11 @@
 """
-Two-player iterated simple sabotage game environment following JAXMarl MultiAgentEnv interface.
+Two-player iterated simple cooperation game environment following JAXMarl MultiAgentEnv interface.
 
 The game is fully cooperative and symmetric.
 Both agents receive the same reward (payoff), specified by the payoff matrix: 
-[[1, 0, -1], [0, 1, -1], [-1, -1, -1]]
+[[1, 0, 0], [0, 0, 0], [0, 0, 0]]
 
-Both agents have 3 actions: H(ead), T(ail), and S(abotage).
+Both agents have 3 actions: C(ooperate), A(rbitrary action A), and B(arbitrary action B).
 Each agent's observation is the history of joint actions taken by both agents.
 """
 
@@ -19,8 +19,8 @@ from jaxmarl.environments import spaces
 
 
 @chex.dataclass
-class SimpleSabotageState:
-    """State of the simple sabotage game environment."""
+class SimpleCooperationState:
+    """State of the simple cooperation game environment."""
     # Current step in the episode
     step: int
     # History of actions taken by both agents [timestep, agent_id]
@@ -29,20 +29,20 @@ class SimpleSabotageState:
     done: bool
 
 
-class SimpleSabotage(MultiAgentEnv):
+class SimpleCooperation(MultiAgentEnv):
     """
-    Two-player iterated simple sabotage game environment.
+    Two-player iterated simple cooperation game environment.
     
     Actions:
-    - 0: Head (H) - Cooperate option 1
-    - 1: Tail (T) - Cooperate option 2  
-    - 2: Sabotage (S) - Sabotage option (ends episode immediately)
+    - 0: Cooperate (C) - Cooperation option
+    - 1: Arbitrary A (A) - Arbitrary action A
+    - 2: Arbitrary B (B) - Arbitrary action B
     
     Payoff Matrix (both agents receive same reward):
-    [[1, 0, -1], [0, 1, -1], [-1, -1, -1]]
+    [[1, 0, 0], [0, 0, 0], [0, 0, 0]]
     
     Episode Termination:
-    - Episode ends when max_steps is reached OR when either agent takes sabotage action (2)
+    - Episode ends when max_steps is reached OR when both agents take cooperate action (0)
     
     Observations:
     Each agent observes the full history of joint actions taken by both agents.
@@ -50,7 +50,7 @@ class SimpleSabotage(MultiAgentEnv):
     
     def __init__(self, max_steps: int = 5, max_history_len: int = 5):
         """
-        Initialize the simple sabotage game environment.
+        Initialize the simple cooperation game environment.
         
         Args:
             max_steps: Maximum number of steps in an episode
@@ -63,9 +63,9 @@ class SimpleSabotage(MultiAgentEnv):
         
         # Payoff matrix: [agent0_action, agent1_action] -> reward
         self.payoff_matrix = jnp.array([
-            [1, 0, -1],   # agent0 plays H (0)
-            [0, 1, -1],   # agent0 plays T (1) 
-            [-1, -1, -1]  # agent0 plays S (2)
+            [1, 0, 0],   # agent0 plays C (0)
+            [0, 0, 0],   # agent0 plays A (1) 
+            [0, 0, 0]    # agent0 plays B (2)
         ])
         
         # Define action and observation spaces
@@ -89,7 +89,7 @@ class SimpleSabotage(MultiAgentEnv):
         }
     
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, key: chex.PRNGKey, params: Optional[Dict] = None) -> Tuple[Dict[str, jnp.ndarray], SimpleSabotageState]:
+    def reset(self, key: chex.PRNGKey, params: Optional[Dict] = None) -> Tuple[Dict[str, jnp.ndarray], SimpleCooperationState]:
         """
         Reset the environment.
         
@@ -105,7 +105,7 @@ class SimpleSabotage(MultiAgentEnv):
         action_history = jnp.full((self.max_history_len, 2), -1, dtype=jnp.int32)
         
         # Create initial state
-        state = SimpleSabotageState(
+        state = SimpleCooperationState(
             step=0,
             action_history=action_history,
             done=False
@@ -120,10 +120,10 @@ class SimpleSabotage(MultiAgentEnv):
     def step_env(
         self, 
         key: chex.PRNGKey, 
-        state: SimpleSabotageState, 
+        state: SimpleCooperationState, 
         actions: Dict[str, int],
         params: Optional[Dict] = None
-    ) -> Tuple[Dict[str, jnp.ndarray], SimpleSabotageState, Dict[str, float], Dict[str, bool], Dict[str, Any]]:
+    ) -> Tuple[Dict[str, jnp.ndarray], SimpleCooperationState, Dict[str, float], Dict[str, bool], Dict[str, Any]]:
         """
         Step the environment forward.
         
@@ -156,12 +156,12 @@ class SimpleSabotage(MultiAgentEnv):
         
         # Check if episode is done
         new_step = state.step + 1
-        # Episode ends if max steps reached OR if either agent sabotages
-        sabotage_taken = (action0 == 2) | (action1 == 2)
-        done = (new_step >= self.max_steps) | sabotage_taken
+        # Episode ends if max steps reached OR if both agents cooperate
+        both_cooperate = (action0 == 0) & (action1 == 0)
+        done = (new_step >= self.max_steps) | both_cooperate
         
         # Create new state
-        new_state = SimpleSabotageState(
+        new_state = SimpleCooperationState(
             step=new_step,
             action_history=new_action_history,
             done=done
@@ -186,7 +186,7 @@ class SimpleSabotage(MultiAgentEnv):
         
         return observations, new_state, rewards, dones, infos
     
-    def _get_observations(self, state: SimpleSabotageState) -> Dict[str, jnp.ndarray]:
+    def _get_observations(self, state: SimpleCooperationState) -> Dict[str, jnp.ndarray]:
         """
         Get observations for all agents.
         
@@ -216,7 +216,7 @@ class SimpleSabotage(MultiAgentEnv):
         return self.action_spaces[agent]
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_avail_actions(self, state: SimpleSabotageState) -> Dict[str, jnp.ndarray]:
+    def get_avail_actions(self, state: SimpleCooperationState) -> Dict[str, jnp.ndarray]:
         """
         Get available actions for each agent.
         All actions are always available.
@@ -227,7 +227,7 @@ class SimpleSabotage(MultiAgentEnv):
             "agent_1": avail_actions
         }
     
-    def render(self, state: SimpleSabotageState, mode: str = "human") -> Optional[Any]:
+    def render(self, state: SimpleCooperationState, mode: str = "human") -> Optional[Any]:
         """
         Render the current state.
         
@@ -242,7 +242,7 @@ class SimpleSabotage(MultiAgentEnv):
             print(f"Step: {state.step}/{self.max_steps}")
             print("Action History (Agent0, Agent1):")
             
-            action_names = ["H", "T", "S"]
+            action_names = ["C", "A", "B"]
             for i in range(min(state.step, self.max_history_len)):
                 if state.action_history[i, 0] >= 0:  # Valid entry
                     a0_name = action_names[state.action_history[i, 0]]
@@ -250,11 +250,11 @@ class SimpleSabotage(MultiAgentEnv):
                     print(f"  Step {i}: ({a0_name}, {a1_name})")
             
             if state.done:
-                # Check if episode ended due to sabotage
+                # Check if episode ended due to cooperation
                 if state.step < self.max_steps and state.step > 0:
                     last_actions = state.action_history[state.step - 1]
-                    if (last_actions[0] == 2) or (last_actions[1] == 2):
-                        print("Episode ended early due to sabotage!")
+                    if (last_actions[0] == 0) and (last_actions[1] == 0):
+                        print("Episode ended early due to mutual cooperation!")
                     else:
                         print("Episode finished!")
                 else:
@@ -265,7 +265,7 @@ class SimpleSabotage(MultiAgentEnv):
     @property 
     def name(self) -> str:
         """Environment name."""
-        return "SimpleSabotage"
+        return "SimpleCooperation"
     
     @property
     def num_actions(self) -> int:

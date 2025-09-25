@@ -102,6 +102,60 @@ def test_simple_sabotage():
     print("\n=== Test completed successfully! ===")
 
 
+def test_sabotage_termination():
+    """Test that the episode ends when either agent takes sabotage action."""
+    
+    print("\n=== Testing Sabotage Termination ===")
+    
+    env = SimpleSabotage(max_steps=10, max_history_len=10)
+    key = jax.random.PRNGKey(123)
+    
+    observations, state = env.reset(key)
+    print(f"Initial step: {state.step}")
+    
+    # Take a few normal actions first
+    actions_sequence = [
+        {"agent_0": 0, "agent_1": 1},  # H, T -> should continue
+        {"agent_0": 1, "agent_1": 0},  # T, H -> should continue  
+        {"agent_0": 0, "agent_1": 2},  # H, S -> should end episode!
+    ]
+    
+    action_names = ["H", "T", "S"]
+    
+    for step, actions in enumerate(actions_sequence):
+        print(f"\nStep {step + 1}:")
+        print(f"  Actions: agent_0={action_names[actions['agent_0']]}, agent_1={action_names[actions['agent_1']]}")
+        
+        # Take step
+        key, subkey = jax.random.split(key)
+        observations, state, rewards, dones, infos = env.step(subkey, state, actions)
+        
+        print(f"  Rewards: {rewards}")
+        print(f"  Done: {dones['__all__']}")
+        print(f"  Current step: {state.step}")
+        
+        if dones["__all__"]:
+            print(f"  Episode ended at step {step + 1}!")
+            break
+    
+    # Test with agent_0 sabotaging
+    print("\n--- Testing Agent 0 Sabotage ---")
+    observations, state = env.reset(key)
+    
+    actions = {"agent_0": 2, "agent_1": 0}  # S, H -> should end immediately
+    print(f"Actions: agent_0=S, agent_1=H")
+    
+    key, subkey = jax.random.split(key)
+    observations, state, rewards, dones, infos = env.step(subkey, state, actions)
+    
+    print(f"Rewards: {rewards}")
+    print(f"Done: {dones['__all__']}")
+    print(f"Episode ended immediately: {dones['__all__']}")
+    
+    # Render to see the termination message
+    env.render(state)
+
+
 def test_observation_history():
     """Test that observation history is working correctly."""
     
@@ -142,4 +196,5 @@ def test_observation_history():
 
 if __name__ == "__main__":
     test_simple_sabotage()
+    test_sabotage_termination()
     test_observation_history()

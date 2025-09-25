@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Algorithm to run
-algo="rotate_without_pop"
+algo="rotate"
 # partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
-conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp
-label="paper-v0:breg"
+conf_obj_type="sreg-sp_ret-sxp" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp, traj_regret is per-trajectory regret
+label="paper-v0:sp-reg" # paper-v0:breg
 num_seeds=3
 # s5_d_model=16
 # s5_ssm_size=16
@@ -28,12 +28,13 @@ log_file="results/oe_logs/${algo}/${label}/experiment_${timestamp}.log"
 
 # Tasks to run
 tasks=(
-    "overcooked-v1/asymm_advantages"
-    "overcooked-v1/coord_ring"
-    "overcooked-v1/counter_circuit"
+    # "overcooked-v1/asymm_advantages"
+    # "overcooked-v1/coord_ring"
+    # "overcooked-v1/counter_circuit"
     # "overcooked-v1/cramped_room"
     # "overcooked-v1/forced_coord"
     # "lbf"
+    "simple_sabotage"
 )
 
 # Function to log messages
