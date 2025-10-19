@@ -412,8 +412,8 @@ def train_regret_maximizing_partners(config, env,
                 def _update_minbatch_conf(train_state_conf, batch_infos):
                     '''
                     Teammate update function. Note that this implementation gathers both XSP (XP data from SP start states)
-                    and SXP (SP data from XP start states) data to enable experimenting with different objectives. 
-                    ROTATE uses the "sreg-xp_ret-sp_ret-sxp" objective, which only requires SP, XP and SXP data.
+                    and SXP (SP data from XP start states) data. 
+                    ROTATE uses the "sreg-xp_reg-sp_ret-sxp" objective.
                     '''
                     minbatch_xp, minbatch_sp, minbatch_xsp, minbatch_sxp = batch_infos
 
@@ -492,7 +492,7 @@ def train_regret_maximizing_partners(config, env,
                             total_xsp_objective = config["REGRET_SP_WEIGHT"] * traj_batch_xsp.other_value - target_v_xsp
                             total_sxp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * target_v_sxp - traj_batch_sxp.other_value
                         
-                        # optimize per-state regret on ego rollouts only, return for both types of br interactions
+                        # optimize per-state regret on XP rollouts only, return for both types of br interactions
                         elif config["CONF_OBJ_TYPE"] == "sreg-xp_ret-sp_ret-sxp":
                             xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
 
@@ -501,12 +501,21 @@ def train_regret_maximizing_partners(config, env,
                             total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
-                        # optimize per-state regret on ego and sp rollouts, return on sxp, and nothing on xsp
+                        # optimize per-state regret on XP and SP rollouts, return on sxp, and nothing on xsp
                         elif config["CONF_OBJ_TYPE"] == "sreg-xp_sreg-sp_ret-sxp":
                             xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
                             sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
 
                             total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
+                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
+                            total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
+
+                        # optimize per-state regret on SP rollouts only, return on sxp, and nothing on xp or xsp
+                        elif config["CONF_OBJ_TYPE"] == "sreg-sp_ret-sxp":
+                            sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
+
+                            total_xp_objective = jnp.array(0.0)
                             total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
                             total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp

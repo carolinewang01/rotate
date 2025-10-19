@@ -64,24 +64,26 @@ ABLATIONS_OBJ = {
 }
 
 ABLATIONS_POP = {
-    "ppo_ego_s5/paper-v0:1reg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"), # TODO: update this result
-    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"), # TODO: update this result
+    # "ppo_ego_s5/paper-v0:1reg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"),
+    "ppo_ego_s5/paper-v0:breg-ego-v-pop": ("teammate_generation", "PPO on ROTATE pop"),
+    # "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"),
+    "oe_paired_resets/paper-v0:breg": ("open_ended", "ROTATE w/o population"),
 }
 
 ROTATE_VARS = {
     "oe_persistent/paper-v0:treg": ("open_ended", "ROTATE (per-traj)"), 
     "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
     "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
-    "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"), # TODO: update this result
+    # "oe_paired_resets/paper-v0:1reg": ("open_ended", "ROTATE w/o population"),
+    "oe_paired_resets/paper-v0:breg": ("open_ended", "ROTATE w/o population"),
 }
 
 SUPPLEMENTAL = {
-    # "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
-    # "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
+    "oe_persistent/paper-v0:comedi+pop": ("open_ended", "ROTATE+CoMeDi MP"),
+    "oe_persistent/paper-v0:paired-treg+pop": ("open_ended", "ROTATE (GAE regret)"),
     # # "oe_persistent/paper-v0:1reg:s5-s": ("open_ended", "rotate, s5-small"),
     # # "oe_persistent/paper-v0:breg:s5-s": ("open_ended", "rotate (obj 0), s5-small"),
     # # "ppo_ego_s5/paper-v0:breg-ego-v-pop": ("teammate_generation", "ppo on rotate pop (obj 0)"),
-    "oe_persistent/paper-v0:breg": ("open_ended", "rotate (obj 0) w/sp regret"),
 }
 
 RESULTS_DIR = "results"

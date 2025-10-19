@@ -8,6 +8,8 @@ from envs.lbf.adhoc_lbf_viewer import AdHocLBFViewer
 from envs.jumanji_jaxmarl_wrapper import JumanjiToJaxMARL
 from envs.overcooked_v1.overcooked_wrapper import OvercookedWrapper
 from envs.overcooked_v1.augmented_layouts import augmented_layouts
+from envs.toy_games.simple_sabotage import SimpleSabotage
+from envs.toy_games.simple_cooperation import SimpleCooperation
 
 def process_default_args(env_kwargs: dict, default_args: dict):
     '''Helper function to process generator and viewer args for Jumanji environments. 
@@ -63,6 +65,22 @@ def make_env(env_name: str, env_kwargs: dict = {}):
         layout = augmented_layouts[env_kwargs['layout']]
         env_kwargs_copy["layout"] = layout
         env = OvercookedWrapper(**env_kwargs_copy)
+    elif env_name == "simple_sabotage":
+        default_env_kwargs = {"max_steps": 5, "max_history_len": 5}
+        env_kwargs_copy = dict(copy.deepcopy(env_kwargs))
+        # add default args that are not already in env_kwargs
+        for key in default_env_kwargs:
+            if key not in env_kwargs:
+                env_kwargs_copy[key] = default_env_kwargs[key]
+        env = SimpleSabotage(**env_kwargs_copy)
+    elif env_name == "simple_cooperation":
+        default_env_kwargs = {"max_steps": 5, "max_history_len": 5}
+        env_kwargs_copy = dict(copy.deepcopy(env_kwargs))
+        # add default args that are not already in env_kwargs
+        for key in default_env_kwargs:
+            if key not in env_kwargs:
+                env_kwargs_copy[key] = default_env_kwargs[key]
+        env = SimpleCooperation(**env_kwargs_copy)
     else:
         env = jaxmarl.make(env_name, **env_kwargs)
     return env

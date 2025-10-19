@@ -2,45 +2,6 @@
 
 This is the working repository for the paper, "ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork." We provide the code for the ROTATE algorithm, other open-ended training and teammate generation baselines, and scripts to reproduce the experiments and figures from the paper.
 
-## TODOs
-
-### Clean Up Code
-Lower priority fixes / additional features: 
-- LBRDiv logging - lagrange multipliers are not logged correctly, we need to fix this.
-- Heuristic agents: 
-    - Enable decision-making to account for the available actions
-- Evaluation
-    - Fix regret evaluator
-- Move best response computation code to its own directory?
-
-### Enabling Collaboration
-- Create a contribution guide
-  - Create list of things to check for others when checking PRs
-  - Creae list of requirements for each algorithm: 
-    - input 
-    - output
-    - test
-- Create an abstract environment API for our codebase (Jiaxun)
-
-### Benchmark Release
-- Ego agent training: 
-   - Add option to train IPPO teammates for training
-   - Make compatible with option to specify teammates in the ego agent
-- Create demo notebook
-- Remove ROTATE-specific paths throughout the codebase
-- README 
-    - Reorient README towards benchmark
-    - Add a figure for the design philosophy! 
-
-### Evaluation
-- Heldout eval teammates: write a script to compute the best response teammates for all heldout agents
-- Regret-based evaluator: 
-    - Figure out how to return regret-maximizing teammates that don't sabotage
-
-### Baselines 
-- Implement PLR style FCP baseline (this requires implementing a regret-based curator)
-- Implement MEP (we should prioritize MEP over TraGeDi because MEP is stronger)
-
 ##  Table of Contents
 - [🚀 Installation Guide](#-installation-guide)
 - [▶️ Getting Started: Reproducing ROTATE Results](#️-getting-started-reproducing-rotate-results)

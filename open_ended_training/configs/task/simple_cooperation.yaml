@@ -1,0 +1,6 @@
+ENV_NAME: simple_cooperation
+ROLLOUT_LENGTH: 64
+ENV_KWARGS: 
+  max_steps: 5
+  max_history_len: 5
+TASK_NAME: simple_cooperation
