@@ -3,8 +3,8 @@
 # Algorithm to run
 algo="rotate"
 # partner_algo="rotate_without_pop" # choices: rotate_without_pop, rotate_with_mixed_play
-conf_obj_type="sreg-sp_ret-sxp" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp, traj_regret is per-trajectory regret
-label="paper-v0:sp-reg" # paper-v0:breg
+conf_obj_type="sreg-xp_sreg-sp_ret-sxp" # breg is sreg-xp_sreg-sp_ret-sxp, 1reg is sreg-xp_ret-sp_ret-sxp, traj_regret is per-trajectory regret
+label="paper-v0:breg" # paper-v0:breg
 num_seeds=3
 # s5_d_model=16
 # s5_ssm_size=16
@@ -34,7 +34,8 @@ tasks=(
     # "overcooked-v1/cramped_room"
     # "overcooked-v1/forced_coord"
     # "lbf"
-    "simple_sabotage"
+    # "simple_sabotage"
+    "simple_cooperation"
 )
 
 # Function to log messages
