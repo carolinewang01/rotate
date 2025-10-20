@@ -133,7 +133,7 @@ if __name__ == "__main__":
             "target_directory": "results/"
         },
         "eval_teammates": {
-            "gdrive_url": "https://drive.google.com/file/d/1KjBV2GekKdRBiK6QSGe2vYx2ThXlG7X7/view?usp=sharing",
+            "gdrive_url": "https://drive.google.com/file/d/1VabJUxYMh-Ny10mag0qmcGtVobgiHbRf/view?usp=sharing",
             "target_directory": "eval_teammates/"
         },
     }
