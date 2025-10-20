@@ -1,8 +1,6 @@
 training_state
 figures/
 figures/*
-notebooks/
-notebooks/*
 
 results*/
 results*/*
