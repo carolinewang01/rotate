@@ -1,3 +1,6 @@
+'''Implementation of the Fictitious Co-Play teammate generation algorithm (Strouse et al. NeurIPS 2021)
+https://proceedings.neurips.cc/paper/2021/hash/797134c3e42371bb4979a462eb2f042a-Abstract.html
+'''
 import shutil
 import time
 import logging
@@ -81,7 +84,6 @@ def run_fcp(config, wandb_logger):
 
 def log_metrics(config, out, logger):
     '''Log statistics, save train run output and log to wandb as artifact.'''   
-    
     metric_names = get_metric_names(config["ENV_NAME"])
     # metrics is a pytree where each leaf has shape 
     # (num_seeds, partner_pop_size, num_partner_updates, rollout_length, agents_per_env * num_envs)

@@ -1,5 +1,5 @@
 ### Instructions
-Instructions were tested on 4/3/25 with a fresh install w/Python 3.11 on a server with Nvidia A100 GPUs.
+Instructions were tested on 6/10/25 with a fresh install w/Python 3.11 on a server with Nvidia A100 GPUs.
 
 1. Create a conda env: 
 

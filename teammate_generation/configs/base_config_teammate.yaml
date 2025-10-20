@@ -50,6 +50,5 @@ logger:
 
 # Local logger
 local_logger:
-  save_figures: false # unused
   save_train_out: true
   save_eval_out: true

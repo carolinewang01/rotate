@@ -174,7 +174,7 @@ class BufferedPopulation(AgentPopulation):
         """
         # Select distribution based on the instance's sampling strategy
         sampling_dist = jax.lax.cond(
-            self.sampling_strategy == "uniform", # Use self.sampling_strategy
+            self.sampling_strategy == "uniform",
             self._get_uniform_sampling_dist,
             self._get_plr_sampling_dist,
             buffer # Pass buffer as the operand to the selected function
@@ -240,6 +240,7 @@ class BufferedPopulation(AgentPopulation):
             needs_resample_mask: Optional boolean mask of shape (n,) indicating
                                  which sampled indices are actually used.
                                  If None, assumes all n are used.
+            sampling_strategy: Sampling strategy to use. If None, uses the instance's sampling strategy.
 
         Returns:
             indices: Indices of sampled agents (shape (n,))
@@ -251,12 +252,12 @@ class BufferedPopulation(AgentPopulation):
         
         # Select distribution based on the instance's sampling strategy
         sampling_dist = jax.lax.cond(
-            self.sampling_strategy == "uniform", # Use self.sampling_strategy
+            self.sampling_strategy == "uniform",
             self._get_uniform_sampling_dist,
             self._get_plr_sampling_dist,
             buffer # Pass buffer as the operand to the selected function
         )
-        # --- End Distribution Logic ---
+        
 
         def handle_empty_buffer():
             # If buffer is empty, return random indices and unchanged buffer

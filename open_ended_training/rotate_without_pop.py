@@ -306,7 +306,7 @@ def train_regret_maximizing_partners(config, env,
                 val_1 = val_1.squeeze()
 
                 # Combine actions into the env format
-                combined_actions = jnp.concatenate([act_0, act_1], axis=0)  # shape (2*num_envs,)
+                combined_actions = jnp.concatenate([act_0, act_1], axis=0)
                 env_act = unbatchify(combined_actions, env.agents, config["NUM_ENVS"], num_agents)
                 env_act = {k: v.flatten() for k, v in env_act.items()}
 
@@ -412,8 +412,8 @@ def train_regret_maximizing_partners(config, env,
                 def _update_minbatch_conf(train_state_conf, batch_infos):
                     '''
                     Teammate update function. Note that this implementation gathers both XSP (XP data from SP start states)
-                    and SXP (SP data from XP start states) data to enable experimenting with different objectives. 
-                    ROTATE uses the "sreg-xp_ret-sp_ret-sxp" objective, which only requires SP, XP and SXP data.
+                    and SXP (SP data from XP start states) data. 
+                    ROTATE uses the "sreg-xp_reg-sp_ret-sxp" objective.
                     '''
                     minbatch_xp, minbatch_sp, minbatch_xsp, minbatch_sxp = batch_infos
 
@@ -472,8 +472,19 @@ def train_regret_maximizing_partners(config, env,
 
                         # Compute policy objectives
 
-                        # optimize per-state regret on ego rollouts only, return for both types of br interactions
-                        if config["CONF_OBJ_TYPE"] == "sreg-xp_ret-sp_ret-sxp":
+                        # This is the ROTATE objective!
+                        # optimize per-state regret on XP and SP rollouts, return on sxp, and nothing on xsp
+                        if config["CONF_OBJ_TYPE"] == "sreg-xp_sreg-sp_ret-sxp":
+                            xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
+                            sp_return_to_go_sp_data = value_sp_on_sp_data + gae_sp
+
+                            total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
+                            total_sp_objective = config["SP_WEIGHT"] * config["REGRET_SP_WEIGHT"] * sp_return_to_go_sp_data - value_xp_on_sp_data
+                            total_xsp_objective = jnp.array(0.0) # no PG loss term on ego rollouts from conf-br states
+                            total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
+
+                        # optimize per-state regret on XP rollouts only, return for both types of br interactions
+                        elif config["CONF_OBJ_TYPE"] == "sreg-xp_ret-sp_ret-sxp":
                             xp_return_to_go_xp_data = value_xp_on_xp_data + gae_xp
 
                             total_xp_objective = config["REGRET_SP_WEIGHT"] * value_sp_on_xp_data - xp_return_to_go_xp_data
@@ -482,10 +493,10 @@ def train_regret_maximizing_partners(config, env,
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         # optimize trajectory-level regret for all interaction types
-                        elif config["CONF_OBJ_TYPE"] == "gae_per_state_regret": # previously called traj_level_regret but this was a misnomer
+                        elif config["CONF_OBJ_TYPE"] == "gae_per_state_regret":
                             total_xp_objective = -gae_xp
                             total_sp_objective = config["SP_WEIGHT"] * gae_sp
-                            total_xsp_objective = jnp.array(0.0)
+                            total_xsp_objective = -gae_xsp # jnp.array(0.0)
                             total_sxp_objective = config["SP_WEIGHT"] * gae_sxp
 
                         elif config["CONF_OBJ_TYPE"] == "traj_regret":
@@ -815,7 +826,7 @@ def train_regret_maximizing_partners(config, env,
             # --------------------------
             # PPO Update and Checkpoint saving
             # --------------------------
-            ckpt_and_eval_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store the final ckpt as the last ckpt
+            ckpt_and_eval_interval = config["NUM_UPDATES"] // max(1, config["NUM_CHECKPOINTS"] - 1) # -1 because we store a ckpt at the last update
             num_ckpts = config["NUM_CHECKPOINTS"]
 
             # Build a PyTree that holds parameters for all conf agent checkpoints
@@ -839,8 +850,8 @@ def train_regret_maximizing_partners(config, env,
                 # Decide if we store a checkpoint
                 # update steps is 1-indexed because it was incremented at the end of the update step
                 to_store = jnp.logical_or(jnp.equal(jnp.mod(update_steps-1, ckpt_and_eval_interval), 0),
-                                        jnp.equal(update_steps, config["NUM_UPDATES"]))
-                
+                                          jnp.equal(update_steps, config["NUM_UPDATES"]))
+                      
                 def store_and_eval_ckpt(args):
                     ckpt_arr_and_ep_infos, rng, cidx = args
                     ckpt_arr_conf, ckpt_arr_br, prev_ep_infos_br, prev_ep_infos_ego = ckpt_arr_and_ep_infos
@@ -1167,8 +1178,7 @@ def log_metrics(config, logger, outs, metric_names: tuple):
         metric_names: tuple, names of metrics to extract from training logs
     """
     teammate_outs, ego_outs = outs
-
-    teammate_metrics = teammate_outs["metrics"] # conf vs ego 
+    teammate_metrics = teammate_outs["metrics"]
     ego_metrics = ego_outs["metrics"]
 
     num_seeds, num_open_ended_iters, _, num_ego_updates = ego_metrics["returned_episode_returns"].shape[:4]
@@ -1229,11 +1239,11 @@ def log_metrics(config, logger, outs, metric_names: tuple):
             logger.log_item("Eval/ConfReturn-Against-Ego", avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/ConfReturn-Against-BR", avg_teammate_sp_returns[iter_idx][step], train_step=global_step)
             logger.log_item("Eval/EgoRegret", avg_teammate_sp_returns[iter_idx][step] - avg_teammate_xp_returns[iter_idx][step], train_step=global_step)
+            
             # Confederate losses
             logger.log_item("Losses/ConfValLoss-Against-Ego", avg_value_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfActorLoss-Against-Ego", avg_actor_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfEntropy-Against-Ego", avg_entropy_losses_teammate_against_ego[iter_idx][step], train_step=global_step)
-            
             logger.log_item("Losses/ConfValLoss-Against-BR", avg_value_losses_teammate_against_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfActorLoss-Against-BR", avg_actor_losses_teammate_against_br[iter_idx][step], train_step=global_step)
             logger.log_item("Losses/ConfEntropy-Against-BR", avg_entropy_losses_teammate_against_br[iter_idx][step], train_step=global_step)

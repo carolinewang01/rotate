@@ -1,0 +1,6 @@
+ENV_NAME: simple_sabotage
+ROLLOUT_LENGTH: 64
+ENV_KWARGS: 
+  max_steps: 10
+  max_history_len: 10
+TASK_NAME: simple_sabotage

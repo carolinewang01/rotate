@@ -1,5 +1,5 @@
 defaults:
-  - task: overcooked/cramped_room # task configs
+  - task: overcooked-v1/cramped_room # task configs
   - algorithm@algorithm: ppo_ego/${task} # task-specific algorithm configs
   - hydra: hydra_simple
   - ../../evaluation/configs/global_heldout_settings
@@ -33,13 +33,12 @@ logger:
     - ${algorithm.ALG}
     - ${TASK_NAME}
     - ${label}
-  mode: offline # options: online, offline, disabled
+  mode: online # options: online, offline, disabled
   verbose: false
   log_train_out: true # whether to log the out dictionary
   log_eval_out: true # whether to log the eval metrics
 
 # Local logger
 local_logger:
-  save_figures: true # currently unused
   save_train_out: true
   save_eval_out: true

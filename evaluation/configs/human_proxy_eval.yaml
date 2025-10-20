@@ -1,0 +1,137 @@
+defaults:
+  - task: overcooked-v1/cramped_room # task configs
+  - hydra: hydra_simple
+  - _self_
+
+ENV_NAME: ${task.ENV_NAME}
+ENV_KWARGS: ${task.ENV_KWARGS}
+TASK_NAME: ${task.TASK_NAME}
+
+label: ""
+name: ${TASK_NAME}/human_proxy_eval/${label}
+
+global_heldout_settings:
+  EVAL_SEED: 34957
+  MAX_EPISODE_STEPS: ${task.ROLLOUT_LENGTH}
+  NUM_EVAL_EPISODES: 64
+  AGGREGATE_STAT: mean # choices: mean, iqm. both are computed with the bootstrapped CI using rliable.
+  NORMALIZE_RETURNS: true # if true, use performance bounds to normalize returns
+
+ego_set:
+  overcooked-v1/cramped_room:
+    rotate:
+      path: results_neurips/overcooked-v1/cramped_room/oe_persistent/paper-v0:1reg/2025-05-10_16-28-55/saved_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]] 
+      test_mode: false
+      ckpt_key: final_params  
+      custom_loader:
+        name: open_ended
+        type: ego
+    comedi:
+      path: results_neurips/overcooked-v1/cramped_room/comedi/paper-v0/2025-05-14_11-48-41/ego_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+  overcooked-v1/asymm_advantages:
+    rotate: 
+      path: results_neurips/overcooked-v1/asymm_advantages/oe_persistent/paper-v0:1reg/2025-05-10_01-14-02/saved_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]] 
+      test_mode: false
+      ckpt_key: final_params  
+      custom_loader:
+        name: open_ended
+        type: ego
+    comedi: 
+      path: results_neurips/overcooked-v1/asymm_advantages/comedi/paper-v0/2025-05-14_11-52-00/ego_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+  overcooked-v1/counter_circuit:
+    rotate: 
+      path: results_neurips/overcooked-v1/counter_circuit/oe_persistent/paper-v0:1reg/2025-05-10_10-48-53/saved_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+      custom_loader:
+        name: open_ended
+        type: ego
+    comedi: 
+      path: results_neurips/overcooked-v1/counter_circuit/comedi/paper-v0/2025-05-14_11-50-34/ego_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+  overcooked-v1/coord_ring:
+    rotate: 
+      path: results_neurips/overcooked-v1/coord_ring/oe_persistent/paper-v0:1reg/2025-05-10_05-18-25/saved_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+      custom_loader:
+        name: open_ended
+        type: ego
+    comedi: 
+      path: results_neurips/overcooked-v1/coord_ring/comedi/paper-v0/2025-05-14_11-51-18/ego_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+  overcooked-v1/forced_coord:
+    rotate: 
+      path: results_neurips/overcooked-v1/forced_coord/oe_persistent/paper-v0:1reg/2025-05-10_18-22-48/saved_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+      custom_loader:
+        name: open_ended
+        type: ego
+    comedi: 
+      path: results_neurips/overcooked-v1/forced_coord/comedi/paper-v0/2025-05-14_11-50-01/ego_train_run
+      actor_type: s5
+      idx_list: [[0, -1], [1, -1], [2, -1]]
+      ckpt_key: final_params
+      test_mode: false
+
+heldout_set:
+  overcooked-v1/cramped_room:
+    bc_proxy:
+      actor_type: bc_proxy
+      test_mode: true # BC policy performs better with test mode
+      performance_bounds:
+        base_return: [0.0, 196.250] # normalization bounds obtained from BC self-play
+        returned_episode_returns: [0.0, 209.655] # shaped return for Overcooked-v1
+  overcooked-v1/asymm_advantages:
+    bc_proxy:
+      actor_type: bc_proxy
+      test_mode: true
+      performance_bounds:
+        base_return: [0.0, 371.250]
+        returned_episode_returns: [0.0, 396.634]
+  overcooked-v1/counter_circuit:
+    bc_proxy:
+      actor_type: bc_proxy
+      test_mode: true
+      performance_bounds:
+        base_return: [0.0, 120.625]
+        returned_episode_returns: [0.0, 127.278]
+  overcooked-v1/coord_ring:
+    bc_proxy:
+      actor_type: bc_proxy
+      test_mode: true
+      performance_bounds:
+        base_return: [0.0, 252.5]
+        returned_episode_returns: [0.0, 268.481]
+  overcooked-v1/forced_coord:
+    bc_proxy:
+      actor_type: bc_proxy
+      test_mode: true
+      performance_bounds:
+        base_return: [0.0, 152.50]
+        returned_episode_returns: [0.0, 161.698]
