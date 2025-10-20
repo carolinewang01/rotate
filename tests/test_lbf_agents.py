@@ -75,8 +75,7 @@ def main(num_episodes,
     print("Initializing environment...")
     # directly initialize the env
     # use the make_env function to initialize the env
-    # env = make_env(env_name="lbf", env_kwargs={"time_limit": max_steps})
-    env = make_env(env_name="lbf-fov-3", env_kwargs={"time_limit": max_steps})
+    env = make_env(env_name="lbf", env_kwargs={"time_limit": max_steps})
     print("Environment initialized")
     
     # Initialize agents
