@@ -1,5 +1,11 @@
 '''This script evaluates one set of ego agents against a set of heldout agents. 
 Based off the generate_xp_matrix.py script.
+
+This evaluation can be run on a specific task using the following command: 
+`python evaluation/run.py --config-name human_proxy_eval task=overcooked-v1/cramped_room`
+
+Before running the evaluation, please ensure that the paths to the ego agent set are correctly 
+specified in the config file, `configs/human_proxy_eval.yaml`.
 '''
 import os
 from io import StringIO

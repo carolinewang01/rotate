@@ -20,7 +20,7 @@ global_heldout_settings:
 ego_set:
   overcooked-v1/cramped_room:
     rotate:
-      path: results_neurips/overcooked-v1/cramped_room/oe_persistent/paper-v0:1reg/2025-05-10_16-28-55/saved_train_run
+      path: results/overcooked-v1/cramped_room/oe_persistent/paper-v0:breg/2025-05-10_16-41-09/saved_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]] 
       test_mode: false
@@ -29,14 +29,14 @@ ego_set:
         name: open_ended
         type: ego
     comedi:
-      path: results_neurips/overcooked-v1/cramped_room/comedi/paper-v0/2025-05-14_11-48-41/ego_train_run
+      path: results/overcooked-v1/cramped_room/comedi/paper-v0/2025-05-14_11-48-41/ego_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
       test_mode: false
   overcooked-v1/asymm_advantages:
     rotate: 
-      path: results_neurips/overcooked-v1/asymm_advantages/oe_persistent/paper-v0:1reg/2025-05-10_01-14-02/saved_train_run
+      path: results/overcooked-v1/asymm_advantages/oe_persistent/paper-v0:breg/2025-05-10_01-12-42/saved_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]] 
       test_mode: false
@@ -45,14 +45,14 @@ ego_set:
         name: open_ended
         type: ego
     comedi: 
-      path: results_neurips/overcooked-v1/asymm_advantages/comedi/paper-v0/2025-05-14_11-52-00/ego_train_run
+      path: results/overcooked-v1/asymm_advantages/comedi/paper-v0/2025-05-14_11-52-00/ego_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
       test_mode: false
   overcooked-v1/counter_circuit:
     rotate: 
-      path: results_neurips/overcooked-v1/counter_circuit/oe_persistent/paper-v0:1reg/2025-05-10_10-48-53/saved_train_run
+      path: results/overcooked-v1/counter_circuit/oe_persistent/paper-v0:breg/2025-05-10_10-58-56/saved_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
@@ -61,14 +61,14 @@ ego_set:
         name: open_ended
         type: ego
     comedi: 
-      path: results_neurips/overcooked-v1/counter_circuit/comedi/paper-v0/2025-05-14_11-50-34/ego_train_run
+      path: results/overcooked-v1/counter_circuit/comedi/paper-v0/2025-05-14_11-50-34/ego_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
       test_mode: false
   overcooked-v1/coord_ring:
     rotate: 
-      path: results_neurips/overcooked-v1/coord_ring/oe_persistent/paper-v0:1reg/2025-05-10_05-18-25/saved_train_run
+      path: results/overcooked-v1/coord_ring/oe_persistent/paper-v0:breg/2025-05-10_05-29-24/saved_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
@@ -77,14 +77,14 @@ ego_set:
         name: open_ended
         type: ego
     comedi: 
-      path: results_neurips/overcooked-v1/coord_ring/comedi/paper-v0/2025-05-14_11-51-18/ego_train_run
+      path: results/overcooked-v1/coord_ring/comedi/paper-v0/2025-05-14_11-51-18/ego_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
       test_mode: false
   overcooked-v1/forced_coord:
     rotate: 
-      path: results_neurips/overcooked-v1/forced_coord/oe_persistent/paper-v0:1reg/2025-05-10_18-22-48/saved_train_run
+      path: results/overcooked-v1/forced_coord/oe_persistent/paper-v0:breg/2025-05-10_12-11-20/saved_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params
@@ -93,7 +93,7 @@ ego_set:
         name: open_ended
         type: ego
     comedi: 
-      path: results_neurips/overcooked-v1/forced_coord/comedi/paper-v0/2025-05-14_11-50-01/ego_train_run
+      path: results/overcooked-v1/forced_coord/comedi/paper-v0/2025-05-14_11-50-01/ego_train_run
       actor_type: s5
       idx_list: [[0, -1], [1, -1], [2, -1]]
       ckpt_key: final_params

@@ -152,6 +152,14 @@ Please see the [wandb documentation](https://docs.wandb.ai/) for general informa
 
 Logging settings in each master config allow the user to control whether logging is enabled/disabled.
 
+#### Running the Human Proxy Evaluations
+
+Before running the evaluation, please ensure that the paths to the ego agent set   
+point to the desired saved policy paths in the config file, `configs/human_proxy_eval.yaml`.
+
+To run the human proxy evaluation on Cramped Room, use the following command: 
+`python evaluation/run.py --config-name human_proxy_eval task=overcooked-v1/cramped_room`.
+
 ### 🤖 Agents
 
 The `agents/` directory contains:
