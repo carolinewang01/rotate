@@ -5,12 +5,16 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![arXiv](https://img.shields.io/badge/arXiv-2505.23686-b31b1b.svg)](https://arxiv.org/abs/2505.23686)
 
+
+
 <!-- image of ROTATE method -->
 <p align="center"><img src="assets/rotate_method.png" width="900"></p>
 
-This is the official repository for the paper, "ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork." We provide the code for the ROTATE algorithm, open-ended AHT and teammate generation baselines, and scripts to reproduce the experiments and figures from the paper.
 
-If you find the paper or code useful, please cite the paper:
+This is the official repository for the paper, "ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork", released for reproducing the experiments and figures in the paper. If you're interested in using this code for your own research, please check out our [JaxAHT](https://github.com/LARG/jax-aht/tree/main) repository instead, which builds on top of this codebase and is meant for general use. 
+
+
+If you find this project useful, please cite the paper:
 ```bibtex
 @misc{wang2025rotate,
   title={ROTATE: Regret-driven Open-ended Training for Ad Hoc Teamwork},
